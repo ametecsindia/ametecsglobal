@@ -201,6 +201,38 @@ if (-not $NoGit -and $cfg.git -and $cfg.git.remote -and $failed -gt 0) {
     Say '   OK  GitHub in step'
   } catch { $failed++; Say "  FAILED GitHub: $($_.Exception.Message)" }
 }
+
+# ------------------------------------------------------------------ this PC's own database
+# Code reaches every PC through GitHub, but each PC has its own database. When an app's database changes
+# (new migration files) arrive, this PC's database is brought up to date with the app's own tools.
+foreach ($app in $cfg.apps) {
+  if (-not $app.database -or ($Only -and $app.name -ne $Only)) { continue }
+  try {
+    $dir = [IO.Path]::GetFullPath((Join-Path $root $app.target))
+    $migDir = Join-Path $dir $app.database.migrations
+    if (-not (Test-Path $migDir) -or -not (Test-Path (Join-Path $dir '.env'))) { continue }
+    $now = (@(Get-ChildItem -LiteralPath $migDir -File | ForEach-Object { $_.Name } | Sort-Object) -join "`n")
+    $seenFile = Join-Path (Join-Path $root 'core/data') ("db-" + ($app.name -replace '[^A-Za-z0-9]', '') + '.txt')
+    $seen = if (Test-Path $seenFile) { [IO.File]::ReadAllText($seenFile) } else { '' }
+    if ($now -eq $seen) { continue }
+    $php = (Get-Command php -ErrorAction SilentlyContinue).Source
+    if (-not $php) { $php = @(Get-ChildItem 'C:\laragon\bin\php\*\php.exe' -ErrorAction SilentlyContinue | Sort-Object FullName -Descending | Select-Object -First 1).FullName }
+    if (-not $php) { throw 'PHP was not found (start Laragon), so the database could not be updated.' }
+    Say "== $($app.name): database changes arrived - updating this PC's database"
+    foreach ($cmd in $app.database.commands) {
+      $ErrorActionPreference = 'Continue'
+      Push-Location $dir
+      $out = & $php @($cmd -split ' ') 2>&1 | ForEach-Object { "$_" }
+      $code = $LASTEXITCODE
+      Pop-Location
+      $ErrorActionPreference = 'Stop'
+      if ($code -ne 0) { throw ("'php $cmd' failed: " + (($out | Select-Object -Last 3) -join ' ')) }
+    }
+    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $seenFile) | Out-Null
+    [IO.File]::WriteAllText($seenFile, $now, $utf8)
+    Say "   OK  $($app.name) database up to date"
+  } catch { $failed++; Say "  FAILED $($app.name) database: $($_.Exception.Message)" }
+}
 } finally { $mutex.ReleaseMutex() }
 
 if ($failed) { Say "Sync finished with $failed failure(s)."; exit 1 } else { Say "Sync finished. All OK."; exit 0 }

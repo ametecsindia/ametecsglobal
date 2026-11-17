@@ -1,5 +1,5 @@
 {
-  "_how": "One block per application. SYNC.bat copies every block's 'source' into its own folder 'target' (plugins/<app>, inside AmetecsGlobal). The source is only read, never changed. 'skipFolders'/'skipFiles' are left out of the copy. 'fixes' are text replacements made in the COPY after every sync, so the copy never touches the source app's database, accounts or folders. To add an app: copy the SmartPRS3 block, change name/source/target (e.g. plugins\\smartept) and its fixes. 'mustContain' = text that must be in the copy after the fixes (the AmetecsGlobal hooks); the sync FAILS if it is missing. 'git' = the AmetecsGlobal GitHub repository this folder is kept in step with; 'neverPush' = files that may never be uploaded (the sync stops if one is about to be). The PC that has an app's 'source' folder brings it in; a PC without it receives the app through GitHub.",
+  "_how": "One block per application. SYNC.bat copies every block's 'source' into its own folder 'target' (plugins/<app>, inside AmetecsGlobal). The source is only read, never changed. 'skipFolders'/'skipFiles' are left out of the copy. 'fixes' are text replacements made in the COPY after every sync, so the copy never touches the source app's database, accounts or folders. To add an app: copy the SmartPRS3 block, change name/source/target (e.g. plugins\\smartept) and its fixes. 'mustContain' = text that must be in the copy after the fixes (the AmetecsGlobal hooks); the sync FAILS if it is missing. 'git' = the AmetecsGlobal GitHub repository this folder is kept in step with; 'neverPush' = files that may never be uploaded (the sync stops if one is about to be). The PC that has an app's 'source' folder brings it in; a PC without it receives the app through GitHub. 'database' = how to bring THIS PC's own database up to date when the app's database changes arrive (run from the app's folder).",
   "apps": [
     {
       "name": "SmartPRS3",
@@ -27,7 +27,25 @@
         "*.apk",
         "*.aab",
         "*.pem.bak",
-        ".gitignore"
+        ".gitignore",
+        "BiometricSync.php",
+        "GeoFence.php",
+        "MobileDevices.php",
+        "PunchIngest.php",
+        "QrAttendance.php",
+        "biometric-mapping.php",
+        "biometric-setup.php",
+        "biometric.php",
+        "iclock.php",
+        "mobile-activation-form.php",
+        "mobile-activation.php",
+        "mobile-device.php",
+        "mobile-devices.php",
+        "mobile.php",
+        "people-mobile-devices-data.php",
+        "qr-attendance.php",
+        "qr.php",
+        "zkteco-devices.php"
       ],
       "fixes": [
         {
@@ -253,6 +271,27 @@
           ],
           "find": "$h = static fn (?string $s): string => htmlspecialchars((string) $s, ENT_QUOTES, 'UTF-8');",
           "replace": "if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET' && $_GET === []) { header('Location: ../../../core/super.php'); exit; } // AmetecsGlobal: its own Super Admin sign-in\n$h = static fn (?string $s): string => htmlspecialchars((string) $s, ENT_QUOTES, 'UTF-8');"
+        },
+        {
+          "files": [
+            "surface\\SqlStore.php"
+          ],
+          "find": "            $conditions[] = 'tenant_id = ?';\n            $bind[] = $this->tenantId;\n",
+          "replace": "            $conditions[] = 'tenant_id = ?';\n            $bind[] = $this->tenantId;\n            if ($table === 'employees' && !empty($GLOBALS['ametecs_hidden_employees'])) { $conditions[] = 'id NOT IN (' . implode(',', array_map('intval', $GLOBALS['ametecs_hidden_employees'])) . ')'; }   // AmetecsGlobal: employees not enabled for this app\n"
+        },
+        {
+          "files": [
+            "surface\\SqlStore.php"
+          ],
+          "find": "        $statement = $this->pdo->prepare(\"SELECT * FROM `{$table}` WHERE tenant_id = ?\");\n        $statement->execute([$this->tenantId]);",
+          "replace": "        [$agWhere, $agBind] = $this->whereFor($table, [], '');   // AmetecsGlobal: the same tenancy clause, plus app access\n        $statement = $this->pdo->prepare(\"SELECT * FROM `{$table}`{$agWhere}\");\n        $statement->execute($agBind);"
+        },
+        {
+          "files": [
+            "public\\app.php"
+          ],
+          "find": "        if ($code === '' || $name === '') {\n            $problem = 'An employee needs a code and a name.';\n        } elseif",
+          "replace": "        // AmetecsGlobal: every employee needs a valid email ID (it is their login) - add and edit alike.\n        $agMail = isset($_POST['f_email']) ? trim(post('f_email')) : trim((string) ($existingRow['email'] ?? ''));\n        if ($code === '' || $name === '') {\n            $problem = 'An employee needs a code and a name.';\n        } elseif (filter_var($agMail, FILTER_VALIDATE_EMAIL) === false) {\n            $problem = $agMail === '' ? 'Enter the employee\\'s email ID - it is their login. Not saved.'\n                : '\"' . $agMail . '\" is not a valid email ID. Correct it and save again. Not saved.';\n        } elseif"
         }
       ],
       "makeEnvFromExample": true,
@@ -313,8 +352,34 @@
             "public\\super.php"
           ],
           "text": "header('Location: ../../../core/super.php');"
+        },
+        {
+          "files": [
+            "surface\\SqlStore.php"
+          ],
+          "text": "ametecs_hidden_employees"
+        },
+        {
+          "files": [
+            "surface\\SqlStore.php"
+          ],
+          "text": "[$agWhere, $agBind]"
+        },
+        {
+          "files": [
+            "public\\app.php"
+          ],
+          "text": "FILTER_VALIDATE_EMAIL) === false) {\n            $problem = $agMail"
         }
-      ]
+      ],
+      "database": {
+        "migrations": "database/migrations",
+        "commands": [
+          "tools/db/migrate.php",
+          "tools/db/grant-application-account.php --apply"
+        ]
+      },
+      "_attendance": "QR attendance, mobile devices and biometric are AmetecsGlobal core modules (core/attendance). These files are no longer copied from SmartPRS3; plugins/smartprs3 holds one-line pointers to the core copies, which are the masters."
     }
   ],
   "git": {

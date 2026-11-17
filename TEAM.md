@@ -6,12 +6,31 @@ AmetecsGlobal\
   index.php            front door -> core/
   core\                AmetecsGlobal itself: client sign-in + app tiles (index.php), Super Admin console (super.php),
                        licences & email (access.php), the gate every app passes through (gate.php)
-  core\data\           this server's clients, licences, activity log, app list (never on GitHub)
+  core\apps.json       the app list (shared through GitHub)
+  core\data\           this PC's clients, licences, activity log (never on GitHub)
   plugins\smartprs3\   everything SmartPRS3: its code, vendor, .env, storage, tools, mobile app
   plugins\<app>\       one folder per app as each joins (SmartEPT next)
   SYNC.bat / AUTO-SYNC.bat, sync.ps1, autosync.ps1, sync-apps.json   keeping it all up to date
 ```
 Clients and their logins live in the database set in `plugins\smartprs3\.env` (SmartPRS3 is the base plugin).
+
+## Organization Setup (central master)
+- core/org.php is the one place for companies, branches, departments, designations, teams, shifts, employees
+  (add / import / edit / delete / fields), logins, passwords and roles, and biometric / QR attendance devices.
+  The same menu for every client; the list lives in core/setup.php.
+- The central database is the source of employee data. Apps keep their own screens and settings as they are
+  (salary structure, payslip and ID card formats, leave rules etc. stay in the app) and use the central employee data for their actions and reports.
+- Inside an app those central screens are hidden; opening one by address goes to Organization Setup, and saving
+  employee changes from inside an app is refused. Every app page has "<- All apps".
+- App access (Organization Setup -> Apps): switch each app on/off per company, branch, department, team or employee
+  (most specific wins; nothing set = on). Off = hidden in that app and no seat. Rules in core/data/app-access.json;
+  SmartPRS3 applies them through a SYNC fix in surface/SqlStore.php.
+- Fully wired: every module reads and writes the central tables (employees, companies, branches, departments,
+  designations, teams, users). SmartPRS3 self-onboarding approval writes the new joiner into the central employees
+  table; User management (Users & passwords) creates a login for every employee with an email, ready for Reset password.
+- QR attendance, mobile device registration and biometric are core modules (Organization Setup only). If an app has
+  its own version of these, hide it in that app (as done for SmartPRS3) and map the app to the core's records.
+- New app: use these central tables for employees and organisation; never its own employee table or employee screens.
 
 ## New PC (once)
 1. Install Laragon and Git for Windows. Ask Ejaz to add your GitHub account to the repository (Write access).
@@ -30,6 +49,8 @@ Clients and their logins live in the database set in `plugins\smartprs3\.env` (S
 
 ## Rules
 - **The PC that has an app's own folder brings it in** (the `source` in `sync-apps.json`, e.g. `C:\laragon\www\SmartPRS3`): SmartPRS3 and SmartEPT on this PC, the other apps on the second PC. A PC without that folder receives the app through GitHub. Keep each app's own folder on one PC only.
-- **Code is shared; data is not.** Each PC has its own database and `core\data`. Shared client data belongs on one shared server.
+- **Shared through GitHub (same on every PC):** all code, screens and logic - client view, Super Admin console, every app in `plugins\`, and the app list (`core\apps.json`).
+- **Kept on each PC:** its own database and `core\data` - clients, licences, logins, Super Admins, activity log. Each person creates their own Super Admin on their own PC.
+- **Database changes travel automatically:** when an app's code arrives with new database tables, the sync updates that PC's database by itself.
 - **The repository is public.** `.env`, `vendor`, `storage`, uploads, keys and `core\data` are never uploaded; the sync stops if one is about to be, and never pushes after a failed step.
 - Two people editing the same lines is the one thing the sync cannot settle on its own - agree who works on which screen.

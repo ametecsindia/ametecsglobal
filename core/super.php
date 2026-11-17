@@ -157,11 +157,10 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && $pdo !== null) {
             $err = ($n = $dup->fetchColumn()) !== false ? "Client code {$code} is already used by {$n}." : null;
         }
         if ($err === null) {
+            // A client login and a Super Admin login may share an email: they sign in on different pages and never mix.
             $dup = $pdo->prepare('SELECT COUNT(*) FROM users WHERE LOWER(email) = ?');
             $dup->execute([$adminEmail]);
-            $dup2 = $pdo->prepare('SELECT COUNT(*) FROM platform_users WHERE LOWER(email) = ?');
-            $dup2->execute([$adminEmail]);
-            $err = ((int) $dup->fetchColumn() + (int) $dup2->fetchColumn()) > 0 ? 'That administrator email already has a login. Use a different email.' : null;
+            $err = (int) $dup->fetchColumn() > 0 ? 'That email already has a client login. Use a different email.' : null;
         }
         if ($err !== null) {
             $back('?p=client-new', null, $err);
@@ -198,7 +197,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && $pdo !== null) {
             'contact_phone' => trim((string) ($_POST['contact_phone'] ?? '')), 'notes' => trim((string) ($_POST['notes'] ?? ''))]);
         AmetecsData::log($meEmail, 'Created client ' . $name . ' (' . $code . ')', $tid, 'admin ' . $adminEmail . '; ' . $describe($lic));
         unset($_SESSION['form']);
-        $_SESSION['reveal'] = ['tid' => $tid, 'email' => $adminEmail, 'password' => $adminPassword];
+        $_SESSION['reveal'] = ['tid' => $tid, 'email' => $adminEmail, 'password' => $adminPassword, 'link' => AmetecsMail::clientLink($slug)];
         $back('?p=client&id=' . $tid, 'Client ' . $name . ' created with its administrator login and licences.');
     }
 
@@ -258,10 +257,10 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && $pdo !== null) {
     if ($do === 'admin-create') {
         $email = strtolower(trim((string) ($_POST['email'] ?? '')));
         $pw = (string) ($_POST['password'] ?? '') ?: $newPassword();
-        $dup = $pdo->prepare('SELECT (SELECT COUNT(*) FROM users WHERE LOWER(email) = ?) + (SELECT COUNT(*) FROM platform_users WHERE LOWER(email) = ?)');
-        $dup->execute([$email, $email]);
+        $dup = $pdo->prepare('SELECT COUNT(*) FROM users WHERE LOWER(email) = ?');
+        $dup->execute([$email]);
         if (filter_var($email, FILTER_VALIDATE_EMAIL) === false || (int) $dup->fetchColumn() > 0) {
-            $back('?p=client&id=' . $id . '#logins', null, 'Give a valid email that has no login yet.');
+            $back('?p=client&id=' . $id . '#logins', null, 'Give a valid email that has no client login yet.');
         }
         $tStore = $platform->forTenant($id);
         if ($tStore->all('companies') === []) {
@@ -356,10 +355,10 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && $pdo !== null) {
     if ($do === 'staff-add') {
         $email = strtolower(trim((string) ($_POST['email'] ?? '')));
         $name = trim((string) ($_POST['name'] ?? ''));
-        $dup = $pdo->prepare('SELECT (SELECT COUNT(*) FROM users WHERE LOWER(email) = ?) + (SELECT COUNT(*) FROM platform_users WHERE LOWER(email) = ?)');
-        $dup->execute([$email, $email]);
+        $dup = $pdo->prepare('SELECT COUNT(*) FROM platform_users WHERE LOWER(email) = ?');
+        $dup->execute([$email]);
         if (filter_var($email, FILTER_VALIDATE_EMAIL) === false || $name === '' || (int) $dup->fetchColumn() > 0) {
-            $back('?p=staff', null, 'Give a name and a valid email that has no login yet.');
+            $back('?p=staff', null, 'Give a name and a valid email that is not already a Super Admin.');
         }
         $pw = $newPassword();
         $pdo->prepare('INSERT INTO platform_users (name, email, password, role, created_at, updated_at) VALUES (?, ?, ?, ?, NOW(), NOW())')
@@ -402,6 +401,9 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && $pdo !== null) {
 }
 
 /* ------------------------------------------------------------------ data for the pages */
+if ($me !== null && $pdo !== null) {
+    AmetecsAccess::ensureHouseClient($pdo);
+}
 $page = $me === null ? 'signin' : (string) ($_GET['p'] ?? 'dashboard');
 $all = AmetecsAccess::all();
 $meta = AmetecsData::clients();
@@ -518,7 +520,9 @@ button[disabled]{opacity:.45;cursor:not-allowed}
 <?php if ($problem !== null): ?><div class="msg bad"><?= ag_h($problem) ?></div><?php endif; ?>
 <?php if ($notice !== null): ?><div class="msg ok"><?= ag_h($notice) ?></div><?php endif; ?>
 <?php if (is_array($reveal)): ?><div class="reveal"><b>Shown once — copy it now.</b> Sign-in: <code><?= ag_h($reveal['email']) ?></code> Password: <code><?= ag_h($reveal['password']) ?></code><br>
-  <span style="font-size:13px"><?= $reveal['tid'] === 'staff' ? 'They sign in at this Super Admin page.' : 'They sign in at the AmetecsGlobal front door (Client view) and can change it from their profile.' ?></span></div><?php endif; ?>
+  <span style="font-size:13px"><?php if ($reveal['tid'] === 'staff'): ?>They sign in at this Super Admin page.<?php else:
+      $rl = $reveal['link'] ?? (($rt = $tenant((string) $reveal['tid'])) !== null && ($rt['subdomain'] ?? '') !== '' ? AmetecsMail::clientLink((string) $rt['subdomain']) : ''); ?>
+      They sign in at <?= $rl !== '' ? 'their company link <code>' . ag_h($rl) . '</code>' : 'the AmetecsGlobal front door' ?> and can change the password from their profile.<?php endif; ?></span></div><?php endif; ?>
 
 <?php if ($page === 'dashboard'):
     $active = count(array_filter($tenants, static fn ($t) => $t['status_code'] === 'active'));
@@ -564,7 +568,7 @@ button[disabled]{opacity:.45;cursor:not-allowed}
     <button class="btn ghost">Filter</button><a class="btn gold" href="?p=client-new" style="margin-left:auto">+ New client</a></form>
   <div class="box"><table><tr><th>Client</th><th>Code</th><th>Status</th><th>Apps on</th><th>Employees</th><th>Since</th><th></th></tr>
   <?php foreach ($list as $t): $tid = (string) $t['id']; ?><tr>
-    <td><a href="?p=client&id=<?= (int) $tid ?>"><b><?= ag_h($t['name']) ?></b></a><div class="muted" style="font-size:12px"><?= ag_h($meta[$tid]['contact_name'] ?? '') ?></div></td>
+    <td><a href="?p=client&id=<?= (int) $tid ?>"><b><?= ag_h($t['name']) ?></b></a><div class="muted" style="font-size:12px"><?= ($t['subdomain'] ?? '') !== '' ? '/c/' . ag_h((string) $t['subdomain']) : 'no sign-in link' ?><?= ($meta[$tid]['contact_name'] ?? '') !== '' ? ' · ' . ag_h($meta[$tid]['contact_name']) : '' ?></div></td>
     <td><?= ag_h($t['code']) ?></td><td><?= $statusPill((string) $t['status_code']) ?></td>
     <td class="chips"><?php foreach ($appsOn($tid) as $c => $st): ?><span class="pill <?= $st === 'on' ? 'green' : 'red' ?>"><?= ag_h($plugins[$c]['name']) ?></span><?php endforeach; ?><?= $appsOn($tid) === [] ? '<span class="muted">none</span>' : '' ?></td>
     <td><?= (int) ($used[$tid] ?? 0) ?></td><td><?= $d($t['onboarded_on'] ?? $t['created_at']) ?></td><td class="right"><a class="btn ghost" href="?p=client&id=<?= (int) $tid ?>">Open</a></td></tr>
@@ -577,7 +581,7 @@ button[disabled]{opacity:.45;cursor:not-allowed}
     <div><label>Company name <span class="req">*</span></label><input name="name" required value="<?= $f('name') ?>" placeholder="ABC Collections Pvt Ltd"></div>
     <div><label>Client code <span class="req">*</span></label><input name="code" required value="<?= $f('code') ?>" placeholder="ABC" maxlength="20"></div>
     <div><label>Legal name (for payslips &amp; letters)</label><input name="legal_name" value="<?= $f('legal_name') ?>"></div>
-    <div><label>Sign-in link name</label><input name="slug" value="<?= $f('slug') ?>" placeholder="made from the name if empty"></div>
+    <div><label>Sign-in link name</label><input name="slug" value="<?= $f('slug') ?>" placeholder="made from the name if empty"><span class="muted" style="font-size:12px">their link: <?= ag_h(AmetecsMail::clientLink('name')) ?></span></div>
     <div><label>Time zone</label><select name="timezone"><?php foreach ($timezones as $z): ?><option<?= ($form['timezone'] ?? 'Asia/Kolkata') === $z ? ' selected' : '' ?>><?= $z ?></option><?php endforeach; ?></select></div>
     <div><label>State</label><input name="state" value="<?= $f('state') ?>" placeholder="Telangana"></div>
   </div></div>
@@ -591,8 +595,9 @@ button[disabled]{opacity:.45;cursor:not-allowed}
     <div><label>Administrator email <span class="req">*</span></label><input type="email" name="admin_email" required value="<?= $f('admin_email') ?>"></div>
     <div><label>Password</label><input name="admin_password" minlength="<?= Session::PASSWORD_FLOOR ?>" placeholder="leave empty to generate one"></div>
   </div></div>
-  <div class="box"><div class="hd"><h2>4 · Apps &amp; licences</h2><span class="muted">switch on at least one and give it seats; valid till left empty = one year</span></div>
-    <?= $licenceRows('', (array) ($form['p'] ?? ['smartprs3' => ['on' => 1, 'seats' => 25, 'until' => (new DateTimeImmutable($today))->modify('+1 year -1 day')->format('Y-m-d')]])) ?>
+  <div class="box"><div class="hd"><h2>4 · Apps &amp; licences</h2><span class="muted">all apps start ticked - untick what this client does not take; valid till left empty = one year</span></div>
+    <?= $licenceRows('', isset($form['p']) ? array_map(static fn ($r) => ['on' => isset($r['on']), 'seats' => (int) ($r['seats'] ?? 0), 'until' => (string) ($r['until'] ?? '')], (array) $form['p']) + array_fill_keys(array_keys($plugins), ['on' => false, 'seats' => 0, 'until' => ''])
+        : array_fill_keys(array_keys($plugins), ['on' => true, 'seats' => 25, 'until' => ''])) ?>
     <div class="ft"><a class="btn ghost" href="?p=clients">Cancel</a> <button class="btn gold">Create client</button></div></div>
   </form>
 
@@ -601,8 +606,13 @@ button[disabled]{opacity:.45;cursor:not-allowed}
     $m = $meta[$tid] ?? [];
     $logins = $admins($tid); ?>
   <div class="row" style="margin-bottom:6px"><a href="?p=clients" class="muted">← Clients</a></div>
-  <div class="row"><h1><?= ag_h($t['name']) ?></h1><?= $statusPill((string) $t['status_code']) ?></div>
+  <div class="row"><h1><?= ag_h($t['name']) ?></h1><?= $statusPill((string) $t['status_code']) ?><?= !empty($m['house']) ? '<span class="pill amber">Ametecs - house client for testing</span>' : '' ?></div>
   <p class="sub">Code <?= ag_h($t['code']) ?> · client #<?= (int) $tid ?> · since <?= $d($t['onboarded_on'] ?? $t['created_at']) ?> · <?= (int) ($used[$tid] ?? 0) ?> active employees</p>
+  <div class="box"><div class="bd row"><b>Sign-in link</b>
+    <?php if (($t['subdomain'] ?? '') !== ''): $cl = AmetecsMail::clientLink((string) $t['subdomain']); ?>
+      <code id="cl"><?= ag_h($cl) ?></code><button type="button" class="btn ghost" onclick="navigator.clipboard.writeText(document.getElementById('cl').textContent);this.textContent='Copied'">Copy</button>
+      <a class="btn ghost" href="<?= ag_h($cl) ?>" target="_blank">Open ↗</a><span class="muted">Give this to the client: it shows their company name and only accepts their logins.</span>
+    <?php else: ?><span class="muted">No sign-in link name yet - set one under Details below.</span><?php endif; ?></div></div>
 
   <div class="box"><div class="hd"><h2>Status</h2></div><div class="bd row">
     <span>This client is <b><?= ag_h($statuses[$t['status_code']] ?? $t['status_code']) ?></b>.</span>
@@ -654,7 +664,7 @@ button[disabled]{opacity:.45;cursor:not-allowed}
   <?php foreach (AmetecsData::activity($tid, 50) as $r): ?><tr><td><?= ag_h($r['at']) ?></td><td><?= ag_h($r['who']) ?></td><td><?= ag_h($r['what']) ?></td><td class="muted"><?= ag_h($r['detail']) ?></td></tr><?php endforeach; ?></table></div>
 
 <?php elseif ($page === 'apps'): ?>
-  <h1>Apps</h1><p class="sub">The apps every client sees. An app with an "Opens at" link is <b>Live</b> and opens from the client's front door; without one it can already be licensed and shows as coming. Retired apps disappear for clients but their licences and data are kept.</p>
+  <h1>Apps</h1><p class="sub">The apps every client sees. This list is shared: a change here reaches every PC through GitHub within minutes. An app with an "Opens at" link is <b>Live</b> and opens from the client's front door; without one it can already be licensed and shows as coming. Retired apps disappear for clients but their licences and data are kept.</p>
   <div class="box"><table><tr><th>App</th><th>What it does</th><th>Counted in</th><th>Colour</th><th>Opens at</th><th>Clients · seats</th><th>Retired</th><th></th></tr>
   <?php foreach (AmetecsAccess::plugins(true) as $c => $p):
       $n = 0; $seats = 0;

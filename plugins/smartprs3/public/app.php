@@ -5635,8 +5635,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
 
+        // AmetecsGlobal: every employee needs a valid email ID (it is their login) - add and edit alike.
+        $agMail = isset($_POST['f_email']) ? trim(post('f_email')) : trim((string) ($existingRow['email'] ?? ''));
         if ($code === '' || $name === '') {
             $problem = 'An employee needs a code and a name.';
+        } elseif (filter_var($agMail, FILTER_VALIDATE_EMAIL) === false) {
+            $problem = $agMail === '' ? 'Enter the employee\'s email ID - it is their login. Not saved.'
+                : '"' . $agMail . '" is not a valid email ID. Correct it and save again. Not saved.';
         } elseif ($seatCap !== null && count(array_filter(liveRows($store, 'employees'), static fn (array $se): bool
             => !in_array(strtolower(trim((string) ($se['status'] ?? ''))), SmartPRS\Surface\Licence::SEAT_FREE, true))) >= $seatCap) {
             $problem = 'Not saved — ' . $seatWhat . ' ' . $seatCap . ' active employees and all are in use. Mark leavers Inactive, or ask Ametecs for a larger plan.';

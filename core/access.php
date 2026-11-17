@@ -29,11 +29,13 @@ spl_autoload_register(static function (string $class): void {
     }
 });
 
+require_once __DIR__ . '/setup.php';
+
 final class AmetecsAccess
 {
     public const FILE = __DIR__ . '/data/access.json';
 
-    /** The apps AmetecsGlobal starts with. Super Admin → Apps edits these and adds more (core/data/apps.json). */
+    /** The apps AmetecsGlobal starts with. Super Admin -> Apps edits these and adds more (core/apps.json - shared code, synced through GitHub like the screens). */
     public const STARTER_APPS = [
         'smartprs3' => ['name' => 'SmartPRS 3', 'what' => 'HRM · Payroll · Attendance · Compliance', 'unit' => 'employees', 'open' => '../plugins/smartprs3/public/app.php', 'color' => '#F97316'],
         'smartept'  => ['name' => 'SmartEPT', 'what' => 'Employee productivity tracking', 'unit' => 'users', 'open' => null, 'color' => '#2563EB'],
@@ -48,9 +50,16 @@ final class AmetecsAccess
      * 'open' = where the app lives (null = not on AmetecsGlobal yet). Retired apps are left out unless asked for:
      * clients stop seeing them, but their licences and data stay.
      */
+    /** The app list is part of the interface, so it lives with the code (core/apps.json) and reaches every PC via GitHub. */
+    public const APPS_FILE = __DIR__ . '/apps.json';
+
     public static function plugins(bool $withRetired = false): array
     {
-        $f = __DIR__ . '/data/apps.json';
+        $f = self::APPS_FILE;
+        // Kept on this PC only before 17 Nov 2026: moved once into the shared file.
+        if (!is_file($f) && is_file(__DIR__ . '/data/apps.json')) {
+            @rename(__DIR__ . '/data/apps.json', $f);
+        }
         $saved = is_file($f) ? json_decode((string) file_get_contents($f), true) : [];
         $apps = self::STARTER_APPS;
         foreach (is_array($saved) ? $saved : [] as $code => $app) {
@@ -61,7 +70,7 @@ final class AmetecsAccess
 
     public static function saveApp(string $code, array $app): void
     {
-        $f = __DIR__ . '/data/apps.json';
+        $f = self::APPS_FILE;
         $saved = is_file($f) ? (json_decode((string) file_get_contents($f), true) ?: []) : [];
         $saved[$code] = $app;
         if (!is_dir(dirname($f))) {
@@ -114,12 +123,71 @@ final class AmetecsAccess
         return self::state($tenant, $plugin) === 'on' && $s > 0 ? $s : null;
     }
 
-    /** Seats in use for SmartPRS3: live employees not marked as leavers — SmartPRS3's own rule. */
-    public static function employeesUsed(\SmartPRS\Surface\SqlStore $platform, string $tenant): int
+    /**
+     * AMETECS INDIA, THE HOUSE CLIENT (owner, 17 Nov 2026): on every PC, once, Ametecs India gets the sign-in link
+     * /c/ametecs and every app switched on, so Ametecs can sign in and test as a client. Done ONCE per PC (marker
+     * file): whatever Super Admin unticks or changes afterwards stays that way.
+     */
+    public const HOUSE_LOGIN = 'altaf@ametecsindia.com';
+    public const HOUSE_PASSWORD = '12345678';   // test only - never created when APP_ENV=production
+
+    public static function ensureHouseClient(\PDO $pdo): ?string
     {
+        $marker = __DIR__ . '/data/house-client.done';
+        if (is_file($marker)) {
+            return null;
+        }
+        $store = new \SmartPRS\Surface\SqlStore($pdo);
+        $q = $pdo->query("SELECT * FROM tenants WHERE code = 'T1' OR LOWER(name) = 'ametecs india' ORDER BY (code = 'T1') DESC, id LIMIT 1");
+        $t = $q->fetch(\PDO::FETCH_ASSOC) ?: null;
+        if ($t === null) {
+            $t = $store->put('tenants', ['code' => 'AMETECS', 'name' => 'Ametecs India', 'status_code' => 'active', 'business_timezone' => 'Asia/Kolkata',
+                'onboarded_on' => date('Y-m-d'), 'provisioned_at' => date('Y-m-d H:i:s')]);
+            $store->forTenant((string) $t['id'])->put('companies', ['name' => 'Ametecs India Private Limited', 'timezone' => 'Asia/Kolkata']);
+        }
+        $tid = (string) $t['id'];
+        if (trim((string) ($t['subdomain'] ?? '')) === '') {
+            $taken = $pdo->prepare('SELECT COUNT(*) FROM tenants WHERE LOWER(subdomain) = ? AND id <> ?');
+            $taken->execute(['ametecs', $tid]);
+            if ((int) $taken->fetchColumn() === 0) {
+                $store->put('tenants', ['id' => $tid, 'subdomain' => 'ametecs']);
+            }
+        }
+        $all = self::all();
+        $until = (new DateTimeImmutable('now', new DateTimeZone('Asia/Kolkata')))->modify('+1 year -1 day')->format('Y-m-d');
+        foreach (self::plugins() as $code => $p) {
+            $had = (array) ($all[$tid][$code] ?? []);
+            if (empty($had['on'])) {   // the one-time setup switches EVERY app on; seats or dates already entered are kept
+                $all[$tid][$code] = ['on' => true, 'seats' => max(100, (int) ($had['seats'] ?? 0)), 'until' => (string) (($had['until'] ?? '') ?: $until),
+                    'changed' => date('c') . ' by AmetecsGlobal (house client)'];
+            }
+        }
+        self::save($all);
+        // THE DEFAULT TEST LOGIN (owner, 17 Nov 2026). The repository is public, so this is created ONLY on a machine that
+        // is not production (APP_ENV in the base plugin's .env), and only if that email has no login at this client yet.
+        $env = \SmartPRS\Surface\Database::env(AG_BASE . '/.env');
+        if (strtolower((string) ($env['APP_ENV'] ?? 'production')) !== 'production') {
+            $users = new \SmartPRS\Surface\Users($store->forTenant($tid), new \SmartPRS\Surface\Authorisation(), \SmartPRS\Platform\Identity\PasswordHasher::platformDefault());
+            if ($store->forTenant($tid)->all('companies') === []) {
+                $store->forTenant($tid)->put('companies', ['name' => 'Ametecs India Private Limited', 'timezone' => 'Asia/Kolkata']);
+            }
+            $made = $users->create(self::HOUSE_LOGIN, self::HOUSE_PASSWORD, 'administrator');
+            $made['ok'] && AmetecsData::log('AmetecsGlobal', 'Created the default test login ' . self::HOUSE_LOGIN . ' (change its password after first sign-in)', $tid);
+        }
+        AmetecsData::saveClient($tid, ['house' => true]);
+        AmetecsData::log('AmetecsGlobal', 'Set up Ametecs India as the house client: sign-in link /c/ametecs, all apps on', $tid);
+        @file_put_contents($marker, date('c') . "\n");
+        return $tid;
+    }
+
+    /** Seats in use for SmartPRS3: live employees not marked as leavers — SmartPRS3's own rule. */
+    public static function employeesUsed(\SmartPRS\Surface\SqlStore $platform, string $tenant, string $app = 'smartprs3'): int
+    {
+        $rules = AmetecsAppAccess::rules($tenant, $app);   // employees switched off for the app use none of its seats
         try {
             return count(array_filter($platform->forTenant($tenant)->all('employees'), static fn (array $e): bool
-                => !\SmartPRS\Surface\Modules::isRetired($e)
+                => AmetecsAppAccess::resolve($rules, $e)[0]
+                && !\SmartPRS\Surface\Modules::isRetired($e)
                 && !in_array(strtolower(trim((string) ($e['status'] ?? ''))), \SmartPRS\Surface\Licence::SEAT_FREE, true)));
         } catch (\Throwable) {
             return 0;
@@ -214,6 +282,12 @@ final class AmetecsMail
     {
         return (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off' ? 'https' : 'http') . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost')
             . rtrim(str_replace('\\', '/', dirname((string) ($_SERVER['SCRIPT_NAME'] ?? '/core/index.php'))), '/') . '/';
+    }
+
+    /** A client's own sign-in link: <AmetecsGlobal>/c/<slug>, like SmartPRS3's company links. */
+    public static function clientLink(string $slug): string
+    {
+        return preg_replace('~core/$~', '', self::base()) . 'c/' . rawurlencode($slug);
     }
 
     /** Issue a one-time reset link for a client login and email it. @return array{ok: bool, why: string} */

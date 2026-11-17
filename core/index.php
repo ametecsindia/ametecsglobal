@@ -20,6 +20,24 @@ $platform = $pdo === null ? null : new SqlStore($pdo);
 $session = $platform === null ? null : new Session($platform, PasswordHasher::platformDefault());
 $session?->start();
 $notice = null;
+$pdo !== null && AmetecsAccess::ensureHouseClient($pdo);   // Ametecs India at /c/ametecs, once per PC
+
+// A COMPANY LINK (/c/<slug>, like SmartPRS3's): the page carries the company's name and only that company's logins are accepted.
+$slug = strtolower(trim((string) ($_GET['c'] ?? $_POST['c'] ?? '')));
+$ws = null;
+if ($slug !== '' && $pdo !== null) {
+    $wq = $pdo->prepare('SELECT * FROM tenants WHERE LOWER(subdomain) = ?');
+    $wq->execute([$slug]);
+    $ws = $wq->fetch(\PDO::FETCH_ASSOC) ?: null;
+}
+$badLink = $slug !== '' && $ws === null;
+// By reference: a password reset switches the page to the reset login's company after these are made.
+$cq = static function (string $more = '') use (&$ws): string {
+    return $ws !== null ? '?c=' . rawurlencode((string) $ws['subdomain']) . ($more !== '' ? '&' . $more : '') : ($more !== '' ? '?' . $more : './');
+};
+$cField = static function () use (&$ws): string {
+    return $ws !== null ? '<input type="hidden" name="c" value="' . ag_h((string) $ws['subdomain']) . '">' : '';
+};
 
 if ($session !== null) {
     $problem ??= isset($_SESSION['flash_problem']) ? (string) $_SESSION['flash_problem'] : null;
@@ -30,9 +48,9 @@ if ($session !== null && ($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     if (!$session->verify((string) ($_POST['csrf'] ?? ''))) {
         $problem = 'This page had expired. Please try again.';
     } elseif (($_POST['do'] ?? '') === 'signin') {
-        $r = $session->signIn((string) ($_POST['email'] ?? ''), (string) ($_POST['password'] ?? ''));
+        $r = $badLink ? ['ok' => false, 'why' => 'This sign-in link is not valid.'] : $session->signIn((string) ($_POST['email'] ?? ''), (string) ($_POST['password'] ?? ''), $ws === null ? null : (string) $ws['id']);
         if ($r['ok']) {
-            header('Location: ./');
+            header('Location: ' . $cq());
             exit;
         }
         $problem = $r['why'];
@@ -50,8 +68,8 @@ if ($session !== null && ($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         } else {
             $_SESSION['fp_times'] = [...$times, time()];
             $q = $pdo->prepare("SELECT u.id, u.tenant_id FROM users u JOIN tenants t ON t.id = u.tenant_id
-                WHERE LOWER(u.email) = ? AND u.disabled_at IS NULL AND t.status_code NOT IN ('suspended', 'closed')");
-            $q->execute([$email]);
+                WHERE LOWER(u.email) = ? AND u.disabled_at IS NULL AND t.status_code NOT IN ('suspended', 'closed') AND (? = '' OR u.tenant_id = ?)");
+            $q->execute([$email, (string) ($ws['id'] ?? ''), (string) ($ws['id'] ?? '')]);
             foreach ($q->fetchAll(\PDO::FETCH_ASSOC) as $u) {
                 $sent = AmetecsMail::resetLink($pdo, (string) $u['tenant_id'], (string) $u['id']);
                 $sent['ok'] || error_log('AmetecsGlobal forgot-password mail not sent: ' . $sent['why']);
@@ -70,6 +88,9 @@ if ($session !== null && ($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             $r = (new \SmartPRS\Surface\Users($platform->forTenant($rt), new \SmartPRS\Surface\Authorisation(), PasswordHasher::platformDefault()))->redeemResetToken($rk, $new);
             if ($r['ok']) {
                 $notice = 'Your password is set. Sign in with it below.';
+                $wq = $pdo->prepare('SELECT * FROM tenants WHERE id = ?');
+                $wq->execute([$rt]);
+                $ws = $wq->fetch(\PDO::FETCH_ASSOC) ?: null;   // back to the company's own sign-in page
             } else {
                 $problem = $r['why'];
                 str_contains($r['why'], 'characters') && $_GET['reset'] = (string) $_POST['reset'];
@@ -77,7 +98,7 @@ if ($session !== null && ($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         }
     } elseif (($_POST['do'] ?? '') === 'signout') {
         $session->signOut();
-        header('Location: ./');
+        header('Location: ' . $cq());
         exit;
     }
 }
@@ -134,12 +155,15 @@ h1{margin:0 0 4px;font-size:24px}.sub{color:var(--mute);margin:0 0 22px}
 .card label{display:block;font-size:12px;font-weight:700;color:var(--mute);margin:14px 0 6px;text-transform:uppercase;letter-spacing:.4px}
 .card input{width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:10px;font-size:15px}
 .card .btn{background:var(--navy);color:#fff;width:100%;margin-top:20px;cursor:pointer}
+a.setup{display:flex;align-items:center;gap:16px;background:#fff;border:1px solid var(--line);border-left:6px solid var(--gold);border-radius:14px;padding:18px 20px;margin-bottom:22px;color:var(--ink);text-decoration:none}
+a.setup:hover{border-color:var(--gold)}a.setup .ic{font-size:30px;color:var(--navy)}a.setup b{font-size:18px}a.setup small{color:var(--mute);font-size:13px}
+a.setup .go2{margin-left:auto;background:var(--navy);color:#fff;padding:10px 16px;border-radius:10px;font-weight:700;white-space:nowrap}
 footer{text-align:center;color:var(--mute);font-size:12px;padding:24px}footer a{color:var(--mute)}
 </style></head><body>
-<header><div class="logo">Ametecs<b>Global</b></div>
+<header><div class="logo">Ametecs<b>Global</b></div><?php if ($ws !== null): ?><div style="opacity:.85;font-size:15px">· <?= ag_h((string) $ws['name']) ?></div><?php endif; ?>
 <?php if ($user !== null): ?>
   <div class="who"><span><?= ag_h($user['email'] ?? '') ?><?= $company !== '' ? ' · ' . ag_h($company) : '' ?></span>
-  <form method="post"><input type="hidden" name="csrf" value="<?= ag_h($session->token()) ?>"><button name="do" value="signout">Sign out</button></form></div>
+  <form method="post"><?= $cField() ?><input type="hidden" name="csrf" value="<?= ag_h($session->token()) ?>"><button name="do" value="signout">Sign out</button></form></div>
 <?php endif; ?>
 </header>
 <main>
@@ -149,12 +173,12 @@ footer{text-align:center;color:var(--mute);font-size:12px;padding:24px}footer a{
     <?php if ($mode === 'forgot'): ?>
       <h1>Forgot password</h1><p class="sub">Type the email you sign in with. We'll email you a link to set a new password.</p>
       <?php if ($problem !== null): ?><div class="msg"><?= ag_h($problem) ?></div><?php endif; ?>
-      <form method="post" action="./?forgot=1">
+      <form method="post" action="<?= ag_h($cq('forgot=1')) ?>"><?= $cField() ?>
         <input type="hidden" name="csrf" value="<?= ag_h($session?->token() ?? '') ?>"><input type="hidden" name="do" value="forgot">
         <label>Email</label><input type="email" name="email" required autofocus>
         <button class="btn">Email me a reset link</button>
       </form>
-      <p class="sub" style="margin-top:16px;text-align:center"><a href="./">Back to sign in</a></p>
+      <p class="sub" style="margin-top:16px;text-align:center"><a href="<?= ag_h($cq()) ?>">Back to sign in</a></p>
     <?php elseif ($mode === 'reset'): ?>
       <h1>Set a new password</h1><p class="sub">For <?= ag_h((string) $resetFor['email']) ?></p>
       <?php if ($problem !== null): ?><div class="msg"><?= ag_h($problem) ?></div><?php endif; ?>
@@ -165,18 +189,22 @@ footer{text-align:center;color:var(--mute);font-size:12px;padding:24px}footer a{
         <button class="btn">Set password</button>
       </form>
     <?php else: ?>
-    <h1>Sign in</h1><p class="sub">One sign-in for all your Ametecs apps.</p>
+    <h1>Sign in</h1><p class="sub"><?= $ws !== null ? 'to <b>' . ag_h((string) $ws['name']) . '</b> - one sign-in for all your apps.' : 'One sign-in for all your Ametecs apps.' ?></p>
+    <?php if ($ws !== null && in_array((string) $ws['status_code'], ['suspended', 'closed'], true)) { $problem ??= 'This company\'s AmetecsGlobal account is suspended. Please contact Ametecs.'; } ?>
+    <?php if ($badLink) { $problem ??= 'This sign-in link is not valid. Check the link with your company administrator.'; } ?>
     <?php if ($problem !== null): ?><div class="msg"><?= ag_h($problem) ?></div><?php endif; ?>
     <?php if ($session !== null && $session->needsEnrolment()): ?>
       <p>No account exists yet. <a href="../plugins/smartprs3/public/app.php?r=signin">Create the first administrator</a>.</p>
+    <?php elseif ($badLink): ?>
+      <p class="sub"><a href="./">Go to the general sign-in page</a></p>
     <?php elseif ($session !== null): ?>
-    <form method="post" action="./">
+    <form method="post" action="<?= ag_h($cq()) ?>"><?= $cField() ?>
       <input type="hidden" name="csrf" value="<?= ag_h($session->token()) ?>"><input type="hidden" name="do" value="signin">
       <label>Email</label><input type="email" name="email" required autofocus>
       <label>Password</label><input type="password" name="password" required>
       <button class="btn">Sign in</button>
     </form>
-    <p class="sub" style="margin-top:14px;text-align:right"><a href="./?forgot=1">Forgot password?</a></p>
+    <p class="sub" style="margin-top:14px;text-align:right"><a href="<?= ag_h($cq('forgot=1')) ?>">Forgot password?</a></p>
     <?php endif; ?>
     <?php endif; ?>
   </div>
@@ -184,6 +212,10 @@ footer{text-align:center;color:var(--mute);font-size:12px;padding:24px}footer a{
   <h1>Your apps</h1>
   <p class="sub">Every Ametecs app is listed. The ones in your plan open; the others can be switched on by Ametecs.</p>
   <?php if ($problem !== null): ?><div class="msg"><?= ag_h($problem) ?></div><?php endif; ?>
+  <?php if (strtolower((string) ($user['role'] ?? '')) !== 'employee'): ?>
+  <a class="setup" href="org.php"><span class="ic">&#9881;</span><span><b>Organization Setup</b><br>
+    <small>Companies, branches, departments, designations, shifts, employees, logins &amp; passwords, biometric &amp; QR devices &mdash; set once here, used by every app.</small></span><span class="go2">Open &rarr;</span></a>
+  <?php endif; ?>
   <div class="grid">
   <?php foreach (AmetecsAccess::plugins() as $code => $p):
       $st = AmetecsAccess::state($tenant, $code, $all);
