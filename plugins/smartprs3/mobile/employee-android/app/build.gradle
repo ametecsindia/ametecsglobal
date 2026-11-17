@@ -1,0 +1,62 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.ametecs.smartprs3.employee'
+    compileSdk 36
+
+    defaultConfig {
+        applicationId 'com.ametecs.smartprs3.employee'
+        minSdk 24
+        targetSdk 36
+        versionCode 7
+        versionName '1.6'
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+// RELEASES FOLDER (owner, 5 Nov 2026), like C:\SmartEPT-Releases: every APK Android Studio builds is
+// also copied to C:\SmartPRS3-Releases\Mobile-Apps\SmartPRS3 Mobile app\v<version>\ — a newer build of
+// the same version replaces the older file. Change versionName above for a new version folder.
+def releasesRoot = 'C:/SmartPRS3-Releases/Mobile-Apps'
+
+android.applicationVariants.all { variant ->
+    variant.assembleProvider.configure {
+        doLast {
+            copy {
+                from variant.outputs.collect { it.outputFile }
+                into "${releasesRoot}/SmartPRS3 Mobile app/v${variant.versionName}"
+                rename { "SmartPRS3-Mobile-app-${variant.versionName}-${variant.buildType.name}.apk" }
+            }
+            copy {
+                from rootProject.file('RELEASES-README.txt')
+                into releasesRoot
+                rename { 'README.txt' }
+            }
+        }
+    }
+}
+
+// THE PLAY STORE FILE (owner, 13 Nov 2026): Build > Generate Signed App Bundle makes app-release.aab; it is copied beside the
+// APKs as SmartPRS3-Mobile-app-<version>-release.aab — the file uploaded to the Google Play Console.
+tasks.matching { it.name == 'bundleRelease' }.configureEach {
+    doLast {
+        copy {
+            from layout.buildDirectory.dir('outputs/bundle/release')
+            include '*.aab'
+            into "${releasesRoot}/SmartPRS3 Mobile app/v${android.defaultConfig.versionName}"
+            rename { "SmartPRS3-Mobile-app-${android.defaultConfig.versionName}-release.aab" }
+        }
+    }
+}

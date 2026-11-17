@@ -1,0 +1,296 @@
+{
+  "_how": "One block per application. SYNC.bat copies every block's 'source' into its own folder 'target' (plugins/<app>, inside AmetecsGlobal). The source is only read, never changed. 'skipFolders'/'skipFiles' are left out of the copy. 'fixes' are text replacements made in the COPY after every sync, so the copy never touches the source app's database, accounts or folders. To add an app: copy the SmartPRS3 block, change name/source/target (e.g. plugins\\smartept) and its fixes. 'mustContain' = text that must be in the copy after the fixes (the AmetecsGlobal hooks); the sync FAILS if it is missing. 'git' = the AmetecsGlobal GitHub repository this folder is kept in step with; 'neverPush' = files that may never be uploaded (the sync stops if one is about to be). 'onlyOn' = the computer name(s) that bring this app in; every other PC receives it through GitHub.",
+  "apps": [
+    {
+      "name": "SmartPRS3",
+      "source": "C:\\laragon\\www\\SmartPRS3",
+      "target": "plugins/smartprs3",
+      "skipFolders": [
+        ".git",
+        "storage",
+        "Claude outputs",
+        "node_modules",
+        "public\\uploads",
+        "mobile\\employee-android\\build",
+        "mobile\\employee-android\\app\\build",
+        "mobile\\employee-android\\app\\release",
+        "mobile\\employee-android\\.gradle",
+        "mobile\\employee-android\\.idea"
+      ],
+      "skipFiles": [
+        ".env",
+        ".env.bak",
+        "env-local.txt",
+        "local.properties",
+        "*.jks",
+        "*.keystore",
+        "*.apk",
+        "*.aab",
+        "*.pem.bak",
+        ".gitignore"
+      ],
+      "fixes": [
+        {
+          "files": [
+            "tools\\db\\bootstrap-local.php"
+          ],
+          "find": "$app = 'smartprs3';",
+          "replace": "$app = 'ametecsglobal';"
+        },
+        {
+          "files": [
+            "tools\\db\\bootstrap-local.php"
+          ],
+          "find": "?? 'smartprs3_migrator'",
+          "replace": "?? 'ametecsglobal_migrator'"
+        },
+        {
+          "files": [
+            "tools\\db\\bootstrap-local.php"
+          ],
+          "find": "?? 'smartprs3')",
+          "replace": "?? 'ametecsglobal')"
+        },
+        {
+          "files": [
+            "public\\index.php",
+            "tools\\db\\schedule.php",
+            "tools\\db\\migrate.php"
+          ],
+          "find": "?: 'smartprs3';",
+          "replace": "?: 'ametecsglobal';"
+        },
+        {
+          "files": [
+            "tools\\db\\backfill-uuids.php"
+          ],
+          "find": "?? 'smartprs3'),",
+          "replace": "?? 'ametecsglobal'),"
+        },
+        {
+          "files": [
+            "tools\\db\\grants.php"
+          ],
+          "find": "?? 'smartprs3');",
+          "replace": "?? 'ametecsglobal');"
+        },
+        {
+          "files": [
+            "tools\\db\\grants.php"
+          ],
+          "find": "?? 'smartprs3_app');",
+          "replace": "?? 'ametecsglobal_app');"
+        },
+        {
+          "files": [
+            "tools\\release\\build-release.php",
+            "tools\\release\\build-client-package.php",
+            "tools\\release\\releases-folder.php"
+          ],
+          "find": "C:\\\\SmartPRS3-Releases",
+          "replace": "C:\\\\AmetecsGlobal-Releases",
+          "optional": true
+        },
+        {
+          "files": [
+            "make-release.bat",
+            "make-client-package.bat"
+          ],
+          "find": "C:\\SmartPRS3-Releases",
+          "replace": "C:\\AmetecsGlobal-Releases",
+          "optional": true
+        },
+        {
+          "files": [
+            "laragon-setup.bat"
+          ],
+          "find": "Run from C:\\laragon\\www\\SmartPRS3",
+          "replace": "Run from C:\\laragon\\www\\AmetecsGlobal\\plugins\\smartprs3",
+          "optional": true
+        },
+        {
+          "files": [
+            "laragon-setup.bat"
+          ],
+          "find": "destroys smartprs3",
+          "replace": "destroys ametecsglobal",
+          "optional": true
+        },
+        {
+          "files": [
+            "laragon-setup.bat"
+          ],
+          "find": "localhost/SmartPRS3/public",
+          "replace": "localhost/AmetecsGlobal/plugins/smartprs3/public",
+          "optional": true
+        },
+        {
+          "files": [
+            ".env.example"
+          ],
+          "regex": true,
+          "find": "(?m)^APP_NAME=.*$",
+          "replace": "APP_NAME=\"Ametecs Global\""
+        },
+        {
+          "files": [
+            ".env.example"
+          ],
+          "regex": true,
+          "find": "(?m)^APP_URL=.*$",
+          "replace": "APP_URL=http://ametecsglobal.test"
+        },
+        {
+          "files": [
+            ".env.example"
+          ],
+          "regex": true,
+          "find": "(?m)^DB_DATABASE=.*$",
+          "replace": "DB_DATABASE=ametecsglobal"
+        },
+        {
+          "files": [
+            ".env.example"
+          ],
+          "regex": true,
+          "find": "(?m)^DB_USERNAME=.*$",
+          "replace": "DB_USERNAME="
+        },
+        {
+          "files": [
+            ".env.example"
+          ],
+          "regex": true,
+          "find": "(?m)^DB_MIGRATION_USERNAME=.*$",
+          "replace": "DB_MIGRATION_USERNAME=ametecsglobal_migrator"
+        },
+        {
+          "files": [
+            ".env.example"
+          ],
+          "regex": true,
+          "find": "(?m)^SMARTPRS_TEST_USER=.*$",
+          "replace": "SMARTPRS_TEST_USER=ametecsglobal"
+        },
+        {
+          "files": [
+            ".env.example"
+          ],
+          "regex": true,
+          "find": "(?m)^SMARTPRS_TEST_DATABASE=.*$",
+          "replace": "SMARTPRS_TEST_DATABASE=ametecsglobal_schema_check"
+        },
+        {
+          "files": [
+            "public\\app.php"
+          ],
+          "find": "$session->start();",
+          "replace": "if (session_status() === PHP_SESSION_NONE) { session_name('AMETECSGLOBAL'); } $session->start();"
+        },
+        {
+          "files": [
+            "public\\app.php"
+          ],
+          "find": "require __DIR__ . '/../surface/partials/boot-hooks.php';",
+          "replace": "require __DIR__ . '/../surface/partials/boot-hooks.php'; require __DIR__ . '/../../../core/gate.php'; // AmetecsGlobal: plugin on/off + seats"
+        },
+        {
+          "files": [
+            "public\\app.php"
+          ],
+          "find": "$cap = $licence->seatLimit() ??",
+          "replace": "$cap = (ametecs_seats('smartprs3') ?? $licence->seatLimit()) ??"
+        },
+        {
+          "files": [
+            "public\\app.php"
+          ],
+          "find": "$editingId === '' ? $licence->seatLimit() : null",
+          "replace": "$editingId === '' ? (ametecs_seats('smartprs3') ?? $licence->seatLimit()) : null"
+        },
+        {
+          "files": [
+            "public\\super.php"
+          ],
+          "find": "session_name('SMARTPRS_SUPER');",
+          "replace": "session_name('AMETECSGLOBAL_SUPER');"
+        },
+        {
+          "files": [
+            "public\\super.php"
+          ],
+          "find": "$h = static fn (?string $s): string => htmlspecialchars((string) $s, ENT_QUOTES, 'UTF-8');",
+          "replace": "if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET' && $_GET === []) { header('Location: ../../../core/super.php'); exit; } // AmetecsGlobal: its own Super Admin sign-in\n$h = static fn (?string $s): string => htmlspecialchars((string) $s, ENT_QUOTES, 'UTF-8');"
+        }
+      ],
+      "makeEnvFromExample": true,
+      "mustNotContain": [
+        {
+          "files": [
+            ".env",
+            "tools\\db\\bootstrap-local.php",
+            "tools\\db\\migrate.php",
+            "tools\\db\\schedule.php",
+            "public\\index.php",
+            "tools\\db\\grants.php",
+            "tools\\db\\backfill-uuids.php"
+          ],
+          "pattern": "(?m)^DB_DATABASE=smartprs3\\s*$|'smartprs3';|'smartprs3'\\)|smartprs3_migrator'|smartprs3_app'"
+        },
+        {
+          "files": [
+            "tools\\release\\build-release.php",
+            "tools\\release\\build-client-package.php"
+          ],
+          "pattern": "\\?\\? 'C:..SmartPRS3-Releases"
+        }
+      ],
+      "mustContain": [
+        {
+          "files": [
+            "public\\app.php"
+          ],
+          "text": "require __DIR__ . '/../../../core/gate.php';"
+        },
+        {
+          "files": [
+            "public\\app.php"
+          ],
+          "text": "session_name('AMETECSGLOBAL')"
+        },
+        {
+          "files": [
+            "public\\app.php"
+          ],
+          "text": "$cap = (ametecs_seats('smartprs3')"
+        },
+        {
+          "files": [
+            "public\\app.php"
+          ],
+          "text": "? (ametecs_seats('smartprs3') ?? $licence->seatLimit()) : null"
+        },
+        {
+          "files": [
+            "public\\super.php"
+          ],
+          "text": "session_name('AMETECSGLOBAL_SUPER');"
+        },
+        {
+          "files": [
+            "public\\super.php"
+          ],
+          "text": "header('Location: ../../../core/super.php');"
+        }
+      ],
+      "onlyOn": [
+        "DESKTOP-ACAS2DS"
+      ]
+    }
+  ],
+  "git": {
+    "remote": "https://github.com/ametecsindia/ametecsglobal.git",
+    "branch": "main",
+    "neverPush": "(^|/)\\.env($|\\.(?!example$))|(^|/)env-local\\.txt$|^plugins/[^/]+/(storage|vendor|node_modules|public/uploads)/|^core/data/(?!\\.htaccess$)|^global/data/|sync-log\\.txt$|\\.(jks|keystore|key|p12|pfx|apk|aab)$|licen[cs]e_private"
+  }
+}

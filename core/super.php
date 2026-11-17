@@ -1,0 +1,738 @@
+<?php
+/**
+ * AMETECSGLOBAL — SUPER ADMIN CONSOLE (Ametecs staff only).
+ *
+ *   Dashboard   counts, apps in use, licences expiring
+ *   Clients     every client (tenant); New client = company + master company + first administrator + app licences
+ *   Client      details, suspend/reactivate/close, apps & licences, logins (create admin, set password, disable/enable)
+ *   Apps        the catalogue, who uses each app, seats
+ *   Activity    every change made here: who, when, what
+ *   Super Admins Ametecs staff accounts (platform_users)
+ *   My account  change own password
+ *
+ * Clients are SmartPRS3's `tenants` rows (same database), so a client made here works in SmartPRS3 at once.
+ * Licences live in core/data/access.json (AmetecsAccess). Nothing is ever deleted: clients are suspended or closed.
+ * Sign-in: `platform_users`, 5 wrong tries = 5 minutes locked; cookie AMETECSGLOBAL_SUPER (shared with SmartPRS3's console).
+ */
+declare(strict_types=1);
+
+require __DIR__ . '/access.php';
+
+use SmartPRS\Platform\Identity\PasswordHasher;
+use SmartPRS\Surface\Authorisation;
+use SmartPRS\Surface\Database;
+use SmartPRS\Surface\Session;
+use SmartPRS\Surface\SqlStore;
+use SmartPRS\Surface\Users;
+
+session_name('AMETECSGLOBAL_SUPER');
+session_set_cookie_params(['httponly' => true, 'samesite' => 'Lax']);
+session_start();
+$_SESSION['csrf'] ??= bin2hex(random_bytes(32));
+
+$pdo = Database::connect(AG_BASE . '/.env');
+$platform = $pdo === null ? null : new SqlStore($pdo);
+$hasher = PasswordHasher::platformDefault();
+$plugins = AmetecsAccess::plugins();
+$statuses = ['active' => 'Active', 'suspended' => 'Suspended', 'closed' => 'Deactivated'];
+$timezones = ['Asia/Kolkata', 'Asia/Dubai', 'Asia/Riyadh', 'Asia/Singapore', 'Europe/London', 'America/New_York', 'UTC'];
+$problem = $pdo === null ? 'The database is not available: ' . Database::why() : null;
+$notice = null;
+foreach (['flash_problem' => 'problem', 'flash_notice' => 'notice'] as $k => $var) {
+    if (isset($_SESSION[$k])) {
+        $$var = (string) $_SESSION[$k];
+        unset($_SESSION[$k]);
+    }
+}
+
+$me = (($_SESSION['user']['platform'] ?? false) === true) ? $_SESSION['user'] : null;
+$meEmail = (string) ($me['email'] ?? '');
+$back = static function (string $to, ?string $ok = null, ?string $bad = null): never {
+    $ok !== null && $_SESSION['flash_notice'] = $ok;
+    $bad !== null && $_SESSION['flash_problem'] = $bad;
+    header('Location: super.php' . $to);
+    exit;
+};
+$newPassword = static fn (): string => substr(strtr(base64_encode(random_bytes(12)), '+/=', 'kQz'), 0, 12);
+$tenant = static function (string $id) use ($pdo): ?array {
+    if ($pdo === null || $id === '' || !ctype_digit($id)) {
+        return null;
+    }
+    $q = $pdo->prepare('SELECT * FROM tenants WHERE id = ?');
+    $q->execute([$id]);
+    return $q->fetch(\PDO::FETCH_ASSOC) ?: null;
+};
+$admins = static function (string $tid) use ($pdo): array {
+    $q = $pdo->prepare("SELECT id, name, email, status, disabled_at, created_at FROM users WHERE tenant_id = ? ORDER BY (status = 'administrator') DESC, id");
+    $q->execute([$tid]);
+    return $q->fetchAll(\PDO::FETCH_ASSOC);
+};
+/** Licences from the form, validated: [plugin => [on, seats, until]] or an error string. */
+$readLicences = static function (array $in) use ($plugins): array|string {
+    $out = [];
+    // An app switched on with no valid-till date runs for one year from today (a half-typed date arrives empty).
+    $year = (new DateTimeImmutable('now', new DateTimeZone('Asia/Kolkata')))->modify('+1 year -1 day')->format('Y-m-d');
+    foreach ($plugins as $code => $p) {
+        $r = (array) ($in[$code] ?? []);
+        $until = trim((string) ($r['until'] ?? ''));
+        if ($until !== '' && preg_match('/^\d{4}-\d{2}-\d{2}$/', $until) !== 1) {
+            return $p['name'] . ': the valid-till date is not a date.';
+        }
+        $on = isset($r['on']);
+        $out[$code] = ['on' => $on, 'seats' => max(0, (int) ($r['seats'] ?? 0)), 'until' => $on && $until === '' ? $year : $until];
+        if ($on && $out[$code]['seats'] < 1) {
+            return $p['name'] . ' is switched on: give it the number of ' . $p['unit'] . ' (at least 1).';
+        }
+    }
+    return $out;
+};
+$describe = static fn (array $lic): string => implode(', ', array_map(static fn (string $c, array $l): string
+    => $c . ($l['on'] ? ' ON ' . $l['seats'] . ' till ' . $l['until'] : ' off'), array_keys($lic), $lic));
+
+/* ------------------------------------------------------------------ actions (POST) */
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && $pdo !== null) {
+    $do = (string) ($_POST['do'] ?? '');
+    $id = (string) ($_POST['id'] ?? '');
+    if (!hash_equals((string) $_SESSION['csrf'], (string) ($_POST['csrf'] ?? ''))) {
+        $back('', null, 'This page had expired. Please try again.');
+    }
+
+    if ($do === 'signin') {
+        $tries = (int) ($_SESSION['super_tries'] ?? 0);
+        if ((int) ($_SESSION['super_locked'] ?? 0) > time()) {
+            $back('', null, 'Too many attempts. Try again in a few minutes.');
+        }
+        $q = $pdo->prepare('SELECT * FROM platform_users WHERE LOWER(email) = ? LIMIT 1');
+        $q->execute([strtolower(trim((string) ($_POST['email'] ?? '')))]);
+        $u = $q->fetch(\PDO::FETCH_ASSOC) ?: null;
+        if ($u === null || trim((string) ($u['disabled_at'] ?? '')) !== '' || !$hasher->verify((string) ($_POST['password'] ?? ''), (string) $u['password'])) {
+            $_SESSION['super_tries'] = $tries + 1;
+            $_SESSION['super_locked'] = $tries + 1 >= 5 ? time() + 300 : 0;
+            $back('', null, 'Those credentials were not accepted.');
+        }
+        session_regenerate_id(true);
+        $_SESSION['super_tries'] = 0;
+        $pdo->prepare('UPDATE platform_users SET last_login_at = NOW() WHERE id = ?')->execute([$u['id']]);
+        // The shape SmartPRS3's console writes, so its console accepts this sign-in too.
+        $_SESSION['user'] = ['id' => 'platform-' . $u['id'], 'email' => (string) $u['email'], 'name' => (string) ($u['name'] ?? ''),
+            'role' => 'administrator', 'employee_id' => null, 'tenant_id' => '', 'platform' => true, 'platform_role' => (string) $u['role'],
+            'platform_id' => (string) $u['id']];
+        AmetecsData::log((string) $u['email'], 'Signed in');
+        $back('');
+    }
+
+    if ($me === null) {
+        $back('', null, 'Please sign in.');
+    }
+
+    if ($do === 'signout') {
+        AmetecsData::log($meEmail, 'Signed out');
+        $_SESSION = [];
+        session_regenerate_id(true);
+        $back('');
+    }
+
+    if ($do === 'client-create') {
+        $name = trim((string) ($_POST['name'] ?? ''));
+        $code = strtoupper((string) preg_replace('/[^A-Za-z0-9-]/', '', (string) ($_POST['code'] ?? '')));
+        $slug = (string) preg_replace('/[^a-z0-9]/', '', strtolower((string) (($_POST['slug'] ?? '') ?: $name)));
+        $tz = in_array($_POST['timezone'] ?? '', $timezones, true) ? (string) $_POST['timezone'] : 'Asia/Kolkata';
+        $adminEmail = strtolower(trim((string) ($_POST['admin_email'] ?? '')));
+        $adminPassword = (string) ($_POST['admin_password'] ?? '') ?: $newPassword();
+        $lic = $readLicences((array) ($_POST['p'] ?? []));
+        $keep = $_POST;
+        unset($keep['csrf'], $keep['admin_password']);
+        $_SESSION['form'] = $keep;
+        $err = match (true) {
+            $name === '' || $code === '' => 'A client needs a company name and a client code.',
+            filter_var($adminEmail, FILTER_VALIDATE_EMAIL) === false => 'Give the client administrator a valid email — it is their sign-in.',
+            strlen($adminPassword) < Session::PASSWORD_FLOOR => 'The administrator password needs at least ' . Session::PASSWORD_FLOOR . ' characters (or leave it empty to generate one).',
+            is_string($lic) => $lic,
+            !in_array(true, array_column($lic, 'on'), true) => 'Switch on at least one app — a client without a licence cannot use anything.',
+            default => null,
+        };
+        if ($err === null) {
+            $dup = $pdo->prepare('SELECT name FROM tenants WHERE UPPER(code) = ?');
+            $dup->execute([$code]);
+            $err = ($n = $dup->fetchColumn()) !== false ? "Client code {$code} is already used by {$n}." : null;
+        }
+        if ($err === null) {
+            $dup = $pdo->prepare('SELECT COUNT(*) FROM users WHERE LOWER(email) = ?');
+            $dup->execute([$adminEmail]);
+            $dup2 = $pdo->prepare('SELECT COUNT(*) FROM platform_users WHERE LOWER(email) = ?');
+            $dup2->execute([$adminEmail]);
+            $err = ((int) $dup->fetchColumn() + (int) $dup2->fetchColumn()) > 0 ? 'That administrator email already has a login. Use a different email.' : null;
+        }
+        if ($err !== null) {
+            $back('?p=client-new', null, $err);
+        }
+        $taken = $pdo->prepare('SELECT COUNT(*) FROM tenants WHERE subdomain = ?');
+        $taken->execute([$slug]);
+        if ($slug === '' || (int) $taken->fetchColumn() > 0) {
+            $slug .= (string) random_int(100, 999);
+        }
+
+        $pdo->beginTransaction();
+        try {
+            $t = $platform->put('tenants', ['code' => $code, 'name' => $name, 'status_code' => 'active', 'business_timezone' => $tz,
+                'subdomain' => $slug, 'state' => trim((string) ($_POST['state'] ?? '')) ?: null, 'onboarded_on' => date('Y-m-d'), 'provisioned_at' => date('Y-m-d H:i:s')]);
+            $tid = (string) $t['id'];
+            $tStore = $platform->forTenant($tid);
+            $tStore->put('companies', ['name' => trim((string) ($_POST['legal_name'] ?? '')) ?: $name, 'timezone' => $tz,
+                'email' => trim((string) ($_POST['contact_email'] ?? '')) ?: null, 'phone' => trim((string) ($_POST['contact_phone'] ?? '')) ?: null]);
+            $made = (new Users($tStore, new Authorisation(), $hasher))->create($adminEmail, $adminPassword, 'administrator');
+            if (!$made['ok']) {
+                throw new \RuntimeException('The administrator login was not created: ' . $made['why']);
+            }
+            $pdo->commit();
+        } catch (\Throwable $x) {
+            $pdo->inTransaction() && $pdo->rollBack();
+            $back('?p=client-new', null, 'Nothing was saved. ' . $x->getMessage());
+        }
+        $all = AmetecsAccess::all();
+        foreach ($lic as $c => $l) {
+            $all[$tid][$c] = $l + ['changed' => date('c') . ' by ' . $meEmail];
+        }
+        AmetecsAccess::save($all);
+        AmetecsData::saveClient($tid, ['contact_name' => trim((string) ($_POST['contact_name'] ?? '')), 'contact_email' => trim((string) ($_POST['contact_email'] ?? '')),
+            'contact_phone' => trim((string) ($_POST['contact_phone'] ?? '')), 'notes' => trim((string) ($_POST['notes'] ?? ''))]);
+        AmetecsData::log($meEmail, 'Created client ' . $name . ' (' . $code . ')', $tid, 'admin ' . $adminEmail . '; ' . $describe($lic));
+        unset($_SESSION['form']);
+        $_SESSION['reveal'] = ['tid' => $tid, 'email' => $adminEmail, 'password' => $adminPassword];
+        $back('?p=client&id=' . $tid, 'Client ' . $name . ' created with its administrator login and licences.');
+    }
+
+    $t = $tenant($id);
+    if (in_array($do, ['client-save', 'client-status', 'licences-save', 'admin-create', 'login-password', 'login-toggle', 'login-link'], true) && $t === null) {
+        $back('?p=clients', null, 'Unknown client.');
+    }
+
+    if ($do === 'client-save') {
+        $name = trim((string) ($_POST['name'] ?? ''));
+        $code = strtoupper((string) preg_replace('/[^A-Za-z0-9-]/', '', (string) ($_POST['code'] ?? '')));
+        $slug = (string) preg_replace('/[^a-z0-9]/', '', strtolower((string) ($_POST['slug'] ?? '')));
+        $dup = $pdo->prepare('SELECT name FROM tenants WHERE (UPPER(code) = ? OR (subdomain = ? AND ? <> \'\')) AND id <> ?');
+        $dup->execute([$code, $slug, $slug, $id]);
+        if ($name === '' || $code === '') {
+            $back('?p=client&id=' . $id, null, 'A client needs a name and a code.');
+        }
+        if (($n = $dup->fetchColumn()) !== false) {
+            $back('?p=client&id=' . $id, null, 'That code or sign-in link is already used by ' . $n . '.');
+        }
+        $platform->put('tenants', ['id' => $id, 'name' => $name, 'code' => $code, 'subdomain' => $slug ?: null,
+            'business_timezone' => in_array($_POST['timezone'] ?? '', $timezones, true) ? (string) $_POST['timezone'] : $t['business_timezone'],
+            'state' => trim((string) ($_POST['state'] ?? '')) ?: null]);
+        AmetecsData::saveClient($id, ['contact_name' => trim((string) ($_POST['contact_name'] ?? '')), 'contact_email' => trim((string) ($_POST['contact_email'] ?? '')),
+            'contact_phone' => trim((string) ($_POST['contact_phone'] ?? '')), 'notes' => trim((string) ($_POST['notes'] ?? ''))]);
+        AmetecsData::log($meEmail, 'Updated client details', $id, $name . ' (' . $code . ')');
+        $back('?p=client&id=' . $id, 'Details saved.');
+    }
+
+    if ($do === 'client-status') {
+        $to = (string) ($_POST['to'] ?? '');
+        if (!isset($statuses[$to])) {
+            $back('?p=client&id=' . $id, null, 'Unknown status.');
+        }
+        $platform->put('tenants', ['id' => $id, 'status_code' => $to]);
+        AmetecsData::log($meEmail, 'Client is now ' . $statuses[$to], $id, 'was ' . $t['status_code']);
+        $back('?p=client&id=' . $id, $t['name'] . ' is now ' . strtolower($statuses[$to]) . '.' . ($to === 'active' ? '' : ' Its people can no longer sign in. Nothing was deleted.'));
+    }
+
+    if ($do === 'licences-save') {
+        $lic = $readLicences((array) ($_POST['p'] ?? []));
+        if (is_string($lic)) {
+            $_SESSION['form'] = ['lic_for' => $id, 'p' => (array) ($_POST['p'] ?? [])];   // shown again exactly as typed
+            $back('?p=client&id=' . $id . '#apps', null, $lic . ' Nothing was saved yet - your entries are still below.');
+        }
+        $defaulted = array_keys(array_filter($lic, static fn ($l, $c) => $l['on'] && trim((string) ($_POST['p'][$c]['until'] ?? '')) === '', ARRAY_FILTER_USE_BOTH));
+        $all = AmetecsAccess::all();
+        foreach ($lic as $c => $l) {
+            $all[$id][$c] = $l + ['changed' => date('c') . ' by ' . $meEmail];
+        }
+        AmetecsAccess::save($all);
+        AmetecsData::log($meEmail, 'Changed apps & licences', $id, $describe($lic));
+        $back('?p=client&id=' . $id . '#apps', 'Apps & licences saved. The client sees the change on their next page.'
+            . ($defaulted === [] ? '' : ' No valid-till date was given for ' . implode(', ', array_map(static fn ($c) => $plugins[$c]['name'], $defaulted)) . ', so it runs for one year (till ' . date('d M Y', (int) strtotime($lic[$defaulted[0]]['until'])) . ').'));
+    }
+
+    if ($do === 'admin-create') {
+        $email = strtolower(trim((string) ($_POST['email'] ?? '')));
+        $pw = (string) ($_POST['password'] ?? '') ?: $newPassword();
+        $dup = $pdo->prepare('SELECT (SELECT COUNT(*) FROM users WHERE LOWER(email) = ?) + (SELECT COUNT(*) FROM platform_users WHERE LOWER(email) = ?)');
+        $dup->execute([$email, $email]);
+        if (filter_var($email, FILTER_VALIDATE_EMAIL) === false || (int) $dup->fetchColumn() > 0) {
+            $back('?p=client&id=' . $id . '#logins', null, 'Give a valid email that has no login yet.');
+        }
+        $tStore = $platform->forTenant($id);
+        if ($tStore->all('companies') === []) {
+            $tStore->put('companies', ['name' => (string) $t['name']]);
+        }
+        $made = (new Users($tStore, new Authorisation(), $hasher))->create($email, $pw, 'administrator');
+        if (!$made['ok']) {
+            $back('?p=client&id=' . $id . '#logins', null, $made['why']);
+        }
+        AmetecsData::log($meEmail, 'Created administrator login', $id, $email);
+        $_SESSION['reveal'] = ['tid' => $id, 'email' => $email, 'password' => $pw];
+        $back('?p=client&id=' . $id . '#logins', 'Administrator ' . $email . ' created.');
+    }
+
+    if ($do === 'login-password' || $do === 'login-toggle' || $do === 'login-link') {
+        $uid = (string) ($_POST['user'] ?? '');
+        $own = array_values(array_filter($admins($id), static fn (array $u): bool => (string) $u['id'] === $uid));
+        if ($own === []) {
+            $back('?p=client&id=' . $id . '#logins', null, 'That login does not belong to this client.');
+        }
+        if ($do === 'login-link') {
+            if (trim((string) ($own[0]['disabled_at'] ?? '')) !== '') {
+                $back('?p=client&id=' . $id . '#logins', null, 'That login is deactivated. Reactivate it first.');
+            }
+            $sent = AmetecsMail::resetLink($pdo, $id, $uid);
+            $sent['ok'] && AmetecsData::log($meEmail, 'Emailed a password reset link', $id, (string) $own[0]['email']);
+            $back('?p=client&id=' . $id . '#logins', $sent['ok'] ? 'Reset link emailed to ' . $own[0]['email'] . ' (valid once, for a limited time).' : null,
+                $sent['ok'] ? null : 'The reset link was not sent: ' . $sent['why'] . ' Use "Set password now" instead.');
+        }
+        if ($do === 'login-toggle') {
+            $off = trim((string) ($own[0]['disabled_at'] ?? '')) === '';
+            $pdo->prepare('UPDATE users SET disabled_at = ' . ($off ? 'NOW()' : 'NULL') . ', updated_at = NOW() WHERE id = ? AND tenant_id = ?')->execute([$uid, $id]);
+            AmetecsData::log($meEmail, ($off ? 'Deactivated' : 'Reactivated') . ' login', $id, (string) $own[0]['email']);
+            $back('?p=client&id=' . $id . '#logins', (string) $own[0]['email'] . ($off ? ' can no longer sign in.' : ' can sign in again.'));
+        }
+        $pw = (string) ($_POST['password'] ?? '') ?: $newPassword();
+        $set = (new Users($platform->forTenant($id), new Authorisation(), $hasher))->setPassword($uid, $pw, (string) ($me['id'] ?? 'platform'));
+        if (!$set['ok']) {
+            $back('?p=client&id=' . $id . '#logins', null, $set['why']);
+        }
+        AmetecsData::log($meEmail, 'Set a new password', $id, (string) $own[0]['email']);
+        $_SESSION['reveal'] = ['tid' => $id, 'email' => (string) $own[0]['email'], 'password' => $pw];
+        $back('?p=client&id=' . $id . '#logins', 'New password set for ' . $own[0]['email'] . '.');
+    }
+
+    if ($do === 'app-save') {
+        $catalogue = AmetecsAccess::plugins(true);
+        $code = (string) ($_POST['code'] ?? '');
+        $isNew = $code === '';
+        $name = trim((string) ($_POST['name'] ?? ''));
+        $open = trim((string) ($_POST['open'] ?? ''));
+        $color = (string) ($_POST['color'] ?? '');
+        if ($name === '') {
+            $back('?p=apps', null, 'An app needs a name.');
+        }
+        // Where the app opens: a web address (https://…) or a path on this server (../something/). Nothing else.
+        if ($open !== '' && preg_match('~^(https?://[^\s"<>]+|(\.\./|/)[A-Za-z0-9._/\-?=&%]*)$~', $open) !== 1) {
+            $back('?p=apps', null, 'The "Opens at" link must be a web address (https://…) or a path on this server (../folder/page.php).');
+        }
+        if ($isNew) {
+            $code = (string) preg_replace('/[^a-z0-9]/', '', strtolower($name));
+            if ($code === '' || isset($catalogue[$code])) {
+                $code = ($code ?: 'app') . random_int(10, 99);
+            }
+        } elseif (!isset($catalogue[$code])) {
+            $back('?p=apps', null, 'Unknown app.');
+        }
+        foreach ($catalogue as $c => $a) {
+            if ($c !== $code && strcasecmp((string) $a['name'], $name) === 0) {
+                $back('?p=apps', null, 'There is already an app called ' . $name . '.');
+            }
+        }
+        $app = ['name' => $name, 'what' => trim((string) ($_POST['what'] ?? '')), 'unit' => trim((string) ($_POST['unit'] ?? '')) ?: 'users',
+            'open' => $open === '' ? null : $open, 'color' => preg_match('/^#[0-9A-Fa-f]{6}$/', $color) === 1 ? strtoupper($color) : '#64748B',
+            'retired' => isset($_POST['retired'])];
+        AmetecsAccess::saveApp($code, $app);
+        AmetecsData::log($meEmail, ($isNew ? 'Added app ' : 'Changed app ') . $name, '', ($app['open'] ?? 'not live yet') . ($app['retired'] ? ' · retired' : ''));
+        $back('?p=apps', $isNew ? $name . ' added. Switch it on for clients from each client\'s page.' : $name . ' saved.' . ($app['retired'] ? ' It is retired: clients no longer see it; their licences are kept.' : ''));
+    }
+
+    if ($do === 'email-save') {
+        AmetecsMail::box($pdo)->save($_POST);
+        AmetecsData::log($meEmail, 'Changed email settings', '', (string) ($_POST['host'] ?? '') . ' from ' . (string) ($_POST['from_email'] ?? ''));
+        $back('?p=email', 'Email settings saved.' . (AmetecsMail::box($pdo)->ready() ? ' Send a test to check them.' : ' Email stays off until it is switched on with a server and a From address.'));
+    }
+
+    if ($do === 'email-test') {
+        $r = AmetecsMail::send($pdo, $meEmail, 'AmetecsGlobal test email', "This is a test from AmetecsGlobal.\nIf you can read this, password reset emails will work.");
+        $back('?p=email', $r['ok'] ? 'Test email sent to ' . $meEmail . '. Check your inbox.' : null, $r['ok'] ? null : 'The test email failed: ' . $r['why']);
+    }
+
+    if ($do === 'staff-add') {
+        $email = strtolower(trim((string) ($_POST['email'] ?? '')));
+        $name = trim((string) ($_POST['name'] ?? ''));
+        $dup = $pdo->prepare('SELECT (SELECT COUNT(*) FROM users WHERE LOWER(email) = ?) + (SELECT COUNT(*) FROM platform_users WHERE LOWER(email) = ?)');
+        $dup->execute([$email, $email]);
+        if (filter_var($email, FILTER_VALIDATE_EMAIL) === false || $name === '' || (int) $dup->fetchColumn() > 0) {
+            $back('?p=staff', null, 'Give a name and a valid email that has no login yet.');
+        }
+        $pw = $newPassword();
+        $pdo->prepare('INSERT INTO platform_users (name, email, password, role, created_at, updated_at) VALUES (?, ?, ?, ?, NOW(), NOW())')
+            ->execute([$name, $email, $hasher->hash($pw), 'super_admin']);
+        AmetecsData::log($meEmail, 'Added Super Admin', '', $email);
+        $_SESSION['reveal'] = ['tid' => 'staff', 'email' => $email, 'password' => $pw];
+        $back('?p=staff', 'Super Admin ' . $email . ' added.');
+    }
+
+    if ($do === 'staff-toggle') {
+        $q = $pdo->prepare('SELECT * FROM platform_users WHERE id = ?');
+        $q->execute([$id]);
+        $u = $q->fetch(\PDO::FETCH_ASSOC);
+        if (!$u || (string) $u['id'] === (string) ($me['platform_id'] ?? '') || strcasecmp((string) $u['email'], $meEmail) === 0) {
+            $back('?p=staff', null, 'You cannot disable your own account.');
+        }
+        $off = trim((string) ($u['disabled_at'] ?? '')) === '';
+        $pdo->prepare('UPDATE platform_users SET disabled_at = ' . ($off ? 'NOW()' : 'NULL') . ', updated_at = NOW() WHERE id = ?')->execute([$id]);
+        AmetecsData::log($meEmail, ($off ? 'Disabled' : 'Enabled') . ' Super Admin', '', (string) $u['email']);
+        $back('?p=staff', (string) $u['email'] . ($off ? ' is disabled.' : ' is enabled.'));
+    }
+
+    if ($do === 'my-password') {
+        $q = $pdo->prepare('SELECT * FROM platform_users WHERE LOWER(email) = ?');
+        $q->execute([strtolower($meEmail)]);
+        $u = $q->fetch(\PDO::FETCH_ASSOC);
+        $new = (string) ($_POST['new'] ?? '');
+        if (!$u || !$hasher->verify((string) ($_POST['current'] ?? ''), (string) $u['password'])) {
+            $back('?p=account', null, 'Your current password is not right.');
+        }
+        if (strlen($new) < Session::PASSWORD_FLOOR || $new !== (string) ($_POST['again'] ?? '')) {
+            $back('?p=account', null, 'The new password needs at least ' . Session::PASSWORD_FLOOR . ' characters, typed the same twice.');
+        }
+        $pdo->prepare('UPDATE platform_users SET password = ?, updated_at = NOW() WHERE id = ?')->execute([$hasher->hash($new), $u['id']]);
+        AmetecsData::log($meEmail, 'Changed own password');
+        $back('?p=account', 'Your password is changed.');
+    }
+
+    $back('', null, 'Nothing to do.');
+}
+
+/* ------------------------------------------------------------------ data for the pages */
+$page = $me === null ? 'signin' : (string) ($_GET['p'] ?? 'dashboard');
+$all = AmetecsAccess::all();
+$meta = AmetecsData::clients();
+$tenants = [];
+$used = [];
+if ($me !== null && $pdo !== null) {
+    $tenants = $pdo->query('SELECT * FROM tenants ORDER BY name')->fetchAll(\PDO::FETCH_ASSOC);
+    foreach ($tenants as $tr) {
+        $used[(string) $tr['id']] = AmetecsAccess::employeesUsed($platform, (string) $tr['id']);
+    }
+}
+$today = AmetecsAccess::today();
+$soon = (new DateTimeImmutable($today))->modify('+30 days')->format('Y-m-d');
+$reveal = $_SESSION['reveal'] ?? null;
+unset($_SESSION['reveal']);
+$form = (array) ($_SESSION['form'] ?? []);
+unset($_SESSION['form']);
+$csrf = static fn (): string => '<input type="hidden" name="csrf" value="' . ag_h($_SESSION['csrf']) . '">';
+$d = static fn (?string $ymd): string => ($ymd ?? '') === '' ? '—' : date('d M Y', (int) strtotime((string) $ymd));
+$appsOn = static function (string $tid) use ($plugins, $all): array {
+    $on = [];
+    foreach ($plugins as $c => $p) {
+        $st = AmetecsAccess::state($tid, $c, $all);
+        if ($st !== 'off') {
+            $on[$c] = $st;
+        }
+    }
+    return $on;
+};
+/** The apps & licences table, used on New client and on the client page. */
+$licenceRows = static function (string $tid, array $prefill = []) use ($plugins, $all, $used): string {
+    $h = '<table><tr><th>App</th><th>On</th><th>Seats</th><th>Valid till</th><th>Now</th></tr>';
+    foreach ($plugins as $c => $p) {
+        $a = $prefill[$c] ?? AmetecsAccess::get($tid, $c, $all);
+        $st = $tid === '' ? (!empty($a['on']) ? 'on' : 'off') : AmetecsAccess::state($tid, $c, $all);
+        $h .= '<tr><td><span class="dot" style="background:' . ag_h($p['color']) . '"></span><b>' . ag_h($p['name']) . '</b>'
+            . ($p['open'] === null ? ' <span class="pill grey">not on AmetecsGlobal yet</span>' : '') . '</td>'
+            . '<td><label class="sw"><input type="checkbox" name="p[' . $c . '][on]"' . (!empty($a['on']) ? ' checked' : '') . '> On</label></td>'
+            . '<td><input type="number" min="0" name="p[' . $c . '][seats]" value="' . (int) ($a['seats'] ?? 0) . '"> ' . ag_h($p['unit'])
+            . ($c === 'smartprs3' && $tid !== '' ? ' <span class="muted">(' . (int) ($used[$tid] ?? 0) . ' in use)</span>' : '') . '</td>'
+            . '<td><input type="date" name="p[' . $c . '][until]" value="' . ag_h((string) ($a['until'] ?? '')) . '"></td>'
+            . '<td><span class="pill ' . ['on' => 'green', 'off' => 'grey', 'expired' => 'red'][$st] . '">' . ['on' => 'Opens', 'off' => 'Off', 'expired' => 'Expired'][$st] . '</span></td></tr>';
+    }
+    return $h . '</table>';
+};
+$statusPill = static fn (string $s): string => '<span class="pill ' . (['active' => 'green', 'suspended' => 'amber', 'closed' => 'red'][$s] ?? 'grey') . '">' . ag_h(ucfirst($s ?: 'unknown')) . '</span>';
+$f = static fn (string $k, string $default = '') => ag_h((string) ($form[$k] ?? $default));
+?><!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AmetecsGlobal · Super Admin</title>
+<style>
+:root{--navy:#1F3A5F;--navy2:#16304f;--gold:#B8893B;--ink:#1e293b;--mute:#64748b;--line:#e2e8f0;--bg:#f4f6fa}
+*{box-sizing:border-box}body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:var(--ink);background:var(--bg);font-size:14px}
+a{color:var(--navy)}header{background:var(--navy);color:#fff;height:56px;padding:0 22px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:5}
+.logo{font-weight:800;font-size:19px}.logo b{color:var(--gold)}.badge{background:var(--gold);color:#fff;font-size:11px;font-weight:700;padding:3px 9px;border-radius:999px}
+header .right{margin-left:auto;display:flex;gap:14px;align-items:center;font-size:13px}header .right a{color:#fff;opacity:.85}
+header button{background:transparent;border:1px solid rgba(255,255,255,.4);color:#fff;border-radius:8px;padding:5px 11px;cursor:pointer}
+.wrap{display:flex;min-height:calc(100vh - 56px)}nav{width:220px;background:#fff;border-right:1px solid var(--line);padding:16px 10px;flex-shrink:0}
+nav a{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:9px;color:var(--ink);text-decoration:none;font-weight:600;margin-bottom:2px}
+nav a:hover{background:#f1f5f9}nav a.on{background:var(--navy);color:#fff}nav .sep{height:1px;background:var(--line);margin:10px 4px}
+main{flex:1;padding:26px 30px;max-width:1240px}h1{margin:0 0 4px;font-size:23px}h2{font-size:17px;margin:0}.sub{color:var(--mute);margin:0 0 20px}
+.msg{padding:12px 14px;border-radius:10px;margin-bottom:16px}.bad{background:#fef2f2;color:#991b1b;border:1px solid #fecaca}.ok{background:#f0fdf4;color:#166534;border:1px solid #bbf7d0}
+.reveal{background:#fffbeb;border:1px solid #fcd34d;color:#78350f;padding:14px 16px;border-radius:10px;margin-bottom:16px}.reveal code{font-size:15px;background:#fff;padding:2px 8px;border-radius:6px;border:1px solid #fcd34d}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:14px;margin-bottom:22px}
+.kpi{background:#fff;border:1px solid var(--line);border-radius:14px;padding:16px}.kpi .n{font-size:28px;font-weight:800;color:var(--navy)}.kpi .l{color:var(--mute);font-size:13px}
+.box{background:#fff;border:1px solid var(--line);border-radius:14px;margin-bottom:20px;overflow:hidden}.box .hd{display:flex;align-items:center;gap:12px;padding:14px 18px;border-bottom:3px solid var(--navy)}
+.box .bd{padding:16px 18px}.box .ft{padding:12px 18px;border-top:1px solid var(--line);text-align:right;background:#fafbfc}
+table{width:100%;border-collapse:collapse}th{background:var(--navy);color:#fff;text-align:left;font-size:12px;padding:9px 14px;font-weight:600;letter-spacing:.2px}
+td{padding:9px 14px;border-top:1px solid var(--line);vertical-align:middle}tr:nth-child(even) td{background:#f8fafc}
+input,select,textarea{font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:#fff}td input[type=number]{width:84px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px 18px}.grid2 label,.stack label{display:block;font-size:12px;font-weight:700;color:var(--mute);margin-bottom:5px;text-transform:uppercase;letter-spacing:.3px}
+.grid2 input,.grid2 select,.grid2 textarea,.stack input{width:100%}.full{grid-column:1/-1}.req{color:#dc2626}
+.btn{display:inline-block;border:0;border-radius:9px;padding:9px 16px;font-weight:700;cursor:pointer;text-decoration:none;font-size:14px}
+.gold{background:var(--gold);color:#fff}.navy{background:var(--navy);color:#fff}.ghost{background:#fff;border:1px solid var(--line);color:var(--ink)}.danger{background:#fff;border:1px solid #fecaca;color:#b91c1c}
+.pill{display:inline-block;font-size:11px;font-weight:700;padding:2px 9px;border-radius:999px;white-space:nowrap}.green{background:#dcfce7;color:#166534}.grey{background:#f1f5f9;color:#475569}.red{background:#fee2e2;color:#991b1b}.amber{background:#fef3c7;color:#92400e}
+.dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:8px;vertical-align:middle}.muted{color:var(--mute)}.right{text-align:right}
+.sw{display:inline-flex;align-items:center;gap:7px;font-weight:600;cursor:pointer}.sw input{width:18px;height:18px;accent-color:#16a34a}
+.chips span{margin-right:4px}.inline{display:inline}.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.act{display:inline-block;position:relative;text-align:left}.act summary{list-style:none;display:inline-block}.act summary::-webkit-details-marker{display:none}
+.act .menu{position:absolute;right:0;top:42px;z-index:3;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 12px 30px rgba(15,23,42,.15);padding:6px;width:340px}
+.act .menu form{display:flex;flex-direction:column;gap:6px;padding:12px;border-bottom:1px solid var(--line)}.act .menu form:last-child{border-bottom:0}.act .menu .row input{flex:1}
+button[disabled]{opacity:.45;cursor:not-allowed}
+.signin{max-width:420px;margin:70px auto;background:#fff;border:1px solid var(--line);border-radius:16px;padding:28px}.signin .stack input{margin-bottom:14px;padding:11px}
+.signin button{width:100%;padding:12px}.toolbar{display:flex;gap:10px;align-items:center;margin-bottom:14px}.toolbar input{flex:1;max-width:340px}
+</style></head><body>
+<header><span class="logo">Ametecs<b>Global</b></span><span class="badge">SUPER ADMIN</span>
+<?php if ($me !== null): ?><span class="right"><a href="./" target="_blank">Client view ↗</a><span><?= ag_h($meEmail) ?></span>
+<form method="post" class="inline"><?= $csrf() ?><button name="do" value="signout">Sign out</button></form></span><?php endif; ?></header>
+
+<?php if ($me === null): ?>
+<div class="signin">
+  <h1>Super Admin sign-in</h1><p class="sub">AmetecsGlobal console: clients, apps and licences.</p>
+  <?php if ($problem !== null): ?><div class="msg bad"><?= ag_h($problem) ?></div><?php endif; ?>
+  <?php $noStaff = $pdo !== null && (int) $pdo->query('SELECT COUNT(*) FROM platform_users')->fetchColumn() === 0; ?>
+  <?php if ($noStaff): ?>
+    <p>No Super Admin exists yet. In the Laragon Terminal, in the AmetecsGlobal folder, run:<br><code>php tools\make-super-admin.php you@company.com "Your Name"</code><br>It prints a one-time password.</p>
+  <?php elseif ($pdo !== null): ?>
+  <form method="post" class="stack"><?= $csrf() ?><input type="hidden" name="do" value="signin">
+    <label>Email</label><input type="email" name="email" required autofocus autocomplete="username">
+    <label>Password</label><input type="password" name="password" required autocomplete="current-password">
+    <button class="btn navy">Sign in</button></form>
+  <p class="muted" style="font-size:12px;margin-top:14px">Forgot the password? Another Super Admin can't see it; run <code>php tools\make-super-admin.php your@email "Name"</code> on the server to set a new one.</p>
+  <?php endif; ?>
+</div>
+<?php else: ?>
+<div class="wrap">
+<nav>
+<?php foreach (['dashboard' => 'Dashboard', 'clients' => 'Clients', 'client-new' => '+ New client', 'apps' => 'Apps', 'activity' => 'Activity log', 'sep' => '', 'email' => 'Email settings', 'staff' => 'Super Admins', 'account' => 'My account'] as $k => $label):
+    if ($k === 'sep') { echo '<div class="sep"></div>'; continue; } ?>
+  <a href="?p=<?= $k ?>" class="<?= $page === $k || ($page === 'client' && $k === 'clients') ? 'on' : '' ?>"><?= ag_h($label) ?></a>
+<?php endforeach; ?>
+</nav>
+<main>
+<?php if ($problem !== null): ?><div class="msg bad"><?= ag_h($problem) ?></div><?php endif; ?>
+<?php if ($notice !== null): ?><div class="msg ok"><?= ag_h($notice) ?></div><?php endif; ?>
+<?php if (is_array($reveal)): ?><div class="reveal"><b>Shown once — copy it now.</b> Sign-in: <code><?= ag_h($reveal['email']) ?></code> Password: <code><?= ag_h($reveal['password']) ?></code><br>
+  <span style="font-size:13px"><?= $reveal['tid'] === 'staff' ? 'They sign in at this Super Admin page.' : 'They sign in at the AmetecsGlobal front door (Client view) and can change it from their profile.' ?></span></div><?php endif; ?>
+
+<?php if ($page === 'dashboard'):
+    $active = count(array_filter($tenants, static fn ($t) => $t['status_code'] === 'active'));
+    $expiring = [];
+    $expired = [];
+    $perApp = array_fill_keys(array_keys($plugins), 0);
+    foreach ($tenants as $t) {
+        foreach ($plugins as $c => $p) {
+            $a = AmetecsAccess::get((string) $t['id'], $c, $all);
+            $st = AmetecsAccess::state((string) $t['id'], $c, $all);
+            $st === 'on' && $perApp[$c]++;
+            if ($st === 'on' && ($a['until'] ?? '') !== '' && $a['until'] <= $soon) { $expiring[] = [$t, $p, $a['until']]; }
+            if ($st === 'expired') { $expired[] = [$t, $p, $a['until']]; }
+        }
+    } ?>
+  <h1>Dashboard</h1><p class="sub"><?= ag_h(date('l, d M Y', (int) strtotime($today))) ?></p>
+  <div class="cards">
+    <div class="kpi"><div class="n"><?= count($tenants) ?></div><div class="l">Clients</div></div>
+    <div class="kpi"><div class="n"><?= $active ?></div><div class="l">Active clients</div></div>
+    <div class="kpi"><div class="n"><?= count($tenants) - $active ?></div><div class="l">Suspended or deactivated</div></div>
+    <div class="kpi"><div class="n"><?= array_sum($perApp) ?></div><div class="l">App licences running</div></div>
+    <div class="kpi"><div class="n"><?= count($expiring) ?></div><div class="l">Expiring in 30 days</div></div>
+    <div class="kpi"><div class="n"><?= array_sum($used) ?></div><div class="l">SmartPRS 3 employees in use</div></div>
+  </div>
+  <div class="box"><div class="hd"><h2>Apps in use</h2></div><table><tr><th>App</th><th>Clients using it</th><th>Status</th></tr>
+  <?php foreach ($plugins as $c => $p): ?><tr><td><span class="dot" style="background:<?= ag_h($p['color']) ?>"></span><b><?= ag_h($p['name']) ?></b></td><td><?= $perApp[$c] ?></td>
+    <td><?= $p['open'] !== null ? '<span class="pill green">Live on AmetecsGlobal</span>' : '<span class="pill grey">Coming</span>' ?></td></tr><?php endforeach; ?></table></div>
+  <div class="box"><div class="hd"><h2>Licences needing attention</h2></div>
+  <?php if ($expiring === [] && $expired === []): ?><div class="bd muted">Nothing expires in the next 30 days.</div><?php else: ?>
+  <table><tr><th>Client</th><th>App</th><th>Valid till</th><th></th></tr>
+  <?php foreach (array_merge($expired, $expiring) as [$t, $p, $u]): ?><tr><td><a href="?p=client&id=<?= (int) $t['id'] ?>"><?= ag_h($t['name']) ?></a></td><td><?= ag_h($p['name']) ?></td>
+    <td><?= $d($u) ?> <?= $u < $today ? '<span class="pill red">Expired</span>' : '<span class="pill amber">Soon</span>' ?></td><td class="right"><a class="btn ghost" href="?p=client&id=<?= (int) $t['id'] ?>#apps">Renew</a></td></tr><?php endforeach; ?></table><?php endif; ?></div>
+  <div class="box"><div class="hd"><h2>Latest activity</h2><a href="?p=activity" style="margin-left:auto">All activity →</a></div>
+  <table><tr><th>When</th><th>Who</th><th>What</th></tr><?php foreach (AmetecsData::activity('', 8) as $r): ?><tr><td><?= ag_h($r['at']) ?></td><td><?= ag_h($r['who']) ?></td><td><?= ag_h($r['what']) ?></td></tr><?php endforeach; ?></table></div>
+
+<?php elseif ($page === 'clients'):
+    $q = strtolower(trim((string) ($_GET['q'] ?? '')));
+    $sf = (string) ($_GET['s'] ?? '');
+    $list = array_filter($tenants, static fn ($t) => ($q === '' || str_contains(strtolower($t['name'] . ' ' . $t['code'] . ' ' . ($t['subdomain'] ?? '')), $q)) && ($sf === '' || $t['status_code'] === $sf)); ?>
+  <h1>Clients</h1><p class="sub">Every company on AmetecsGlobal. Open one to change its apps, licences and logins.</p>
+  <form class="toolbar"><input type="hidden" name="p" value="clients"><input name="q" placeholder="Search name, code or sign-in link" value="<?= ag_h($q) ?>">
+    <select name="s"><option value="">All statuses</option><?php foreach ($statuses as $k => $v): ?><option value="<?= $k ?>"<?= $sf === $k ? ' selected' : '' ?>><?= $v ?></option><?php endforeach; ?></select>
+    <button class="btn ghost">Filter</button><a class="btn gold" href="?p=client-new" style="margin-left:auto">+ New client</a></form>
+  <div class="box"><table><tr><th>Client</th><th>Code</th><th>Status</th><th>Apps on</th><th>Employees</th><th>Since</th><th></th></tr>
+  <?php foreach ($list as $t): $tid = (string) $t['id']; ?><tr>
+    <td><a href="?p=client&id=<?= (int) $tid ?>"><b><?= ag_h($t['name']) ?></b></a><div class="muted" style="font-size:12px"><?= ag_h($meta[$tid]['contact_name'] ?? '') ?></div></td>
+    <td><?= ag_h($t['code']) ?></td><td><?= $statusPill((string) $t['status_code']) ?></td>
+    <td class="chips"><?php foreach ($appsOn($tid) as $c => $st): ?><span class="pill <?= $st === 'on' ? 'green' : 'red' ?>"><?= ag_h($plugins[$c]['name']) ?></span><?php endforeach; ?><?= $appsOn($tid) === [] ? '<span class="muted">none</span>' : '' ?></td>
+    <td><?= (int) ($used[$tid] ?? 0) ?></td><td><?= $d($t['onboarded_on'] ?? $t['created_at']) ?></td><td class="right"><a class="btn ghost" href="?p=client&id=<?= (int) $tid ?>">Open</a></td></tr>
+  <?php endforeach; ?><?php if ($list === []): ?><tr><td colspan="7" class="muted">No clients match.</td></tr><?php endif; ?></table></div>
+
+<?php elseif ($page === 'client-new'): ?>
+  <h1>New client</h1><p class="sub">Creates the company, its first administrator login and its app licences in one step. The administrator signs in at the AmetecsGlobal front door.</p>
+  <form method="post"><?= $csrf() ?><input type="hidden" name="do" value="client-create">
+  <div class="box"><div class="hd"><h2>1 · Company</h2></div><div class="bd grid2">
+    <div><label>Company name <span class="req">*</span></label><input name="name" required value="<?= $f('name') ?>" placeholder="ABC Collections Pvt Ltd"></div>
+    <div><label>Client code <span class="req">*</span></label><input name="code" required value="<?= $f('code') ?>" placeholder="ABC" maxlength="20"></div>
+    <div><label>Legal name (for payslips &amp; letters)</label><input name="legal_name" value="<?= $f('legal_name') ?>"></div>
+    <div><label>Sign-in link name</label><input name="slug" value="<?= $f('slug') ?>" placeholder="made from the name if empty"></div>
+    <div><label>Time zone</label><select name="timezone"><?php foreach ($timezones as $z): ?><option<?= ($form['timezone'] ?? 'Asia/Kolkata') === $z ? ' selected' : '' ?>><?= $z ?></option><?php endforeach; ?></select></div>
+    <div><label>State</label><input name="state" value="<?= $f('state') ?>" placeholder="Telangana"></div>
+  </div></div>
+  <div class="box"><div class="hd"><h2>2 · Contact person</h2></div><div class="bd grid2">
+    <div><label>Name</label><input name="contact_name" value="<?= $f('contact_name') ?>"></div>
+    <div><label>Phone</label><input name="contact_phone" value="<?= $f('contact_phone') ?>"></div>
+    <div><label>Email</label><input type="email" name="contact_email" value="<?= $f('contact_email') ?>"></div>
+    <div><label>Notes</label><input name="notes" value="<?= $f('notes') ?>"></div>
+  </div></div>
+  <div class="box"><div class="hd"><h2>3 · Client administrator login</h2></div><div class="bd grid2">
+    <div><label>Administrator email <span class="req">*</span></label><input type="email" name="admin_email" required value="<?= $f('admin_email') ?>"></div>
+    <div><label>Password</label><input name="admin_password" minlength="<?= Session::PASSWORD_FLOOR ?>" placeholder="leave empty to generate one"></div>
+  </div></div>
+  <div class="box"><div class="hd"><h2>4 · Apps &amp; licences</h2><span class="muted">switch on at least one and give it seats; valid till left empty = one year</span></div>
+    <?= $licenceRows('', (array) ($form['p'] ?? ['smartprs3' => ['on' => 1, 'seats' => 25, 'until' => (new DateTimeImmutable($today))->modify('+1 year -1 day')->format('Y-m-d')]])) ?>
+    <div class="ft"><a class="btn ghost" href="?p=clients">Cancel</a> <button class="btn gold">Create client</button></div></div>
+  </form>
+
+<?php elseif ($page === 'client' && ($t = $tenant((string) ($_GET['id'] ?? ''))) !== null):
+    $tid = (string) $t['id'];
+    $m = $meta[$tid] ?? [];
+    $logins = $admins($tid); ?>
+  <div class="row" style="margin-bottom:6px"><a href="?p=clients" class="muted">← Clients</a></div>
+  <div class="row"><h1><?= ag_h($t['name']) ?></h1><?= $statusPill((string) $t['status_code']) ?></div>
+  <p class="sub">Code <?= ag_h($t['code']) ?> · client #<?= (int) $tid ?> · since <?= $d($t['onboarded_on'] ?? $t['created_at']) ?> · <?= (int) ($used[$tid] ?? 0) ?> active employees</p>
+
+  <div class="box"><div class="hd"><h2>Status</h2></div><div class="bd row">
+    <span>This client is <b><?= ag_h($statuses[$t['status_code']] ?? $t['status_code']) ?></b>.</span>
+    <?php foreach (['active' => ['Reactivate', 'navy'], 'suspended' => ['Suspend', 'danger'], 'closed' => ['Deactivate', 'danger']] as $to => [$label, $cls]): if ($to === $t['status_code']) continue; ?>
+      <form method="post" class="inline" onsubmit="return confirm('<?= $label ?> <?= ag_h(addslashes($t['name'])) ?>?')"><?= $csrf() ?><input type="hidden" name="do" value="client-status"><input type="hidden" name="id" value="<?= (int) $tid ?>"><input type="hidden" name="to" value="<?= $to ?>"><button class="btn <?= $cls ?>"><?= $label ?></button></form>
+    <?php endforeach; ?>
+    <span class="muted"><b>Suspend</b> = a temporary stop (e.g. unpaid). <b>Deactivate</b> = the client has left. Either way nobody at this client can sign in to any app, and no data is deleted; Reactivate undoes both.</span>
+  </div></div>
+
+  <form method="post" id="apps"><?= $csrf() ?><input type="hidden" name="do" value="licences-save"><input type="hidden" name="id" value="<?= (int) $tid ?>">
+  <div class="box"><div class="hd"><h2>Apps &amp; licences</h2><span class="muted">what this client can open, how many seats, until when</span></div>
+    <?= $licenceRows($tid, (string) ($form['lic_for'] ?? '') === $tid ? array_map(static fn ($r) => ['on' => isset($r['on']), 'seats' => (int) ($r['seats'] ?? 0), 'until' => (string) ($r['until'] ?? '')], (array) ($form['p'] ?? [])) + array_fill_keys(array_keys($plugins), ['on' => false, 'seats' => 0, 'until' => '']) : []) ?>
+    <div class="ft"><span class="muted" style="float:left">Valid till left empty = one year from today.</span><button class="btn gold">Save apps &amp; licences</button></div></div></form>
+
+  <div class="box" id="logins"><div class="hd"><h2>Logins</h2><span class="muted">one login per person works for every app this client has</span></div>
+  <table><tr><th>Email</th><th>Role</th><th>Status</th><th>Created</th><th class="right">Actions</th></tr>
+  <?php foreach ($logins as $u): $off = trim((string) ($u['disabled_at'] ?? '')) !== ''; ?><tr>
+    <td><?= ag_h($u['email']) ?></td><td><?= ag_h(ucfirst((string) $u['status'])) ?></td><td><?= $off ? '<span class="pill red">Deactivated</span>' : '<span class="pill green">Can sign in</span>' ?></td><td><?= $d($u['created_at']) ?></td>
+    <td class="right">
+      <?php $hid = '<input type="hidden" name="id" value="' . (int) $tid . '"><input type="hidden" name="user" value="' . (int) $u['id'] . '">'; ?>
+      <details class="act"><summary class="btn ghost">Reset password ▾</summary><div class="menu">
+        <form method="post"><?= $csrf() ?><?= $hid ?><input type="hidden" name="do" value="login-password">
+          <b>Set password now</b><span class="muted">type one, or leave empty to generate one (shown once)</span>
+          <div class="row"><input name="password" placeholder="new password (or empty)" minlength="<?= Session::PASSWORD_FLOOR ?>"><button class="btn navy">Set now</button></div></form>
+        <form method="post"><?= $csrf() ?><?= $hid ?><input type="hidden" name="do" value="login-link">
+          <b>Email a reset link</b><span class="muted">they choose their own password; the link works once</span>
+          <button class="btn gold"<?= AmetecsMail::box($pdo)->ready() ? '' : ' disabled title="Set up Email settings first"' ?>>Email link to <?= ag_h($u['email']) ?></button></form>
+      </div></details>
+      <form method="post" class="inline" onsubmit="return confirm('<?= $off ? 'Reactivate' : 'Deactivate' ?> <?= ag_h(addslashes((string) $u['email'])) ?>?')"><?= $csrf() ?><?= $hid ?><input type="hidden" name="do" value="login-toggle"><button class="btn <?= $off ? 'navy' : 'danger' ?>"><?= $off ? 'Reactivate' : 'Deactivate' ?></button></form></td></tr>
+  <?php endforeach; ?><?php if ($logins === []): ?><tr><td colspan="5" class="muted">No logins yet — create the administrator below.</td></tr><?php endif; ?></table>
+  <form method="post" class="ft row" style="justify-content:flex-end"><?= $csrf() ?><input type="hidden" name="do" value="admin-create"><input type="hidden" name="id" value="<?= (int) $tid ?>">
+    <span class="muted">Add an administrator:</span><input type="email" name="email" placeholder="email" required><input name="password" placeholder="password (or empty)"><button class="btn navy">Create administrator</button></form>
+  <div class="bd muted" style="font-size:13px">The client's administrator adds their own employees' logins inside SmartPRS 3 (Users).</div></div>
+
+  <form method="post"><?= $csrf() ?><input type="hidden" name="do" value="client-save"><input type="hidden" name="id" value="<?= (int) $tid ?>">
+  <div class="box"><div class="hd"><h2>Details</h2></div><div class="bd grid2">
+    <div><label>Company name</label><input name="name" required value="<?= ag_h($t['name']) ?>"></div>
+    <div><label>Client code</label><input name="code" required value="<?= ag_h($t['code']) ?>"></div>
+    <div><label>Sign-in link name</label><input name="slug" value="<?= ag_h((string) ($t['subdomain'] ?? '')) ?>"></div>
+    <div><label>Time zone</label><select name="timezone"><?php foreach (array_unique(array_merge([$t['business_timezone']], $timezones)) as $z): ?><option<?= $t['business_timezone'] === $z ? ' selected' : '' ?>><?= ag_h($z) ?></option><?php endforeach; ?></select></div>
+    <div><label>State</label><input name="state" value="<?= ag_h((string) ($t['state'] ?? '')) ?>"></div>
+    <div><label>Contact name</label><input name="contact_name" value="<?= ag_h($m['contact_name'] ?? '') ?>"></div>
+    <div><label>Contact phone</label><input name="contact_phone" value="<?= ag_h($m['contact_phone'] ?? '') ?>"></div>
+    <div><label>Contact email</label><input type="email" name="contact_email" value="<?= ag_h($m['contact_email'] ?? '') ?>"></div>
+    <div class="full"><label>Notes</label><textarea name="notes" rows="2"><?= ag_h($m['notes'] ?? '') ?></textarea></div>
+  </div><div class="ft"><button class="btn navy">Save details</button></div></div></form>
+
+  <div class="box"><div class="hd"><h2>Activity for this client</h2></div><table><tr><th>When</th><th>Who</th><th>What</th><th>Detail</th></tr>
+  <?php foreach (AmetecsData::activity($tid, 50) as $r): ?><tr><td><?= ag_h($r['at']) ?></td><td><?= ag_h($r['who']) ?></td><td><?= ag_h($r['what']) ?></td><td class="muted"><?= ag_h($r['detail']) ?></td></tr><?php endforeach; ?></table></div>
+
+<?php elseif ($page === 'apps'): ?>
+  <h1>Apps</h1><p class="sub">The apps every client sees. An app with an "Opens at" link is <b>Live</b> and opens from the client's front door; without one it can already be licensed and shows as coming. Retired apps disappear for clients but their licences and data are kept.</p>
+  <div class="box"><table><tr><th>App</th><th>What it does</th><th>Counted in</th><th>Colour</th><th>Opens at</th><th>Clients · seats</th><th>Retired</th><th></th></tr>
+  <?php foreach (AmetecsAccess::plugins(true) as $c => $p):
+      $n = 0; $seats = 0;
+      foreach ($tenants as $t) { if (AmetecsAccess::state((string) $t['id'], $c, $all) === 'on') { $n++; $seats += (int) AmetecsAccess::get((string) $t['id'], $c, $all)['seats']; } }
+      $fid = 'app-' . $c; ?>
+    <tr<?= !empty($p['retired']) ? ' style="opacity:.6"' : '' ?>>
+      <td><form id="<?= $fid ?>" method="post"><?= $csrf() ?><input type="hidden" name="do" value="app-save"><input type="hidden" name="code" value="<?= ag_h($c) ?>"></form>
+        <input form="<?= $fid ?>" name="name" value="<?= ag_h($p['name']) ?>" style="width:130px;font-weight:700" required><div class="muted" style="font-size:11px;margin-top:3px">code: <?= ag_h($c) ?></div></td>
+      <td><input form="<?= $fid ?>" name="what" value="<?= ag_h($p['what']) ?>" style="width:100%"></td>
+      <td><input form="<?= $fid ?>" name="unit" value="<?= ag_h($p['unit']) ?>" style="width:90px"></td>
+      <td><input form="<?= $fid ?>" type="color" name="color" value="<?= ag_h($p['color']) ?>" style="width:44px;padding:2px;height:32px"></td>
+      <td><input form="<?= $fid ?>" name="open" value="<?= ag_h((string) ($p['open'] ?? '')) ?>" placeholder="not live yet" style="width:170px">
+        <div style="margin-top:3px"><?= !empty($p['retired']) ? '<span class="pill red">Retired</span>' : ($p['open'] !== null ? '<span class="pill green">Live</span>' : '<span class="pill grey">Coming</span>') ?></div></td>
+      <td><?= $n ?> · <?= $seats ?></td>
+      <td><label class="sw"><input form="<?= $fid ?>" type="checkbox" name="retired"<?= !empty($p['retired']) ? ' checked' : '' ?>></label></td>
+      <td class="right"><button form="<?= $fid ?>" class="btn ghost">Save</button></td></tr>
+  <?php endforeach; ?></table></div>
+  <form method="post" class="box"><?= $csrf() ?><input type="hidden" name="do" value="app-save">
+    <div class="hd"><h2>Add a new app</h2><span class="muted">it appears for every client straight away, switched off until you licence it</span></div>
+    <div class="bd grid2">
+      <div><label>App name <span class="req">*</span></label><input name="name" required placeholder="e.g. SmartVisit"></div>
+      <div><label>What it does</label><input name="what" placeholder="one line clients will read"></div>
+      <div><label>Seats are counted in</label><input name="unit" value="users" placeholder="users, employees, agents, devices…"></div>
+      <div><label>Colour</label><input type="color" name="color" value="#1F3A5F" style="height:38px;padding:3px"></div>
+      <div class="full"><label>Opens at (leave empty until the app is on AmetecsGlobal)</label><input name="open" placeholder="../plugins/smartvisit/  or  https://smartvisit.example.com"></div>
+    </div><div class="ft"><button class="btn gold">Add app</button></div></form>
+
+<?php elseif ($page === 'activity'):
+    $names = array_column($tenants, 'name', 'id'); ?>
+  <h1>Activity log</h1><p class="sub">Every change made in this console, newest first. Entries are never edited or removed.</p>
+  <div class="box"><table><tr><th>When</th><th>Who</th><th>Client</th><th>What</th><th>Detail</th></tr>
+  <?php foreach (AmetecsData::activity() as $r): ?><tr><td><?= ag_h($r['at']) ?></td><td><?= ag_h($r['who']) ?></td>
+    <td><?= $r['tenant'] !== '' ? '<a href="?p=client&id=' . (int) $r['tenant'] . '">' . ag_h($names[$r['tenant']] ?? '#' . $r['tenant']) . '</a>' : '' ?></td><td><?= ag_h($r['what']) ?></td><td class="muted"><?= ag_h($r['detail']) ?></td></tr>
+  <?php endforeach; ?></table></div>
+
+<?php elseif ($page === 'staff'):
+    $staff = $pdo->query('SELECT * FROM platform_users ORDER BY id')->fetchAll(\PDO::FETCH_ASSOC); ?>
+  <h1>Super Admins</h1><p class="sub">Ametecs staff who can use this console.</p>
+  <div class="box"><table><tr><th>Name</th><th>Email</th><th>Status</th><th>Last sign-in</th><th class="right"></th></tr>
+  <?php foreach ($staff as $u): $off = trim((string) ($u['disabled_at'] ?? '')) !== ''; $self = strcasecmp((string) $u['email'], $meEmail) === 0; ?><tr>
+    <td><?= ag_h($u['name']) ?><?= $self ? ' <span class="pill grey">you</span>' : '' ?></td><td><?= ag_h($u['email']) ?></td><td><?= $off ? '<span class="pill red">Disabled</span>' : '<span class="pill green">Active</span>' ?></td>
+    <td><?= ag_h((string) ($u['last_login_at'] ?? '—')) ?></td>
+    <td class="right"><?php if (!$self): ?><form method="post" class="inline"><?= $csrf() ?><input type="hidden" name="do" value="staff-toggle"><input type="hidden" name="id" value="<?= (int) $u['id'] ?>"><button class="btn <?= $off ? 'navy' : 'danger' ?>"><?= $off ? 'Enable' : 'Disable' ?></button></form><?php endif; ?></td></tr>
+  <?php endforeach; ?></table>
+  <form method="post" class="ft row" style="justify-content:flex-end"><?= $csrf() ?><input type="hidden" name="do" value="staff-add"><span class="muted">Add a Super Admin:</span>
+    <input name="name" placeholder="name" required><input type="email" name="email" placeholder="email" required><button class="btn gold">Add (password shown once)</button></form></div>
+
+<?php elseif ($page === 'email'): $mc = AmetecsMail::box($pdo)->config(); ?>
+  <h1>Email settings</h1><p class="sub">The mailbox AmetecsGlobal sends from: password reset links for clients. Use your company mail server (SMTP) details.</p>
+  <div class="msg <?= AmetecsMail::box($pdo)->ready() ? 'ok' : 'bad' ?>"><?= AmetecsMail::box($pdo)->ready() ? 'Email is ON.' : 'Email is OFF: "Email reset link" and "Forgot password?" will not work until this is set up and switched on.' ?></div>
+  <form method="post" class="box" style="max-width:760px"><?= $csrf() ?><input type="hidden" name="do" value="email-save">
+    <div class="hd"><h2>Mail server (SMTP)</h2></div><div class="bd grid2">
+      <div class="full"><label class="sw" style="text-transform:none;font-size:14px;color:var(--ink)"><input type="checkbox" name="enabled"<?= $mc['enabled'] ? ' checked' : '' ?>> Send emails</label></div>
+      <div><label>Server (host)</label><input name="host" value="<?= ag_h((string) $mc['host']) ?>" placeholder="smtp.gmail.com"></div>
+      <div><label>Port</label><input type="number" name="port" value="<?= (int) $mc['port'] ?>"></div>
+      <div><label>Security</label><select name="encryption"><?php foreach (['tls' => 'TLS (port 587)', 'ssl' => 'SSL (port 465)', 'none' => 'None'] as $k => $v): ?><option value="<?= $k ?>"<?= $mc['encryption'] === $k ? ' selected' : '' ?>><?= $v ?></option><?php endforeach; ?></select></div>
+      <div><label>Username</label><input name="username" value="<?= ag_h((string) $mc['username']) ?>" autocomplete="off"></div>
+      <div><label>Password</label><input type="password" name="password" placeholder="<?= $mc['has_password'] ? 'saved - leave empty to keep' : '' ?>" autocomplete="new-password"></div>
+      <div><label>From email</label><input type="email" name="from_email" value="<?= ag_h((string) $mc['from_email']) ?>" placeholder="noreply@ametecsindia.com"></div>
+      <div><label>From name</label><input name="from_name" value="<?= ag_h((string) $mc['from_name'] === 'SmartPRS' ? 'AmetecsGlobal' : (string) $mc['from_name']) ?>"></div>
+      <div><label>Reply-to (optional)</label><input type="email" name="reply_to" value="<?= ag_h((string) $mc['reply_to']) ?>"></div>
+    </div><div class="ft"><button class="btn navy">Save</button></div></form>
+  <form method="post" class="box" style="max-width:760px"><?= $csrf() ?><input type="hidden" name="do" value="email-test">
+    <div class="bd row"><span>Send a test email to <b><?= ag_h($meEmail) ?></b></span><button class="btn gold"<?= AmetecsMail::box($pdo)->ready() ? '' : ' disabled' ?>>Send test</button></div></form>
+  <p class="muted" style="font-size:12px">The password is stored encrypted. These are the same mail settings SmartPRS 3's console uses, so there is one mailbox to look after.</p>
+
+<?php elseif ($page === 'account'): ?>
+  <h1>My account</h1><p class="sub"><?= ag_h($meEmail) ?></p>
+  <form method="post" class="box" style="max-width:480px"><?= $csrf() ?><input type="hidden" name="do" value="my-password">
+    <div class="hd"><h2>Change password</h2></div><div class="bd stack">
+    <label>Current password</label><input type="password" name="current" required autocomplete="current-password"><br><br>
+    <label>New password (<?= Session::PASSWORD_FLOOR ?>+ characters)</label><input type="password" name="new" required minlength="<?= Session::PASSWORD_FLOOR ?>" autocomplete="new-password"><br><br>
+    <label>New password again</label><input type="password" name="again" required autocomplete="new-password"></div>
+    <div class="ft"><button class="btn navy">Change password</button></div></form>
+
+<?php else: ?>
+  <h1>Not found</h1><p class="sub">That page or client does not exist. <a href="?p=clients">Back to clients</a></p>
+<?php endif; ?>
+</main></div>
+<?php endif; ?>
+</body></html>

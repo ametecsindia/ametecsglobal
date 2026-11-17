@@ -1,0 +1,56 @@
+SMARTPRS — GOOGLE PLAY CONSOLE TEXT (copy and paste)
+
+App name
+SmartPRS
+
+Short description (max 80 characters)
+HR, attendance and payroll for your team — punch, leave, payslips, approvals.
+
+Full description
+SmartPRS is the mobile app for companies that run HR, attendance and payroll on SmartPRS.
+
+Employees:
+• Punch IN / OUT — at the office by QR, or from the field within your geo-fence
+• See today's status and your last 7 days: present, late, leave, weekly off and holidays
+• Apply for leave and see your leave balance
+• Request an attendance correction
+• Download your payslips and letters
+• Get alerts for approvals and announcements
+
+Managers and HR:
+• Approve leave and attendance corrections on the go
+• See who is in today and who is missing
+• The same menus and permissions as the SmartPRS web application
+
+Secure by design: every phone is registered and approved by your company's administrator, and a lost phone can be revoked at any time.
+
+New to SmartPRS? Tap Explore Demo to try a sample company with ready-made data.
+
+SmartPRS is made by Ametecs India Private Limited, Hyderabad.
+
+Category: Business
+Contact email: support@ametecsindia.com
+Website: https://smartprs.com
+Privacy policy URL: https://smartprs.com/privacy-policy
+Account deletion URL: https://smartprs.com/policy.php?p=delete-account
+
+APP ACCESS — "All or some functionality is restricted" → Add instructions
+Name: Play review login
+Company address: https://smartprs.com/c/playreview
+Username: <the reviewer email you saved in Super Admin → Demo Requests>
+Password: <the reviewer password you saved there>
+Other information: Open the app, type the company address above, then the username and password, and tap Sign in. No activation code, OTP or phone approval is needed for this login. It opens a demo company with sample employees, attendance, leave and payroll. The demo data is reset every night. Explore Demo on the sign-in screen also creates a separate sample company.
+
+DATA SAFETY (answers)
+Does the app collect or share user data? Yes — collected, not shared with third parties.
+Encrypted in transit: Yes.  Users can request deletion: Yes (URL above).
+Data collected (all for App functionality / Account management, not optional for the feature):
+• Personal info: Name, Email address, Phone number
+• Location: Precise location — only when the person taps Punch IN / OUT (geo-fence check), not in the background
+• Photos: profile photo / selfie the person chooses to take
+• Financial info: Other financial info — salary and payslips shown to the employee (provided by the employer)
+• App info and performance: none     • Device or other IDs: Device ID (phone registration)
+Ads: No ads.
+
+CONTENT RATING: questionnaire → category "All other app types"; answer No to violence, sexual content, gambling, etc.
+TARGET AUDIENCE: 18 and over.

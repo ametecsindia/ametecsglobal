@@ -1,0 +1,29 @@
+{
+ "section": "time",
+ "items": [
+  {
+   "key": "overtime",
+   "module": "overtime",
+   "label": "Overtime Register",
+   "icon": "fa-business-time",
+   "permission": "attendance.day.view",
+   "hidden": true
+  },
+  {
+   "key": "integrations",
+   "route": "integrations",
+   "label": "API Keys & Integrations",
+   "icon": "fa-plug",
+   "permission": "tenant.settings.update"
+  },
+  {
+   "key": "biometric-mapping",
+   "route": "biometric-mapping",
+   "label": "Biometric Mapping & Sync",
+   "icon": "fa-fingerprint",
+   "permission": "tenant.settings.update",
+   "hidden": true
+  }
+ ],
+ "note": "16 Nov 2026 (owner: \"I do not want any redundancy\"): Biometric Devices and Biometric Mapping & Sync are hidden — devices, sync and mapping live only on Organization Configuration → Biometric Device Setup; their old addresses open that screen. Biometric Mapping & Sync is shown again (owner, 12 Nov 2026 16:29: Biometric is an attendance source, its menus back on the sidebar). Bulk Attendance Upload is not a separate menu item (owner, 12 Oct): the bulk sheet is part of Manual Entry (route attendance-bulk still answers)."
+}

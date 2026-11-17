@@ -1,0 +1,31 @@
+# AmetecsGlobal - never on GitHub (the repository is public)
+# Each app lives in plugins/<app>/ with its own libraries, settings and runtime files:
+/plugins/*/vendor/
+/plugins/*/node_modules/
+/plugins/*/.env
+/plugins/*/.env.*
+!/plugins/*/.env.example
+/plugins/*/env-local.txt
+/plugins/*/storage/
+/plugins/*/public/uploads/
+/plugins/*/.phpunit.cache
+/plugins/*/Claude outputs/
+
+# Client data, licences, activity log: AmetecsGlobal's own records, per server
+/core/data/*
+!/core/data/.htaccess
+
+# Sync's own working files
+/sync-log.txt
+/ametecsglobal-files.zip
+/INSTALL-FIRST.bat
+
+# Android build output and signing keys
+/plugins/*/mobile/**/build/
+/plugins/*/mobile/**/.gradle/
+/plugins/*/mobile/**/.idea/
+/plugins/*/mobile/**/local.properties
+*.apk
+*.aab
+*.jks
+*.keystore

@@ -1,0 +1,7 @@
+{
+    "note": "Administration → Updates & Licence reads this. make-release.bat sets it when a release is built; an installed release package brings its own copy.",
+    "product": "SmartPRS",
+    "version": "3.0.13",
+    "released_on": "2026-11-16",
+    "channel": "stable"
+}

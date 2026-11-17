@@ -1,0 +1,7 @@
+{
+ "at": "2026-11-16",
+ "doing": "Nothing in progress.",
+ "next": "Owner: make-release.bat (so smartprs.com gets Suspend/Reset and clients get the new licence client), install it on the cloud server, then make-client-package.bat for new installs.",
+ "checks": "Licence round trip (activate, suspend, resume, reset, wrong machine, unreachable message) 14/14 PASS on a test server; installer db step tested on MariaDB (occupied db -> new name, re-run kept); package build + verify tested. IIS step not runnable here (Windows only).",
+ "stopped_at": "Files written to the PC and cmp-verified."
+}
