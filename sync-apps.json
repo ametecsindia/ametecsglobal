@@ -1,5 +1,5 @@
 {
-  "_how": "One block per application. SYNC.bat copies every block's 'source' into its own folder 'target' (plugins/<app>, inside AmetecsGlobal). The source is only read, never changed. 'skipFolders'/'skipFiles' are left out of the copy. 'fixes' are text replacements made in the COPY after every sync, so the copy never touches the source app's database, accounts or folders. To add an app: copy the SmartPRS3 block, change name/source/target (e.g. plugins\\smartept) and its fixes. 'mustContain' = text that must be in the copy after the fixes (the AmetecsGlobal hooks); the sync FAILS if it is missing. 'git' = the AmetecsGlobal GitHub repository this folder is kept in step with; 'neverPush' = files that may never be uploaded (the sync stops if one is about to be). 'onlyOn' = the computer name(s) that bring this app in; every other PC receives it through GitHub.",
+  "_how": "One block per application. SYNC.bat copies every block's 'source' into its own folder 'target' (plugins/<app>, inside AmetecsGlobal). The source is only read, never changed. 'skipFolders'/'skipFiles' are left out of the copy. 'fixes' are text replacements made in the COPY after every sync, so the copy never touches the source app's database, accounts or folders. To add an app: copy the SmartPRS3 block, change name/source/target (e.g. plugins\\smartept) and its fixes. 'mustContain' = text that must be in the copy after the fixes (the AmetecsGlobal hooks); the sync FAILS if it is missing. 'git' = the AmetecsGlobal GitHub repository this folder is kept in step with; 'neverPush' = files that may never be uploaded (the sync stops if one is about to be). The PC that has an app's 'source' folder brings it in; a PC without it receives the app through GitHub.",
   "apps": [
     {
       "name": "SmartPRS3",
@@ -30,6 +30,38 @@
         ".gitignore"
       ],
       "fixes": [
+        {
+          "files": [
+            "public\\app.php"
+          ],
+          "find": "require __DIR__ . '/../global/gate.php';",
+          "replace": "require __DIR__ . '/../../../core/gate.php';",
+          "optional": true
+        },
+        {
+          "files": [
+            "public\\super.php"
+          ],
+          "find": "header('Location: ../global/super.php');",
+          "replace": "header('Location: ../../../core/super.php');",
+          "optional": true
+        },
+        {
+          "files": [
+            "laragon-setup.bat"
+          ],
+          "find": "Run from C:\\laragon\\www\\AmetecsGlobal\r",
+          "replace": "Run from C:\\laragon\\www\\AmetecsGlobal\\plugins\\smartprs3\r",
+          "optional": true
+        },
+        {
+          "files": [
+            "laragon-setup.bat"
+          ],
+          "find": "localhost/AmetecsGlobal/public/",
+          "replace": "localhost/AmetecsGlobal/plugins/smartprs3/public/",
+          "optional": true
+        },
         {
           "files": [
             "tools\\db\\bootstrap-local.php"
@@ -282,9 +314,6 @@
           ],
           "text": "header('Location: ../../../core/super.php');"
         }
-      ],
-      "onlyOn": [
-        "DESKTOP-ACAS2DS"
       ]
     }
   ],

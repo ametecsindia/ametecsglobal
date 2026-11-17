@@ -155,7 +155,7 @@ if (!$session->isSignedIn() ? $superConsole : ((($session->user()['platform'] ??
 // LICENCE GATE (on-premise), SUBSCRIPTION LOCK (cloud), MOBILE-APP DEVICE LINK — SmartPRS 2's
 // middlewares, 16 Oct 2026. Sets $subscriptionLocked; does nothing on a local/SaaS install with a
 // licence-free, unexpired workspace. See the file for the rules.
-require __DIR__ . '/../surface/partials/boot-hooks.php'; require __DIR__ . '/../global/gate.php'; // AmetecsGlobal: plugin on/off + seats
+require __DIR__ . '/../surface/partials/boot-hooks.php'; require __DIR__ . '/../../../core/gate.php'; // AmetecsGlobal: plugin on/off + seats
 
 // EVERY collection below this line is read and written through a TENANT-SCOPED
 // store. The scoping is structural rather than a where-clause each screen has to

@@ -29,7 +29,7 @@ Clients and their logins live in the database set in `plugins\smartprs3\.env` (S
 - If the window says **"the same file was changed here and on GitHub"**: you and someone else edited the same lines. Nothing was overwritten. Tell Claude which file; it gets merged by hand.
 
 ## Rules
-- **Each app is brought in on one PC** (`onlyOn` in `sync-apps.json`): SmartPRS3 and SmartEPT on Ejaz's office PC, the other apps on the second PC. Every other PC receives them through GitHub.
+- **The PC that has an app's own folder brings it in** (the `source` in `sync-apps.json`, e.g. `C:\laragon\www\SmartPRS3`): SmartPRS3 and SmartEPT on this PC, the other apps on the second PC. A PC without that folder receives the app through GitHub. Keep each app's own folder on one PC only.
 - **Code is shared; data is not.** Each PC has its own database and `core\data`. Shared client data belongs on one shared server.
 - **The repository is public.** `.env`, `vendor`, `storage`, uploads, keys and `core\data` are never uploaded; the sync stops if one is about to be, and never pushes after a failed step.
 - Two people editing the same lines is the one thing the sync cannot settle on its own - agree who works on which screen.

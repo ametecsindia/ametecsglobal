@@ -51,7 +51,7 @@ if (($_SESSION['user']['platform'] ?? false) === true) {
     exit;
 }
 
-if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET' && $_GET === []) { header('Location: ../global/super.php'); exit; } // AmetecsGlobal: its own Super Admin sign-in
+if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET' && $_GET === []) { header('Location: ../../../core/super.php'); exit; } // AmetecsGlobal: its own Super Admin sign-in
 $h = static fn (?string $s): string => htmlspecialchars((string) $s, ENT_QUOTES, 'UTF-8');
 $_SESSION['csrf'] ??= bin2hex(random_bytes(32));
 $pdo = Database::connect(__DIR__ . '/../.env');

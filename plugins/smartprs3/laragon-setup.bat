@@ -111,6 +111,6 @@ echo   No data seeded. Add some with --with-demo, or copy SmartPRS 2's with --fr
 
 :done
 echo.
-echo Open:  http://localhost/AmetecsGlobal/public/app.php
+echo Open:  http://localhost/AmetecsGlobal/plugins/smartprs3/public/app.php
 echo Sign in with the credentials printed above.
 endlocal

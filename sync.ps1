@@ -64,8 +64,7 @@ if ($prs -and (Test-Path (Join-Path $root 'surface')) -and (Test-Path (Join-Path
     if ((Test-Path -LiteralPath $from) -and -not (Test-Path -LiteralPath (Join-Path $to $n))) { Move-Item -LiteralPath $from -Destination (Join-Path $to $n); $moved++ }
   }
   # The files the sync patches are taken fresh from the app on THIS pc (if it brings the app in), so they get the new paths.
-  $here = -not $prs.onlyOn -or @($prs.onlyOn | Where-Object { $_ -ieq $env:COMPUTERNAME }).Count -gt 0
-  if ($here -and (Test-Path $prs.source)) { foreach ($fx in $prs.fixes) { foreach ($rel in $fx.files) { $f = Join-Path $to $rel; if (Test-Path $f) { Remove-Item -LiteralPath $f -Force } } } }
+  if (Test-Path $prs.source) { foreach ($fx in $prs.fixes) { foreach ($rel in $fx.files) { $f = Join-Path $to $rel; if (Test-Path $f) { Remove-Item -LiteralPath $f -Force } } } }
   Say "== moved SmartPRS3 ($moved items) into plugins/smartprs3"
 }
 $oldCore = Join-Path $root 'global'
@@ -79,10 +78,9 @@ if (Test-Path (Join-Path $oldCore 'super.php')) {
 
 foreach ($app in $cfg.apps) {
   if ($Only -and $app.name -ne $Only) { continue }
-  # ONE PC BRINGS AN APP IN (sync-apps.json "onlyOn"). Every other PC gets it through GitHub, so an older
-  # copy of the app on a second PC can never overwrite newer files.
-  if ($app.onlyOn -and @($app.onlyOn | Where-Object { $_ -ieq $env:COMPUTERNAME }).Count -eq 0) {
-    Say "== $($app.name): brought in on $(@($app.onlyOn) -join ', '), not on this PC - this PC gets it through GitHub."
+  # THE PC THAT HAS THE APP'S FOLDER BRINGS IT IN. A PC without that folder gets the app through GitHub.
+  if (-not (Test-Path -LiteralPath $app.source)) {
+    Say "== $($app.name): its folder ($($app.source)) is not on this PC - this PC gets it through GitHub."
     continue
   }
   try {
@@ -142,7 +140,9 @@ if (-not $NoGit -and $cfg.git -and $cfg.git.remote -and $failed -gt 0) {
     foreach ($p in @('C:\Program Files\Git\cmd\git.exe', 'C:\laragon\bin\git\cmd\git.exe', 'C:\laragon\bin\git\bin\git.exe')) { if (-not $git -and (Test-Path $p)) { $git = $p } }
     if (-not $git) { throw 'git is not installed on this computer.' }
     $branch = if ($cfg.git.branch) { $cfg.git.branch } else { 'main' }
-    function G { $out = & $git -C $root @args 2>&1; $script:gx = $LASTEXITCODE; return ($out | Out-String).Trim() }
+    # Git writes normal progress ("To https://...", line-ending notes) to stderr; Windows PowerShell would treat that as
+    # an error, so only git's exit code decides success.
+    function G { $ErrorActionPreference = 'Continue'; $out = & $git -C $root @args 2>&1 | ForEach-Object { "$_" }; $script:gx = $LASTEXITCODE; return ($out -join "`n").Trim() }
     Say "== GitHub: $($cfg.git.remote) ($branch)"
 
     if (-not (Test-Path (Join-Path $root '.git'))) {
