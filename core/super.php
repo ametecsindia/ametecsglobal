@@ -970,7 +970,7 @@ main{max-width:1560px;padding:16px 26px 20px}
 @media (max-width:1100px){.kstrip{grid-template-columns:repeat(3,1fr)}.dgrid2{grid-template-columns:1fr}}
 .cn b{white-space:nowrap}.mxt td:last-child,.mxt th:last-child{padding-right:16px;white-space:nowrap}.mxt th.ac{padding-left:4px;padding-right:4px}.mxt th:first-child{width:30%}
 </style>
-<link rel="stylesheet" href="assets/shell.css?v=13"><link rel="stylesheet" href="assets/super.css?v=10"><link rel="stylesheet" href="assets/theme-gold.css?v=3"><link rel="stylesheet" href="assets/theme-sa-light.css?v=1"></head><body>
+<link rel="stylesheet" href="assets/shell.css?v=13"><link rel="stylesheet" href="assets/super.css?v=11"><link rel="stylesheet" href="assets/theme-gold.css?v=3"><link rel="stylesheet" href="assets/theme-sa-light.css?v=1"></head><body>
 <?php
 $myName = trim((string) ($me['name'] ?? '')) ?: ucfirst((string) strtok($meEmail, '@'));
 $myIni = strtoupper(implode('', array_map(static fn (string $w): string => mb_substr($w, 0, 1), array_slice(preg_split('/[\s._-]+/', $myName) ?: ['S'], 0, 2))));
@@ -1269,8 +1269,11 @@ $myIni = strtoupper(implode('', array_map(static fn (string $w): string => mb_su
       </div></details>
       <form method="post" class="inline" onsubmit="return confirm('<?= $off ? 'Reactivate' : 'Deactivate' ?> <?= ag_h(addslashes((string) $u['email'])) ?>?')"><?= $csrf() ?><?= $hid ?><input type="hidden" name="do" value="login-toggle"><button class="btn <?= $off ? 'navy' : 'danger' ?>"><?= $off ? 'Reactivate' : 'Deactivate' ?></button></form></td></tr>
   <?php endforeach; ?><?php if ($logins === []): ?><tr><td colspan="5" class="muted">No logins yet — create the administrator below.</td></tr><?php endif; ?></table>
-  <form method="post" class="ft row" style="justify-content:flex-end"><?= $csrf() ?><input type="hidden" name="do" value="admin-create"><input type="hidden" name="id" value="<?= (int) $tid ?>">
-    <span class="muted">Add an administrator:</span><input type="email" name="email" placeholder="email" required><input name="password" placeholder="password (or empty)"><button class="btn navy">Create administrator</button></form>
+  <form method="post" class="addadm"><?= $csrf() ?><input type="hidden" name="do" value="admin-create"><input type="hidden" name="id" value="<?= (int) $tid ?>">
+    <b><i class="fas fa-user-plus"></i>Add an administrator</b>
+    <label>Email<input type="email" name="email" placeholder="name@company.com" required></label>
+    <label>Password<input name="password" placeholder="leave empty to generate one"></label>
+    <button class="btn gold"><i class="fas fa-plus"></i>Create</button></form>
   <div class="bd muted" style="font-size:13px">The client's administrator adds their own employees' logins inside SmartPRS 3 (Users).</div></div>
 
   <div class="box"><div class="hd"><h2><i class="fas fa-clock-rotate-left"></i>Activity for this client</h2></div><table><tr><th>When</th><th>Who</th><th>What</th><th>Detail</th></tr>
@@ -1809,38 +1812,62 @@ $myIni = strtoupper(implode('', array_map(static fn (string $w): string => mb_su
     </div>
   </div>
 
-<?php elseif ($page === 'apps'): ?>
-  <h1>Apps</h1><p class="sub">The apps every client sees. This list is shared: a change here reaches every PC through GitHub within minutes. An app with an "Opens at" link is <b>Live</b> and opens from the client's front door; without one it can already be licensed and shows as coming. Retired apps disappear for clients but their licences and data are kept.</p>
-  <div class="box"><table><tr><th>App</th><th>What it does</th><th>Counted in</th><th>Colour</th><th>Logo</th><th>Opens at</th><th>Clients · seats</th><th>Retired</th><th></th></tr>
-  <?php foreach (AmetecsAccess::plugins(true) as $c => $p):
-      $n = 0; $seats = 0;
-      foreach ($tenants as $t) { if (AmetecsAccess::state((string) $t['id'], $c, $all) === 'on') { $n++; $seats += (int) AmetecsAccess::get((string) $t['id'], $c, $all)['seats']; } }
-      $fid = 'app-' . $c; ?>
-    <tr<?= !empty($p['retired']) ? ' style="opacity:.6"' : '' ?>>
-      <td><form id="<?= $fid ?>" method="post"><?= $csrf() ?><input type="hidden" name="do" value="app-save"><input type="hidden" name="code" value="<?= ag_h($c) ?>"></form>
-        <input form="<?= $fid ?>" name="name" value="<?= ag_h($p['name']) ?>" style="width:130px;font-weight:700" required><div class="muted" style="font-size:11px;margin-top:3px">code: <?= ag_h($c) ?></div></td>
-      <td><input form="<?= $fid ?>" name="what" value="<?= ag_h($p['what']) ?>" style="width:100%"></td>
-      <td><input form="<?= $fid ?>" name="unit" value="<?= ag_h($p['unit']) ?>" style="width:90px"></td>
-      <td><input form="<?= $fid ?>" type="color" name="color" value="<?= ag_h($p['color']) ?>" style="width:44px;padding:2px;height:32px"></td>
-      <td><?php $lg = trim((string) ($p['logo'] ?? '')) ?: (['smartprs3' => 'assets/logos/smartprs3.png', 'smartept' => 'assets/logos/smartept.png', 'leadger' => 'https://rovexy.app/brand/products/leadger.png inv', 'rovexy' => 'https://rovexy.app/brand/rovexy-lockup.svg'][$c] ?? ''); [$lg, $lgInv] = array_pad(explode(' ', $lg, 2), 2, ''); ?>
-        <div style="display:flex;gap:8px;align-items:center"><span style="width:84px;height:34px;border-radius:8px;background:#fff;border:1px solid var(--line);display:grid;place-items:center;flex:none;padding:4px"><?= $lg !== '' ? '<img src="' . ag_h($lg) . '" alt="" style="max-width:100%;max-height:26px' . ($lgInv === 'inv' ? ';filter:invert(1) hue-rotate(180deg)' : '') . '" onerror="this.remove()">' : '<span style="color:#64748b;font-size:11px">none</span>' ?></span>
-        <input form="<?= $fid ?>" name="logo" value="<?= ag_h((string) ($p['logo'] ?? '')) ?>" placeholder="built-in" style="width:150px"></div></td>
-      <td><input form="<?= $fid ?>" name="open" value="<?= ag_h((string) ($p['open'] ?? '')) ?>" placeholder="not live yet" style="width:170px">
-        <div style="margin-top:3px"><?= !empty($p['retired']) ? '<span class="pill red">Retired</span>' : ($p['open'] !== null ? '<span class="pill green">Live</span>' : '<span class="pill grey">Coming</span>') ?></div></td>
-      <td><?= $n ?> · <?= $seats ?></td>
-      <td><label class="sw"><input form="<?= $fid ?>" type="checkbox" name="retired"<?= !empty($p['retired']) ? ' checked' : '' ?>></label></td>
-      <td class="right"><button form="<?= $fid ?>" class="btn ghost">Save</button></td></tr>
-  <?php endforeach; ?></table></div>
-  <form method="post" class="box"><?= $csrf() ?><input type="hidden" name="do" value="app-save">
-    <div class="hd"><h2><i class="fas fa-circle-plus"></i>Add a new app</h2><span class="muted">it appears for every client straight away, switched off until you licence it</span></div>
-    <div class="bd grid2">
-      <div><label>App name <span class="req">*</span></label><input name="name" required placeholder="e.g. SmartVisit"></div>
-      <div><label>What it does</label><input name="what" placeholder="one line clients will read"></div>
-      <div><label>Seats are counted in</label><input name="unit" value="users" placeholder="users, employees, agents, devices…"></div>
-      <div><label>Colour</label><input type="color" name="color" value="#1F3A5F" style="height:38px;padding:3px"></div>
-      <div class="full"><label>Logo (web address or assets/logos/file.png &mdash; a full-colour logo on a transparent or white background; add &ldquo; inv&rdquo; after the address if you only have a white version)</label><input name="logo" placeholder="https://example.com/logo-white.png"></div>
-      <div class="full"><label>Opens at (leave empty until the app is on AmetecsGlobal)</label><input name="open" placeholder="../plugins/smartvisit/  or  https://smartvisit.example.com"></div>
-    </div><div class="ft"><button class="btn gold">Add app</button></div></form>
+<?php elseif ($page === 'apps'):
+    // PHASE 7 (owner, 18 Nov 2026: "redesign this page"): one card per app - logo, status, clients, seats, online
+    // price - with editing in a pop-up instead of a wide table of inputs.
+    $cat = AmetecsAccess::plugins(true); $prs = AmetecsBilling::ready() ? AmetecsBilling::prices() : [];
+    $builtIn = ['smartprs3' => 'assets/logos/smartprs3.png', 'smartept' => 'assets/logos/smartept.png', 'leadger' => 'https://rovexy.app/brand/products/leadger.png inv', 'rovexy' => 'https://rovexy.app/brand/rovexy-lockup.svg'];
+    $logoImg = static function (string $c, array $p) use ($builtIn): string {
+        [$lg, $inv] = array_pad(explode(' ', trim((string) ($p['logo'] ?? '')) ?: ($builtIn[$c] ?? ''), 2), 2, '');
+        return $lg !== '' ? '<img src="' . ag_h($lg) . '" alt="' . ag_h($p['name']) . '"' . ($inv === 'inv' ? ' style="filter:invert(1) hue-rotate(180deg)"' : '') . ' onerror="this.remove()">' : '<span class="amark">' . ag_h(mb_substr((string) $p['name'], 0, 1)) . '</span>';
+    };
+    $stat = []; $tc = 0; $ts = 0;
+    foreach ($cat as $c => $p) {
+        $n = 0; $seats = 0;
+        foreach ($tenants as $t) { if (AmetecsAccess::state((string) $t['id'], $c, $all) === 'on') { $n++; $seats += (int) AmetecsAccess::get((string) $t['id'], $c, $all)['seats']; } }
+        $stat[$c] = [$n, $seats];
+    }
+    $liveN = count(array_filter($cat, static fn ($p) => empty($p['retired']) && $p['open'] !== null));
+    $retN = count(array_filter($cat, static fn ($p) => !empty($p['retired'])));
+    $field = static fn (string $fid, array $p, string $c = ''): string => '<div class="grid2">'
+        . '<div><label>App name <span class="req">*</span></label><input name="name" value="' . ag_h((string) ($p['name'] ?? '')) . '" required placeholder="e.g. SmartVisit"></div>'
+        . '<div><label>Seats are counted in</label><input name="unit" value="' . ag_h((string) ($p['unit'] ?? 'users')) . '" placeholder="users, employees, agents…"></div>'
+        . '<div class="full"><label>What it does</label><input name="what" value="' . ag_h((string) ($p['what'] ?? '')) . '" placeholder="one line clients will read"></div>'
+        . '<div class="full"><label>Opens at <small class="muted">empty = not live yet</small></label><input name="open" value="' . ag_h((string) ($p['open'] ?? '')) . '" placeholder="../plugins/myapp/  or  https://myapp.example.com"></div>'
+        . '<div class="full"><label>Logo <small class="muted">web address or assets/logos/file.png; add " inv" for a white-only logo; empty = built-in</small></label><input name="logo" value="' . ag_h((string) ($p['logo'] ?? '')) . '" placeholder="built-in"></div>'
+        . '<div><label>Colour</label><input type="color" name="color" value="' . ag_h((string) ($p['color'] ?? '#1F3A5F')) . '" style="height:40px;padding:3px;width:100%"></div>'
+        . ($c !== '' ? '<div><label>Status</label><label class="sw" style="text-transform:none;font-size:13.5px;color:var(--ink);margin-top:8px"><input type="checkbox" name="retired"' . (!empty($p['retired']) ? ' checked' : '') . '> Retired (clients stop seeing it; licences kept)</label></div>' : '')
+        . '</div>'; ?>
+  <div class="lph"><div><h1>Applications</h1><p class="sub">The apps every client sees. A change here reaches every PC through GitHub within minutes. An app with an "Opens at" link is <b>Live</b>; without one it can be licensed and shows as arriving soon.</p></div>
+    <button type="button" class="btn gold" onclick="document.getElementById('appnew').showModal()"><i class="fas fa-plus"></i>Add app</button></div>
+  <div class="lsum four">
+    <div class="ls"><span class="li"><i class="fas fa-layer-group"></i></span><div><b><?= count($cat) ?></b><small>Applications</small></div></div>
+    <div class="ls"><span class="li t-green"><i class="fas fa-circle-play"></i></span><div><b><?= $liveN ?></b><small>Live</small></div></div>
+    <div class="ls"><span class="li"><i class="fas fa-hourglass-half"></i></span><div><b><?= count($cat) - $liveN - $retN ?></b><small>Arriving soon</small></div></div>
+    <div class="ls"><span class="li"><i class="fas fa-key"></i></span><div><b><?= array_sum(array_column($stat, 0)) ?> · <?= array_sum(array_column($stat, 1)) ?></b><small>Licences · seats</small></div></div>
+  </div>
+  <div class="appg"><?php foreach ($cat as $c => $p): [$n, $seats] = $stat[$c]; $ret = !empty($p['retired']); $pr = $prs[$c] ?? []; ?>
+    <article class="appc<?= $ret ? ' ret' : '' ?>" style="--c:<?= ag_h((string) $p['color']) ?>">
+      <header><span class="alogo"><?= $logoImg($c, $p) ?></span><?= $ret ? '<span class="pill red">Retired</span>' : ($p['open'] !== null ? '<span class="pill green">Live</span>' : '<span class="pill grey">Arriving soon</span>') ?></header>
+      <h3><?= ag_h($p['name']) ?> <small><?= ag_h($c) ?></small></h3>
+      <p><?= ag_h((string) ($p['what'] ?: 'No description yet.')) ?></p>
+      <dl><div><dt>Clients</dt><dd><?= $n ?></dd></div><div><dt>Seats</dt><dd><?= $seats ?> <small><?= ag_h((string) $p['unit']) ?></small></dd></div>
+        <div><dt>Online price</dt><dd><?= $pr !== [] ? implode(' · ', array_map(static fn ($k, $v) => '₹' . number_format((float) $v) . '<small>/' . ($k === 'yearly' ? 'yr' : 'mo') . '</small>', array_keys($pr), $pr)) : '<a href="?p=gateway">Set</a>' ?></dd></div></dl>
+      <footer><button type="button" class="btn ghost" onclick="document.getElementById('app-<?= ag_h($c) ?>').showModal()"><i class="fas fa-pen"></i>Edit</button>
+        <a class="btn ghost" href="?p=clients"><i class="fas fa-building"></i>Clients</a>
+        <?php if ($p['open'] !== null && !$ret): ?><a class="btn ghost" href="<?= ag_h((string) $p['open']) ?>" target="_blank" rel="noopener" title="Open"><i class="fas fa-arrow-up-right-from-square"></i></a><?php endif; ?></footer>
+    </article>
+    <dialog id="app-<?= ag_h($c) ?>" class="ldlg"><form method="post"><?= $csrf() ?><input type="hidden" name="do" value="app-save"><input type="hidden" name="code" value="<?= ag_h($c) ?>">
+      <header><h2><i class="fas fa-pen"></i>Edit <?= ag_h($p['name']) ?></h2><button type="button" class="x" onclick="this.closest('dialog').close()">&times;</button></header>
+      <?= $field('app-' . $c, $p, $c) ?>
+      <footer><button type="button" class="btn ghost" onclick="this.closest('dialog').close()">Cancel</button><button class="btn gold"><i class="fas fa-check"></i>Save</button></footer></form></dialog>
+  <?php endforeach; ?>
+    <button type="button" class="appc addc" onclick="document.getElementById('appnew').showModal()"><i class="fas fa-plus"></i><b>Add a new app</b><small>It appears for every client straight away, switched off until you licence it.</small></button>
+  </div>
+  <dialog id="appnew" class="ldlg"><form method="post"><?= $csrf() ?><input type="hidden" name="do" value="app-save">
+    <header><h2><i class="fas fa-circle-plus"></i>Add a new app</h2><button type="button" class="x" onclick="this.closest('dialog').close()">&times;</button></header>
+    <?= $field('new', ['color' => '#1F3A5F']) ?>
+    <footer><button type="button" class="btn ghost" onclick="this.closest('dialog').close()">Cancel</button><button class="btn gold"><i class="fas fa-plus"></i>Add app</button></footer></form></dialog>
 
 <?php elseif ($page === 'activity'):
     // Phase 7 audit (18 Nov 2026): sign-ins drowned the real changes, so the log opens on Changes; Sign-ins and Everything are one click away.

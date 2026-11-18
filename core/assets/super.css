@@ -250,3 +250,28 @@ main.pg-activity .ltabs{margin-top:4px}
 .tred{color:#dc2626;font-weight:600}.tamb{color:#b45309;font-weight:600}
 @media (max-width:1100px){.dgrid3{grid-template-columns:minmax(0,1fr)}}
 @media (max-width:560px){.actc.six{grid-template-columns:1fr 1fr}.rbars{height:150px;gap:4px;padding:14px 8px 6px}.rbars b{display:none}.mixr{flex-direction:column;align-items:stretch}.donut2{margin:auto}.plans2 div,.adopt div{grid-template-columns:90px minmax(0,1fr) 40px}.fleet{grid-template-columns:1fr}}
+/* client page: add an administrator (18 Nov 2026) */
+.addadm{display:grid;grid-template-columns:auto minmax(0,1.3fr) minmax(0,1fr) auto;gap:12px;align-items:end;padding:14px 18px;border-top:1px solid var(--line);background:#fffcf5}
+.addadm>b{display:flex;align-items:center;gap:8px;font-size:13.5px;align-self:center;white-space:nowrap}.addadm>b i{color:#b8893b}
+.addadm label{display:grid;gap:5px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.3px;color:#7a6e5b;margin:0}
+.addadm input{height:40px!important;min-height:0!important;padding:0 12px!important;font-size:13.5px;text-transform:none;letter-spacing:0;width:100%}
+.addadm .btn{height:40px}
+@media (max-width:900px){.addadm{grid-template-columns:1fr}.addadm .btn{justify-content:center}}
+/* Applications page cards (18 Nov 2026) */
+.lsum.four{grid-template-columns:repeat(4,minmax(0,1fr))}
+.appg{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px}
+.appc{position:relative;background:#fff;border:1px solid var(--line);border-radius:16px;padding:18px;box-shadow:var(--sh2);display:flex;flex-direction:column;gap:10px;overflow:hidden;transition:transform .15s,box-shadow .15s}
+.appc:before{content:"";position:absolute;inset:0 0 auto;height:4px;background:var(--c)}
+.appc:hover{transform:translateY(-2px);box-shadow:var(--sh)}.appc.ret{opacity:.6}
+.appc header{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.alogo{height:40px;min-width:40px;max-width:170px;display:flex;align-items:center}.alogo img{max-height:36px;max-width:170px}.alogo b{font-size:18px;color:var(--c)}
+.appc h3{margin:4px 0 0;font-size:17px}.appc h3 small{font-size:11px;font-weight:500;color:#94a3b8;margin-left:4px}
+.appc>p{margin:0;font-size:13px;color:#64748b;min-height:36px}
+.appc dl{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:4px 0 0;padding:12px 0;border-top:1px solid #f1ece0;border-bottom:1px solid #f1ece0}
+.appc dt{font-size:10.5px;text-transform:uppercase;letter-spacing:.4px;color:#94a3b8;font-weight:600}.appc dd{margin:3px 0 0;font-weight:700;font-size:15px}.appc dd small{font-size:11px;font-weight:500;color:#94a3b8}
+.appc footer{display:flex;gap:8px;margin-top:auto}.appc footer .btn{flex:1;justify-content:center}.appc footer a.btn:last-child[title]{flex:none}
+.addc{border:2px dashed #e5d3ac;background:#fffcf5;align-items:center;justify-content:center;text-align:center;cursor:pointer;min-height:230px;font:inherit;color:#3d3426}
+.addc:before{display:none}.addc i{width:46px;height:46px;border-radius:50%;display:grid;place-items:center;background:#f7ead0;color:#9a7228;font-size:18px}.addc small{color:#94a3b8;max-width:220px}
+@media (max-width:700px){.lsum.four{grid-template-columns:1fr 1fr}}
+.mini .shell>.side{width:72px}
+.amark{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;background:color-mix(in srgb,var(--c) 14%,#fff);color:var(--c);font-weight:800;font-size:18px}

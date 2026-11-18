@@ -913,10 +913,10 @@ a{color:inherit}
         <dt>Valid till</dt><dd><?= $until === '' ? 'No end date' : ag_h(date('d M Y', (int) strtotime($until))) . ($days !== null ? ' <small style="' . ($days < 0 ? 'color:#b91c1c' : ($days <= 30 ? 'color:#b45309' : 'color:#94a3b8')) . '">' . ($days < 0 ? 'ended ' . -$days . ' days ago' : $days . ' days left') . '</small>' : '') ?></dd></dl>
       <div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap"><?php if ($payOnline && (float) ($l['price'] ?? 0) > 0 && $l['currency'] === 'INR' && in_array($l['plan'], ['monthly', 'yearly'], true) && $st !== 'off'): ?>
         <form method="post" style="display:inline"><input type="hidden" name="csrf" value="<?= ag_h($session->token()) ?>"><input type="hidden" name="do" value="pay-renew"><input type="hidden" name="licence" value="<?= (int) $l['id'] ?>"><button class="btn2 primary"><i class="fas fa-rotate"></i>Renew online</button></form><?php endif; ?>
-        <?php if ($payOnline && ($prices[$code] ?? []) !== [] && !in_array($l['status'], ['suspended', 'cancelled'], true) && $l['plan'] !== 'perpetual'): ?></div><?= $planForm($code, $l, 'Change plan or seats') ?><div>
+        <?php if ($billOn && ($prices[$code] ?? []) !== [] && !in_array($l['status'], ['suspended', 'cancelled'], true) && $l['plan'] !== 'perpetual'): ?></div><?= $planForm($code, $l, 'Change plan or seats') ?><div>
         <?php else: ?><a class="btn2 ghost" href="?v=support&amp;subject=<?= rawurlencode('Change plan / seats: ' . ($apps[$code]['name'] ?? $code)) ?>"><i class="fas fa-sliders"></i>Change plan or seats</a><?php endif; ?></div></div>
   <?php endforeach; ?></div>
-  <?php $buyable = $payOnline ? array_filter($apps, static fn ($p, $c) => !isset($lics[$c]) && ($prices[$c] ?? []) !== [] && array_filter((array) $prices[$c]) !== [], ARRAY_FILTER_USE_BOTH) : [];
+  <?php $buyable = $billOn ? array_filter($apps, static fn ($p, $c) => !isset($lics[$c]) && ($prices[$c] ?? []) !== [] && array_filter((array) $prices[$c]) !== [], ARRAY_FILTER_USE_BOTH) : [];
   if ($buyable !== []): ?>
   <h2 class="dsec"><i class="fas fa-cart-shopping"></i>Add an application<span>pay online, start at once</span></h2>
   <div class="grid2c"><?php foreach ($buyable as $code => $p): $r = $prices[$code]; ?>
