@@ -705,6 +705,20 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && $pdo !== null) {
         $back('?p=staff', 'Super Admin ' . $email . ' added.');
     }
 
+    if ($do === 'staff-password') {   // Phase 7: set a new password for another Super Admin, shown once
+        $q = $pdo->prepare('SELECT * FROM platform_users WHERE id = ?');
+        $q->execute([$id]);
+        $u = $q->fetch(\PDO::FETCH_ASSOC);
+        if (!$u || strcasecmp((string) $u['email'], $meEmail) === 0) {
+            $back('?p=staff', null, $u ? 'Change your own password under My account.' : 'Unknown Super Admin.');
+        }
+        $pw = $newPassword();
+        $pdo->prepare('UPDATE platform_users SET password = ?, updated_at = NOW() WHERE id = ?')->execute([$hasher->hash($pw), $id]);
+        AmetecsData::log($meEmail, 'Set a new password for Super Admin', '', (string) $u['email']);
+        $_SESSION['reveal'] = ['tid' => 'staff', 'email' => (string) $u['email'], 'password' => $pw];
+        $back('?p=staff', 'New password set for ' . $u['email'] . '.');
+    }
+
     if ($do === 'staff-toggle') {
         $q = $pdo->prepare('SELECT * FROM platform_users WHERE id = ?');
         $q->execute([$id]);
@@ -940,7 +954,7 @@ main{max-width:1560px;padding:16px 26px 20px}
 @media (max-width:1100px){.kstrip{grid-template-columns:repeat(3,1fr)}.dgrid2{grid-template-columns:1fr}}
 .cn b{white-space:nowrap}.mxt td:last-child,.mxt th:last-child{padding-right:16px;white-space:nowrap}.mxt th.ac{padding-left:4px;padding-right:4px}.mxt th:first-child{width:30%}
 </style>
-<link rel="stylesheet" href="assets/shell.css?v=6"><link rel="stylesheet" href="assets/super.css?v=5"></head><body>
+<link rel="stylesheet" href="assets/shell.css?v=6"><link rel="stylesheet" href="assets/super.css?v=6"></head><body>
 <?php
 $myName = trim((string) ($me['name'] ?? '')) ?: ucfirst((string) strtok($meEmail, '@'));
 $myIni = strtoupper(implode('', array_map(static fn (string $w): string => mb_substr($w, 0, 1), array_slice(preg_split('/[\s._-]+/', $myName) ?: ['S'], 0, 2))));
@@ -1756,16 +1770,56 @@ $myIni = strtoupper(implode('', array_map(static fn (string $w): string => mb_su
   <?php endforeach; ?></table></div>
 
 <?php elseif ($page === 'staff'):
-    $staff = $pdo->query('SELECT * FROM platform_users ORDER BY id')->fetchAll(\PDO::FETCH_ASSOC); ?>
-  <h1>Super Admins</h1><p class="sub">Ametecs staff who can use this console.</p>
-  <div class="box"><table><tr><th>Name</th><th>Email</th><th>Status</th><th>Last sign-in</th><th class="right"></th></tr>
-  <?php foreach ($staff as $u): $off = trim((string) ($u['disabled_at'] ?? '')) !== ''; $self = strcasecmp((string) $u['email'], $meEmail) === 0; ?><tr>
-    <td><?= ag_h($u['name']) ?><?= $self ? ' <span class="pill grey">you</span>' : '' ?></td><td><?= ag_h($u['email']) ?></td><td><?= $off ? '<span class="pill red">Disabled</span>' : '<span class="pill green">Active</span>' ?></td>
-    <td><?= ag_h((string) ($u['last_login_at'] ?? '—')) ?></td>
-    <td class="right"><?php if (!$self): ?><form method="post" class="inline"><?= $csrf() ?><input type="hidden" name="do" value="staff-toggle"><input type="hidden" name="id" value="<?= (int) $u['id'] ?>"><button class="btn <?= $off ? 'navy' : 'danger' ?>"><?= $off ? 'Enable' : 'Disable' ?></button></form><?php endif; ?></td></tr>
-  <?php endforeach; ?></table>
-  <form method="post" class="ft row" style="justify-content:flex-end"><?= $csrf() ?><input type="hidden" name="do" value="staff-add"><span class="muted">Add a Super Admin:</span>
-    <input name="name" placeholder="name" required><input type="email" name="email" placeholder="email" required><button class="btn gold">Add (password shown once)</button></form></div>
+    // PHASE 7 (owner, 18 Nov 2026: "redesign this page"): member cards, figures, add in a pop-up, reset a password.
+    $staff = $pdo->query('SELECT * FROM platform_users ORDER BY disabled_at IS NOT NULL, name')->fetchAll(\PDO::FETCH_ASSOC);
+    $nowTs = time();
+    $ago = static function (?string $at) use ($nowTs): string {
+        if (($at ?? '') === '') { return 'Never'; }
+        $s2 = max(0, $nowTs - (int) strtotime((string) $at));
+        return $s2 < 90 ? 'just now' : ($s2 < 3600 ? round($s2 / 60) . ' min ago' : ($s2 < 86400 ? round($s2 / 3600) . ' h ago' : ($s2 < 86400 * 30 ? round($s2 / 86400) . ' days ago' : date('d M Y', (int) strtotime((string) $at)))));
+    };
+    $ini = static fn (string $n): string => strtoupper(implode('', array_map(static fn ($w) => mb_substr($w, 0, 1), array_slice(preg_split('/[\s._@-]+/', trim($n)) ?: ['S'], 0, 2))));
+    $active = array_filter($staff, static fn ($u) => trim((string) ($u['disabled_at'] ?? '')) === '');
+    $recent = array_filter($staff, static fn ($u) => ($u['last_login_at'] ?? '') !== '' && strtotime((string) $u['last_login_at']) > $nowTs - 7 * 86400);
+    $emails = array_map(static fn ($u) => strtolower((string) $u['email']), $staff);
+    $feed = array_slice(array_values(array_filter(AmetecsData::activity('', 400), static fn ($r) => in_array(strtolower((string) $r['who']), $emails, true) && $r['what'] !== 'Signed in')), 0, 8); ?>
+  <div class="lph"><div><h1>Super Admins</h1><p class="sub">Ametecs staff who run this console: clients, licences, releases and billing for every company on AmetecsGlobal.</p></div>
+    <button type="button" class="btn gold" onclick="document.getElementById('addsa').showModal()"><i class="fas fa-user-plus"></i>Add Super Admin</button></div>
+  <section class="lsum" style="grid-template-columns:repeat(4,1fr)">
+    <div class="ls split"><span class="li"><i class="fas fa-user-shield"></i></span><span><b><?= count($staff) ?></b><small>Super Admins</small></span></div>
+    <div class="ls green"><span class="li"><i class="fas fa-circle-check"></i></span><span><b><?= count($active) ?></b><small>Active</small></span></div>
+    <div class="ls <?= count($recent) > 0 ? 'green' : 'zero' ?>"><span class="li"><i class="fas fa-right-to-bracket"></i></span><span><b><?= count($recent) ?></b><small>Signed in, last 7 days</small></span></div>
+    <div class="ls <?= count($staff) - count($active) > 0 ? 'red' : 'zero' ?>"><span class="li"><i class="fas fa-user-slash"></i></span><span><b><?= count($staff) - count($active) ?></b><small>Disabled</small></span></div>
+  </section>
+  <div class="pg2"><div class="pgm">
+    <div class="sacards"><?php foreach ($staff as $u): $off = trim((string) ($u['disabled_at'] ?? '')) !== ''; $self = strcasecmp((string) $u['email'], $meEmail) === 0; ?>
+      <article class="sac<?= $off ? ' off' : '' ?><?= $self ? ' me' : '' ?>">
+        <div class="sat"><span class="saav"><?= ag_h($ini((string) ($u['name'] ?: $u['email']))) ?><i class="<?= $off ? 'off' : (($u['last_login_at'] ?? '') !== '' && strtotime((string) $u['last_login_at']) > $nowTs - 86400 ? 'on' : '') ?>"></i></span>
+          <div><b><?= ag_h((string) $u['name']) ?><?= $self ? ' <span class="pill grey">you</span>' : '' ?></b><a href="mailto:<?= ag_h((string) $u['email']) ?>"><?= ag_h((string) $u['email']) ?></a></div>
+          <span class="pill <?= $off ? 'red' : 'green' ?>"><?= $off ? 'Disabled' : 'Active' ?></span></div>
+        <dl><div><dt>Role</dt><dd>Super Admin</dd></div><div><dt>Last sign-in</dt><dd title="<?= ag_h((string) ($u['last_login_at'] ?? '')) ?>"><?= ag_h($ago($u['last_login_at'] ?? null)) ?></dd></div><div><dt>Added</dt><dd><?= $d(substr((string) ($u['created_at'] ?? ''), 0, 10)) ?></dd></div></dl>
+        <footer><?php if ($self): ?><a class="btn ghost" href="?p=account"><i class="fas fa-lock"></i>Change my password</a>
+          <?php else: ?><form method="post" onsubmit="return confirm('Set a new password for <?= ag_h(addslashes((string) $u['email'])) ?>? Their current password stops working; the new one is shown once.')"><?= $csrf() ?><input type="hidden" name="do" value="staff-password"><input type="hidden" name="id" value="<?= (int) $u['id'] ?>"><button class="btn ghost"><i class="fas fa-key"></i>New password</button></form>
+            <form method="post" onsubmit="return confirm('<?= $off ? 'Enable' : 'Disable' ?> <?= ag_h(addslashes((string) $u['email'])) ?>?')"><?= $csrf() ?><input type="hidden" name="do" value="staff-toggle"><input type="hidden" name="id" value="<?= (int) $u['id'] ?>"><button class="btn <?= $off ? 'navy' : 'danger' ?>"><i class="fas fa-<?= $off ? 'user-check' : 'user-slash' ?>"></i><?= $off ? 'Enable' : 'Disable' ?></button></form><?php endif; ?></footer>
+      </article>
+    <?php endforeach; ?>
+      <button type="button" class="sac add" onclick="document.getElementById('addsa').showModal()"><i class="fas fa-plus"></i><b>Add a Super Admin</b><small>Name and email; a password is generated and shown once</small></button>
+    </div>
+  </div><aside class="pgs">
+    <div class="box"><div class="hd"><h2><i class="fas fa-shield-halved"></i>Security</h2></div><ul class="sasec">
+      <li><i class="fas fa-lock"></i><span><b>Sign-in lock</b>5 wrong passwords lock the account for 5 minutes.</span></li>
+      <li><i class="fas fa-eye-slash"></i><span><b>Passwords shown once</b>New and reset passwords appear one time only; nobody can look one up later.</span></li>
+      <li><i class="fas fa-user-slash"></i><span><b>Disable, never delete</b>A disabled Super Admin cannot sign in; their history stays.</span></li>
+      <li><i class="fas fa-terminal"></i><span><b>Locked out?</b><code>php plugins\smartprs3\tools\make-super-admin.php email "Name"</code></span></li></ul></div>
+    <div class="box"><div class="hd"><h2><i class="fas fa-clock-rotate-left"></i>Recent activity</h2><a href="?p=activity" class="more">All <i class="fas fa-arrow-right"></i></a></div>
+      <?php if ($feed === []): ?><div class="empty">Nothing yet.</div><?php else: ?><ul class="feed"><?php foreach ($feed as $r): ?><li><span class="fd"></span><div><div class="ft2"><?= ag_h($r['what']) ?></div><div class="fm"><?= ag_h($r['who']) ?> &middot; <?= ag_h($ago($r['at'])) ?></div></div></li><?php endforeach; ?></ul><?php endif; ?></div>
+  </aside></div>
+  <dialog id="addsa" class="ldlg"><form method="post"><?= $csrf() ?><input type="hidden" name="do" value="staff-add">
+    <header><h2><i class="fas fa-user-plus"></i>Add a Super Admin</h2><button type="button" class="x" onclick="this.closest('dialog').close()">&times;</button></header>
+    <div class="grid2"><div class="full"><label>Full name</label><input name="name" required placeholder="e.g. Ravi Teja" autocomplete="off"></div>
+      <div class="full"><label>Work email</label><input type="email" name="email" required placeholder="name@ametecsindia.com" autocomplete="off"></div>
+      <div class="full"><p class="muted" style="margin:0;font-size:12.5px"><i class="fas fa-circle-info"></i> A password is generated and shown to you once. Give it to them privately; they change it under My account. They get full access to every client.</p></div></div>
+    <footer><button type="button" class="btn ghost" onclick="this.closest('dialog').close()">Cancel</button><button class="btn gold"><i class="fas fa-check"></i>Add Super Admin</button></footer></form></dialog>
 
 <?php elseif ($page === 'email'): $mc = AmetecsMail::box($pdo)->config(); ?>
   <h1>Email settings</h1><p class="sub">The mailbox AmetecsGlobal sends from: password reset links for clients. Use your company mail server (SMTP) details.</p>
