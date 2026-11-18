@@ -41,7 +41,15 @@ Clients and their logins live in the database set in `plugins\smartprs3\.env` (S
   `core/licence-api.php` (action activate / check); the first server is bound, others are refused until
   "Release from server". Offline servers get a signed .lic file (needs the signing key, which lives only on the
   live licence server). The old `core\data\access.json` is imported once and renamed `access.json.imported`.
-- Payments (Phase 3) use Razorpay.
+## Payments & invoices (Phase 3, 18 Nov 2026)
+- Super Admin -> Payment settings: Razorpay Key ID / Secret (stored encrypted, in the payment_gateways table SmartPRS3's
+  console also uses), test or live mode, on/off; GST %, seller name, GSTIN, address and billing email for every invoice.
+- Invoices (ag_invoices, numbered AG-<year>-00001) for paid upgrades, licence renewals ("Raise renewal invoice" on a
+  licence with a price) and anything else (New invoice). Clients pay from Payments & invoices in their panel (Razorpay:
+  cards, UPI, net banking), or with "Pay & upgrade" on Updates / "Renew online" on their licences.
+- A payment counts only after the server checks it: Razorpay's signature, or "Check with Razorpay" on the invoice (for a
+  client who paid and closed the page). Paying unlocks the upgrade / extends the licence; a refund (Razorpay or offline)
+  takes it back. Offline payments: "Mark paid" with the UTR / cheque reference. Every invoice prints as a PDF.
 
 ## Updates & releases (Phase 2, 18 Nov 2026)
 - Super Admin -> Updates & releases is the one place for every app's full releases, patches and plugins/modules.
