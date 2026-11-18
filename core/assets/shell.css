@@ -302,3 +302,13 @@ img,video,canvas{max-width:100%}
 @media (max-width:1100px){.akpis{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media (max-width:560px){.akpis{grid-template-columns:1fr 1fr}.tlday{top:56px}.acnt{margin-left:0}}
 .afilt .fsearch input{width:100%}.afilt .fsearch{display:flex;align-items:center}
+/* dashboard arrangement (18 Nov 2026): filters scroll with the page, quick actions as one strip, even bottom row */
+.dfilters{position:static!important}
+.qbar{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 16px}
+.qbar a{display:inline-flex;align-items:center;gap:8px;padding:8px 14px;border-radius:30px;background:#fff;border:1px solid #efe6d4;font-size:12.5px;font-weight:600;color:#3d3426;text-decoration:none;box-shadow:0 1px 2px rgba(60,40,10,.04);transition:all .15s}
+.qbar a:hover{border-color:#d4a65a;background:#fffaf0;transform:translateY(-1px)}.qbar i{color:#b8893b}
+.ins3.eq.dbot{align-items:stretch;margin-top:16px}
+.seatl .logo{width:100px;height:28px;flex:none;overflow:hidden;display:flex;align-items:center}.seatl .logo img{max-width:100%!important;max-height:26px;object-fit:contain;object-position:left}
+.seatl .logo b,.seatl .logo span{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ract b{overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.ins4 .dnut li small{display:none}.ins4 .dnut{gap:14px}.ins4 .dring{width:104px;height:104px}

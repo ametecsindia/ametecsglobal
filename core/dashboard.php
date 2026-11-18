@@ -163,6 +163,7 @@ ob_start(); ?>
   <?php endif; ?>
   <?= $tile('Applications', (string) count($held), $f['app'] !== '' ? 'filtered' : 'in your plan', '', 'fa-grip') ?>
 </section>
+<nav class="qbar"><a href="org.php?s=employees"><i class="fas fa-user-plus"></i>Add employee</a><a href="org.php?s=users"><i class="fas fa-user-shield"></i>Users &amp; permissions</a><a href="?v=apps"><i class="fas fa-grip"></i>My applications</a><a href="?v=plugins"><i class="fas fa-puzzle-piece"></i>Modules &amp; plugins</a><a href="?v=billing"><i class="fas fa-file-invoice"></i>Payments</a><a href="?v=support"><i class="fas fa-headset"></i>Get help</a></nav>
 
 <?php
 // MORE INSIGHT (owner, 18 Nov 2026: "add more features on this page and also graphic"): an attendance donut and a
@@ -219,7 +220,7 @@ foreach ($chosen as $e) {
     }
 }
 usort($moments, static fn ($a, $b) => $a[0] <=> $b[0]);
-$acts = array_slice(array_values(array_filter(AmetecsData::activity($tenant, 100), static fn ($r) => !in_array($r['what'], ['Signed in', 'Signed out'], true))), 0, 6);
+$acts = array_slice(array_values(array_filter(AmetecsData::activity($tenant, 100), static fn ($r) => !in_array($r['what'], ['Signed in', 'Signed out'], true))), 0, 5);
 $cols = ['Present' => '#16a34a', 'On leave' => '#2563eb', 'Absent' => '#dc2626'];
 ?>
 <section class="ins3">
@@ -256,20 +257,6 @@ $cols = ['Present' => '#16a34a', 'On leave' => '#2563eb', 'Absent' => '#dc2626']
 </section>
 <?php endif; ?>
 
-<section class="ins3 eq">
-  <div class="chart"><h3><i class="fas fa-calendar-day"></i>Coming up<span class="muted2">next 30 days</span></h3>
-    <?php if ($moments === []): ?><div class="emp3"><i class="fas fa-mug-hot"></i>No birthdays, anniversaries, probation ends or expiring documents in the next 30 days.</div>
-    <?php else: ?><ul class="mom"><?php foreach (array_slice($moments, 0, 7) as [$n, $ic, $tn, $who, $what]): ?><li><span class="mi <?= $tn ?>"><i class="fas <?= $ic ?>"></i></span><div><b><?= ag_h($who) ?></b><small><?= ag_h($what) ?></small></div><em><?= $n === 0 ? 'Today' : ($n === 1 ? 'Tomorrow' : ($n < 0 ? -$n . 'd ago' : 'in ' . $n . 'd')) ?></em></li><?php endforeach; ?></ul><?php endif; ?></div>
-  <div class="chart"><h3><i class="fas fa-key"></i>Your plan<a class="more2" href="?v=licences">Licences <i class="fas fa-arrow-right"></i></a></h3>
-    <ul class="seatl"><?php foreach ($held as $code => $h): $l = $h['l']; $seats = (int) $l['seats']; $usedN = $code === 'smartprs3' ? count($everyone) : null; $until = (string) ($l['valid_until'] ?? ''); $left = $until !== '' ? (int) floor((strtotime($until) - strtotime($today)) / 86400) : null; ?>
-      <li><div class="logo"><?= $logoOf($code, $h['p']) ?></div><div class="sinfo"><span><?= $usedN !== null ? $usedN . ' / ' : '' ?><?= $seats > 0 ? $seats : '&infin;' ?> <?= ag_h((string) $h['p']['unit']) ?><small><?= $left === null ? 'no end date' : ($left < 0 ? 'ended' : $left . ' days left') ?></small></span>
-        <?php if ($usedN !== null && $seats > 0): $pc = min(100, (int) round(100 * $usedN / $seats)); ?><em class="sbar"><i style="width:<?= $pc ?>%;background:<?= $pc >= 90 ? '#dc2626' : ($pc >= 75 ? '#d97706' : '#16a34a') ?>"></i></em><?php endif; ?></div></li>
-    <?php endforeach; ?></ul></div>
-  <div class="chart"><h3><i class="fas fa-bolt"></i>Quick actions</h3>
-    <div class="qact"><a href="org.php?s=employees"><i class="fas fa-user-plus"></i>Add employee</a><a href="org.php?s=users"><i class="fas fa-user-shield"></i>Users &amp; permissions</a><a href="?v=apps"><i class="fas fa-grip"></i>My applications</a><a href="?v=plugins"><i class="fas fa-puzzle-piece"></i>Modules &amp; plugins</a><a href="?v=billing"><i class="fas fa-file-invoice"></i>Payments</a><a href="?v=support"><i class="fas fa-headset"></i>Get help</a></div>
-    <h3 style="margin-top:14px"><i class="fas fa-clock-rotate-left"></i>Recent activity<a class="more2" href="?v=activity">All <i class="fas fa-arrow-right"></i></a></h3>
-    <?php if ($acts === []): ?><div class="emp3 sm">No changes yet.</div><?php else: ?><ul class="ract"><?php foreach ($acts as $r): ?><li><b><?= ag_h($r['what']) ?></b><small><?= ag_h($r['who']) ?> &middot; <time data-at="<?= ag_h($r['at']) ?>"><?= ag_h($r['at']) ?></time></small></li><?php endforeach; ?></ul><?php endif; ?></div>
-</section>
 <h2 class="dsec"><i class="fas fa-grip"></i>Applications<span><?= count($held) ?> in your plan</span></h2>
 
 <?php $later = []; foreach ($held as $code => $h): $p = $h['p']; $s = $h['s'];
@@ -291,6 +278,19 @@ $cols = ['Present' => '#16a34a', 'On leave' => '#2563eb', 'Absent' => '#dc2626']
 <?php endforeach; ?>
 <?php if ($later !== []): ?><p class="dnote later"><i class="fas fa-hourglass-half"></i> Also in your plan, arriving on AmetecsGlobal soon: <?= ag_h(implode(', ', $later)) ?>.</p><?php endif; ?>
 <?php if ($held === []): ?><div class="lic-t"><div class="empty2" style="padding:30px">No applications are switched on for your company yet. <a href="?v=support">Contact Ametecs</a>.</div></div><?php endif; ?>
+
+<section class="ins3 eq dbot">
+  <div class="chart"><h3><i class="fas fa-calendar-day"></i>Coming up<span class="muted2">next 30 days</span></h3>
+    <?php if ($moments === []): ?><div class="emp3"><i class="fas fa-mug-hot"></i>No birthdays, anniversaries, probation ends or expiring documents in the next 30 days.</div>
+    <?php else: ?><ul class="mom"><?php foreach (array_slice($moments, 0, 7) as [$n, $ic, $tn, $who, $what]): ?><li><span class="mi <?= $tn ?>"><i class="fas <?= $ic ?>"></i></span><div><b><?= ag_h($who) ?></b><small><?= ag_h($what) ?></small></div><em><?= $n === 0 ? 'Today' : ($n === 1 ? 'Tomorrow' : ($n < 0 ? -$n . 'd ago' : 'in ' . $n . 'd')) ?></em></li><?php endforeach; ?></ul><?php endif; ?></div>
+  <div class="chart"><h3><i class="fas fa-key"></i>Your plan<a class="more2" href="?v=licences">Licences <i class="fas fa-arrow-right"></i></a></h3>
+    <ul class="seatl"><?php foreach ($held as $code => $h): $l = $h['l']; $seats = (int) $l['seats']; $usedN = $code === 'smartprs3' ? count($everyone) : null; $until = (string) ($l['valid_until'] ?? ''); $left = $until !== '' ? (int) floor((strtotime($until) - strtotime($today)) / 86400) : null; ?>
+      <li><div class="logo"><?= $logoOf($code, $h['p']) ?></div><div class="sinfo"><span><?= $usedN !== null ? $usedN . ' / ' : '' ?><?= $seats > 0 ? $seats : '&infin;' ?> <?= ag_h((string) $h['p']['unit']) ?><small><?= $left === null ? 'no end date' : ($left < 0 ? 'ended' : $left . ' days left') ?></small></span>
+        <?php if ($usedN !== null && $seats > 0): $pc = min(100, (int) round(100 * $usedN / $seats)); ?><em class="sbar"><i style="width:<?= $pc ?>%;background:<?= $pc >= 90 ? '#dc2626' : ($pc >= 75 ? '#d97706' : '#16a34a') ?>"></i></em><?php endif; ?></div></li>
+    <?php endforeach; ?></ul></div>
+  <div class="chart">    <h3><i class="fas fa-clock-rotate-left"></i>Recent activity<a class="more2" href="?v=activity">All <i class="fas fa-arrow-right"></i></a></h3>
+    <?php if ($acts === []): ?><div class="emp3 sm">No changes yet.</div><?php else: ?><ul class="ract"><?php foreach ($acts as $r): ?><li><b><?= ag_h($r['what']) ?></b><small><?= ag_h($r['who']) ?> &middot; <time data-at="<?= ag_h($r['at']) ?>"><?= ag_h($r['at']) ?></time></small></li><?php endforeach; ?></ul><?php endif; ?></div>
+</section>
 <?php
 $dashHtml = (string) ob_get_clean();
 if (isset($_GET['frag'])) {
