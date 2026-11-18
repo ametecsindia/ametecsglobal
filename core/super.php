@@ -970,7 +970,7 @@ main{max-width:1560px;padding:16px 26px 20px}
 @media (max-width:1100px){.kstrip{grid-template-columns:repeat(3,1fr)}.dgrid2{grid-template-columns:1fr}}
 .cn b{white-space:nowrap}.mxt td:last-child,.mxt th:last-child{padding-right:16px;white-space:nowrap}.mxt th.ac{padding-left:4px;padding-right:4px}.mxt th:first-child{width:30%}
 </style>
-<link rel="stylesheet" href="assets/shell.css?v=13"><link rel="stylesheet" href="assets/super.css?v=11"><link rel="stylesheet" href="assets/theme-gold.css?v=3"><link rel="stylesheet" href="assets/theme-sa-light.css?v=1"></head><body>
+<link rel="stylesheet" href="assets/shell.css?v=13"><link rel="stylesheet" href="assets/super.css?v=12"><link rel="stylesheet" href="assets/theme-gold.css?v=3"><link rel="stylesheet" href="assets/theme-sa-light.css?v=1"></head><body>
 <?php
 $myName = trim((string) ($me['name'] ?? '')) ?: ucfirst((string) strtok($meEmail, '@'));
 $myIni = strtoupper(implode('', array_map(static fn (string $w): string => mb_substr($w, 0, 1), array_slice(preg_split('/[\s._-]+/', $myName) ?: ['S'], 0, 2))));
@@ -1546,25 +1546,58 @@ $myIni = strtoupper(implode('', array_map(static fn (string $w): string => mb_su
     $fa = (string) ($_GET['app'] ?? '');
     $rels = AmetecsReleases::all($fa);
     $inc = AmetecsReleases::ready() ? AmetecsReleases::incoming() : []; ?>
-  <h1>Updates &amp; releases</h1><p class="sub">Every release, patch and plugin for every app. Upload a package, choose who gets it, publish now or on a date. Clients see only updates for apps they hold. Cloud clients run Ametecs' server: install a release on it here (with automatic backup and roll-back).</p>
+  <?php
+    // PHASE 7 (owner, 18 Nov 2026: "redesign this page also"): figures, one card per app (cloud server version against
+    // the newest release), status tabs, release cards; uploading moves into a pop-up.
+    $rst = in_array($_GET['st'] ?? '', array_keys(AmetecsReleases::STATUSES), true) ? (string) $_GET['st'] : '';
+    $allRels = AmetecsReleases::ready() ? AmetecsReleases::all('') : [];
+    $byState = array_count_values(array_map(static fn ($r) => AmetecsReleases::stateOf($r), $allRels));
+    $shown = array_values(array_filter($rels, static fn ($r) => $rst === '' || AmetecsReleases::stateOf($r) === $rst));
+    $qsr = static fn (array $o) => '?' . http_build_query(array_filter($o + ['p' => 'releases', 'app' => $fa, 'st' => $rst]));
+    $mk = static fn (string $c, array $p) => '<span class="am" style="--c:' . ag_h((string) ($p['color'] ?? '#64748B')) . '">' . ag_h(mb_substr((string) $p['name'], 0, 1)) . '</span>'; ?>
+  <div class="lph"><div><h1>Updates &amp; releases</h1><p class="sub">Every release, patch and plugin for every app. Upload a package, choose who gets it, publish now or on a date. Cloud clients run Ametecs' server: install a release on it (with automatic backup and roll-back).</p></div>
+    <?php if (AmetecsReleases::ready()): ?><div class="row"><?php if ($inc !== []): ?><button type="button" class="btn ghost" onclick="document.getElementById('relinc').showModal()"><i class="fas fa-folder-open"></i>From incoming folder <em class="cnt2"><?= count($inc) ?></em></button><?php endif; ?>
+    <button type="button" class="btn gold" onclick="document.getElementById('relup').showModal()"><i class="fas fa-upload"></i>Upload a package</button></div><?php endif; ?></div>
   <?php if (!AmetecsReleases::ready()): ?><div class="msg bad"><i class="fas fa-circle-exclamation"></i><span>The update tables are not on this PC yet. They arrive with the next sync.</span></div><?php else: ?>
-  <div class="box"><div class="hd"><h2><i class="fas fa-server"></i>Ametecs cloud server</h2><span class="muted">the version each app runs for cloud clients</span></div>
-    <table><tr><th>App</th><th>Running</th><th>Newest published</th><th>On-premise clients behind</th><th class="right"></th></tr>
-    <?php foreach ($plugins as $c => $p):
+  <div class="lsum five">
+    <div class="ls"><span class="li"><i class="fas fa-box"></i></span><div><b><?= count($allRels) ?></b><small>Releases</small></div></div>
+    <div class="ls"><span class="li t-green"><i class="fas fa-circle-check"></i></span><div><b><?= (int) ($byState['published'] ?? 0) ?></b><small>Published</small></div></div>
+    <div class="ls"><span class="li"><i class="fas fa-clock"></i></span><div><b><?= (int) ($byState['scheduled'] ?? 0) + (int) ($byState['draft'] ?? 0) ?></b><small>Scheduled &amp; drafts</small></div></div>
+    <div class="ls"><span class="li"><i class="fas fa-download"></i></span><div><b><?= AmetecsReleases::countEvents('installed') ?></b><small>Installs, 30 days</small></div></div>
+    <div class="ls"><span class="li"><i class="fas fa-triangle-exclamation"></i></span><div><b><?= AmetecsReleases::countEvents('failed') ?></b><small>Failures, 30 days</small></div></div>
+  </div>
+
+  <h2 class="sech"><i class="fas fa-server"></i>Ametecs cloud server <small>the version each app runs for cloud clients</small></h2>
+  <div class="vgrid"><?php foreach ($plugins as $c => $p):
         $pv = AmetecsReleases::platformVersion($c);
         $newest = null; foreach (AmetecsReleases::all($c) as $r) { if ($r['kind'] !== 'plugin' && AmetecsReleases::stateOf($r) === 'published' && ($newest === null || version_compare($r['version'], $newest['version'], '>'))) { $newest = $r; } }
         $behind = 0; foreach (AmetecsLicences::rows() as $ltid => $la) { $l = $la[$c] ?? null; if ($l !== null && $l['deployment'] === 'onprem' && AmetecsLicences::stateOf($l) === 'on' && AmetecsReleases::offerFor((string) $ltid, $c, (string) ($l['app_version'] ?? ''))['updates'] !== []) { $behind++; } }
-        $hasBackup = ($root = AmetecsReleases::pluginRoot($c)) !== null && is_file($root . '/storage/updates/history.json'); ?>
-      <tr><td><b><?= ag_h($p['name']) ?></b></td><td><?= $pv !== '' ? ag_h($pv) : '<span class="muted">' . (AmetecsReleases::pluginRoot($c) === null ? 'not on this server yet' : 'unknown') . '</span>' ?></td>
-        <td><?= $newest !== null ? '<a href="?p=release&id=' . (int) $newest['id'] . '">' . ag_h($newest['version']) . '</a>' . ($pv !== '' && version_compare($newest['version'], $pv, '>') ? ' <span class="pill amber">newer than this server</span>' : '') : '<span class="muted">none yet</span>' ?></td>
-        <td><?= $behind ?></td>
-        <td class="right"><?php if ($hasBackup): ?><form method="post" class="inline" onsubmit="return confirm('Roll back the last install of <?= ag_h($p['name']) ?> on the cloud server?')"><?= $csrf() ?><input type="hidden" name="do" value="release-rollback"><input type="hidden" name="app" value="<?= ag_h($c) ?>"><button class="btn ghost"><i class="fas fa-rotate-left"></i>Roll back last install</button></form><?php endif; ?></td></tr>
-    <?php endforeach; ?></table></div>
+        $hasBackup = ($root = AmetecsReleases::pluginRoot($c)) !== null && is_file($root . '/storage/updates/history.json');
+        $state = $pv === '' ? ['off', 'Not on this server'] : ($newest !== null && version_compare($newest['version'], $pv, '>') ? ['amber', 'Update available'] : ['green', 'Up to date']); ?>
+    <div class="vc" style="--c:<?= ag_h((string) $p['color']) ?>"><div class="vh"><?= $mk($c, $p) ?><b><?= ag_h($p['name']) ?></b><span class="vs <?= $state[0] ?>"><?= $state[1] ?></span></div>
+      <div class="vv"><div><small>Running</small><b><?= $pv !== '' ? ag_h($pv) : '—' ?></b></div><i class="fas fa-arrow-right"></i><div><small>Newest</small><b><?= $newest !== null ? '<a href="?p=release&id=' . (int) $newest['id'] . '">' . ag_h($newest['version']) . '</a>' : '—' ?></b></div></div>
+      <div class="vf"><span><i class="fas fa-server"></i><?= $behind ?> on-premise behind</span><?php if ($hasBackup): ?><form method="post" class="inline" onsubmit="return confirm('Roll back the last install of <?= ag_h($p['name']) ?> on the cloud server?')"><?= $csrf() ?><input type="hidden" name="do" value="release-rollback"><input type="hidden" name="app" value="<?= ag_h($c) ?>"><button class="lnk"><i class="fas fa-rotate-left"></i>Roll back</button></form><?php endif; ?></div></div>
+  <?php endforeach; ?></div>
 
-  <details class="xupl"><summary><span class="xi"><i class="fas fa-upload"></i></span><span><b>Upload a package</b><small>Full release, patch or plugin - checked, fingerprinted and signed on upload</small></span><i class="fas fa-chevron-down car"></i></summary>
-  <form method="post" enctype="multipart/form-data" class="box"><?= $csrf() ?><input type="hidden" name="do" value="release-upload">
-    <div class="hd"><h2><i class="fas fa-upload"></i>Upload a package</h2><span class="muted">a .zip from the app's release builder, with release.json at the top &middot; this server accepts up to <?= ag_h((string) ini_get('upload_max_filesize')) ?></span></div>
-    <div class="bd grid2">
+  <h2 class="sech"><i class="fas fa-boxes-stacked"></i>Releases</h2>
+  <div class="ltabs"><a class="<?= $rst === '' ? 'on' : '' ?>" href="<?= ag_h($qsr(['st' => ''])) ?>"><i class="fas fa-layer-group"></i>All<em><?= count($allRels) ?></em></a>
+    <?php foreach (AmetecsReleases::STATUSES as $k => [$lab]): if (empty($byState[$k]) && $rst !== $k) { continue; } ?><a class="<?= $rst === $k ? 'on' : '' ?>" href="<?= ag_h($qsr(['st' => $k])) ?>"><?= ag_h($lab) ?><em><?= (int) ($byState[$k] ?? 0) ?></em></a><?php endforeach; ?></div>
+  <form class="toolbar"><input type="hidden" name="p" value="releases"><?php if ($rst !== ''): ?><input type="hidden" name="st" value="<?= ag_h($rst) ?>"><?php endif; ?><span class="si"><i class="fas fa-magnifying-glass"></i><input data-live="#rel-t" placeholder="Search version, title…" autocomplete="off"></span>
+    <select name="app" onchange="this.form.submit()"><option value="">All apps</option><?php foreach ($plugins as $c => $p): ?><option value="<?= ag_h($c) ?>"<?= $fa === $c ? ' selected' : '' ?>><?= ag_h($p['name']) ?></option><?php endforeach; ?></select></form>
+  <div class="box"><table id="rel-t" class="sortable"><tr><th>Release</th><th>Type</th><th>Status</th><th>Goes to</th><th>Price</th><th class="ac">Downloads</th><th class="ac">Installs</th><th class="ac">Failures</th><th></th></tr>
+  <?php foreach ($shown as $r): [$sl, $sc] = AmetecsReleases::STATUSES[AmetecsReleases::stateOf($r)]; $rp = $plugins[$r['app']] ?? ['name' => $r['app'], 'color' => '#64748B']; $fl = AmetecsReleases::countEvents('failed', 3650, (string) $r['id']); ?><tr>
+    <td><div class="rn"><?= $mk((string) $r['app'], $rp) ?><div><a href="?p=release&id=<?= (int) $r['id'] ?>"><b><?= ag_h($rp['name']) ?> <?= ag_h($r['version']) ?></b></a><?= $r['mandatory'] ? ' <span class="pill red">Mandatory</span>' : '' ?><?= trim((string) $r['signature']) === '' ? ' <span class="pill grey" title="No signing key on this server">Unsigned</span>' : '' ?><small><?= ag_h((string) ($r['title'] ?: '')) ?></small></div></div></td>
+    <td><span class="kt k-<?= ag_h((string) $r['kind']) ?>"><?= ag_h(AmetecsReleases::KINDS[$r['kind']] ?? $r['kind']) ?></span></td>
+    <td><span class="pill <?= $sc ?>"><?= $sl ?></span><?= AmetecsReleases::stateOf($r) === 'scheduled' ? '<div class="muted" style="font-size:12px">' . ag_h(date('d M Y H:i', (int) strtotime((string) $r['publish_at']))) . '</div>' : '' ?></td>
+    <td><?= $r['audience'] === 'all' ? '<i class="fas fa-users muted"></i> Everyone with the app' : '<i class="fas fa-user-check muted"></i> ' . count(AmetecsReleases::access((string) $r['id'])) . ' selected' ?></td>
+    <td><?= ($r['price'] ?? null) !== null ? '<b>' . ag_h($r['currency']) . ' ' . number_format((float) $r['price'], 2) . '</b>' : '<span class="pill green">Free</span>' ?></td>
+    <td class="ac"><?= AmetecsReleases::countEvents('downloaded', 3650, (string) $r['id']) ?></td><td class="ac"><?= AmetecsReleases::countEvents('installed', 3650, (string) $r['id']) ?></td><td class="ac"><?= $fl > 0 ? '<b class="tred">' . $fl . '</b>' : '0' ?></td>
+    <td class="right"><a class="btn ghost" href="?p=release&id=<?= (int) $r['id'] ?>">Open <i class="fas fa-arrow-right"></i></a></td></tr>
+  <?php endforeach; ?><?php if ($shown === []): ?><tr><td colspan="9"><div class="empty"><i class="fas fa-box-open"></i>No releases here yet. <a href="#" onclick="document.getElementById('relup').showModal();return false">Upload a package</a>.</div></td></tr><?php endif; ?></table></div>
+
+  <dialog id="relup" class="ldlg wide"><form method="post" enctype="multipart/form-data"><?= $csrf() ?><input type="hidden" name="do" value="release-upload">
+    <header><h2><i class="fas fa-upload"></i>Upload a package</h2><button type="button" class="x" onclick="this.closest('dialog').close()">&times;</button></header><p class="muted dsub2">a .zip from the app's release builder, with release.json at the top &middot; this server accepts up to <?= ag_h((string) ini_get('upload_max_filesize')) ?></p>
+    <div class="grid2">
       <div><label>App <span class="req">*</span></label><select name="app" required><?php foreach ($plugins as $c => $p): ?><option value="<?= ag_h($c) ?>"<?= $fa === $c ? ' selected' : '' ?>><?= ag_h($p['name']) ?></option><?php endforeach; ?></select></div>
       <div><label>Type <span class="req">*</span></label><select name="kind"><?php foreach (AmetecsReleases::KINDS as $k => $v): ?><option value="<?= $k ?>"><?= $v ?></option><?php endforeach; ?></select></div>
       <div><label>Package (.zip) <span class="req">*</span></label><input type="file" name="package" accept=".zip" required></div>
@@ -1575,29 +1608,16 @@ $myIni = strtoupper(implode('', array_map(static fn (string $w): string => mb_su
       <div class="full"><label>Release notes <span class="muted">(shown to clients; empty = from release.json)</span></label><textarea name="notes" rows="3"></textarea></div>
       <div><label>Upgrade price <span class="muted">(empty = free)</span></label><input name="price" inputmode="decimal" placeholder="0.00"></div>
       <div><label class="sw" style="text-transform:none;font-size:14px;color:var(--ink);margin-top:26px"><input type="checkbox" name="mandatory"> Mandatory update</label></div>
-    </div><div class="ft"><button class="btn gold"><i class="fas fa-upload"></i>Upload &amp; check</button></div></form>
-  <?php if ($inc !== []): ?>
-  <form method="post" class="box"><?= $csrf() ?><input type="hidden" name="do" value="release-import">
-    <div class="hd"><h2><i class="fas fa-folder-open"></i>Add from the incoming folder</h2><span class="muted">for packages bigger than the upload limit: copy them into core\data\releases\incoming</span></div>
-    <div class="bd row"><select name="incoming"><?php foreach ($inc as $z): ?><option><?= ag_h($z) ?></option><?php endforeach; ?></select>
+    </div><footer><button type="button" class="btn ghost" onclick="this.closest('dialog').close()">Cancel</button><button class="btn gold"><i class="fas fa-upload"></i>Upload &amp; check</button></footer></form></dialog>
+  <?php if ($inc !== []): ?><dialog id="relinc" class="ldlg">
+  <form method="post"><?= $csrf() ?><input type="hidden" name="do" value="release-import">
+    <header><h2><i class="fas fa-folder-open"></i>Add from the incoming folder</h2><button type="button" class="x" onclick="this.closest('dialog').close()">&times;</button></header><p class="muted dsub2">for packages bigger than the upload limit: copy them into core\data\releases\incoming</span></div>
+    <div class="grid2 incg"><select name="incoming"><?php foreach ($inc as $z): ?><option><?= ag_h($z) ?></option><?php endforeach; ?></select>
       <select name="app"><?php foreach ($plugins as $c => $p): ?><option value="<?= ag_h($c) ?>"><?= ag_h($p['name']) ?></option><?php endforeach; ?></select>
       <select name="kind"><?php foreach (AmetecsReleases::KINDS as $k => $v): ?><option value="<?= $k ?>"><?= $v ?></option><?php endforeach; ?></select>
-      <button class="btn navy">Check &amp; add</button></div></form>
+      </div><footer><button type="button" class="btn ghost" onclick="this.closest('dialog').close()">Cancel</button><button class="btn gold">Check &amp; add</button></footer></form></dialog>
   <?php endif; ?>
 
-  </details>
-  <form class="toolbar"><input type="hidden" name="p" value="releases"><span class="si"><i class="fas fa-magnifying-glass"></i><input data-live="#rel-t" placeholder="Search version, title…" autocomplete="off"></span>
-    <select name="app" onchange="this.form.submit()"><option value="">All apps</option><?php foreach ($plugins as $c => $p): ?><option value="<?= ag_h($c) ?>"<?= $fa === $c ? ' selected' : '' ?>><?= ag_h($p['name']) ?></option><?php endforeach; ?></select></form>
-  <div class="box"><table id="rel-t" class="sortable"><tr><th>App</th><th>Version</th><th>Type</th><th>Status</th><th>Goes to</th><th>Price</th><th>Downloads</th><th>Installs</th><th>Failures</th><th></th></tr>
-  <?php foreach ($rels as $r): [$sl, $sc] = AmetecsReleases::STATUSES[AmetecsReleases::stateOf($r)]; ?><tr>
-    <td><?= ag_h($plugins[$r['app']]['name'] ?? $r['app']) ?></td>
-    <td><b><?= ag_h($r['version']) ?></b><?= $r['mandatory'] ? ' <span class="pill red">Mandatory</span>' : '' ?><?= trim((string) $r['signature']) === '' ? ' <span class="pill grey" title="No signing key on this server">Unsigned</span>' : '' ?><div class="muted" style="font-size:12px"><?= ag_h((string) $r['title']) ?></div></td>
-    <td><?= ag_h(AmetecsReleases::KINDS[$r['kind']] ?? $r['kind']) ?></td><td><span class="pill <?= $sc ?>"><?= $sl ?></span><?= AmetecsReleases::stateOf($r) === 'scheduled' ? '<div class="muted" style="font-size:12px">' . ag_h(date('d M Y H:i', (int) strtotime((string) $r['publish_at']))) . '</div>' : '' ?></td>
-    <td><?= $r['audience'] === 'all' ? 'Every client with the app' : count(AmetecsReleases::access((string) $r['id'])) . ' selected' ?></td>
-    <td><?= ($r['price'] ?? null) !== null ? ag_h($r['currency']) . ' ' . number_format((float) $r['price'], 2) : 'Free' ?></td>
-    <td><?= AmetecsReleases::countEvents('downloaded', 3650, (string) $r['id']) ?></td><td><?= AmetecsReleases::countEvents('installed', 3650, (string) $r['id']) ?></td><td><?= AmetecsReleases::countEvents('failed', 3650, (string) $r['id']) ?></td>
-    <td class="right"><a class="btn ghost" href="?p=release&id=<?= (int) $r['id'] ?>">Open</a></td></tr>
-  <?php endforeach; ?><?php if ($rels === []): ?><tr><td colspan="10"><div class="empty"><i class="fas fa-box-open"></i>No releases yet. Upload the first package above.</div></td></tr><?php endif; ?></table></div>
   <?php endif; ?>
 
 <?php elseif ($page === 'release' && ($rl = AmetecsReleases::byId((string) ($_GET['id'] ?? ''))) !== null):
