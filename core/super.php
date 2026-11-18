@@ -23,6 +23,7 @@
 declare(strict_types=1);
 
 require __DIR__ . '/access.php';
+require __DIR__ . '/sample.php';
 
 use SmartPRS\Platform\Identity\PasswordHasher;
 use SmartPRS\Surface\Authorisation;
@@ -689,6 +690,17 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && $pdo !== null) {
         $back('?p=apps', $isNew ? $name . ' added. Switch it on for clients from each client\'s page.' : $name . ' saved.' . ($app['retired'] ? ' It is retired: clients no longer see it; their licences are kept.' : ''));
     }
 
+    if ($do === 'sample-add' || $do === 'sample-remove') {   // sample data (18 Nov 2026), this PC's database only
+        if (strtolower((string) (\SmartPRS\Surface\Database::env(AG_BASE . '/.env')['APP_ENV'] ?? 'production')) === 'production') {
+            $back('?p=system', null, 'Sample data is switched off on a production server.');
+        }
+        try {
+            $msg = $do === 'sample-add' ? 'Sample data added: ' . AmetecsSample::add($pdo, $platform, (string) ($_POST['tenant'] ?? ''), $meEmail) . '.' : AmetecsSample::remove($pdo, $meEmail);
+        } catch (\Throwable $x) {
+            $back('?p=system', null, 'Sample data was not added: ' . $x->getMessage());
+        }
+        $back('?p=system', $msg);
+    }
     if ($do === 'email-save') {
         AmetecsMail::box($pdo)->save($_POST);
         AmetecsData::log($meEmail, 'Changed email settings', '', (string) ($_POST['host'] ?? '') . ' from ' . (string) ($_POST['from_email'] ?? ''));
@@ -1828,6 +1840,16 @@ $myIni = strtoupper(implode('', array_map(static fn (string $w): string => mb_su
         <?php foreach (array_slice($backups, 0, 12) as [$ba, $bn, $bs2, $bt]): ?><tr><td><?= ag_h($ba) ?></td><td style="font-size:12px"><code><?= ag_h($bn) ?></code></td><td><?= $mb($bs2) ?></td><td><?= ag_h(date('d M Y H:i', $bt)) ?></td></tr><?php endforeach; ?>
         <?php if ($backups === []): ?><tr><td colspan="4"><div class="empty"><i class="fas fa-box-archive"></i>No installs on this server yet.</div></td></tr><?php endif; ?></table>
         <div class="bd muted" style="font-size:12.5px">Database: each PC's MySQL holds its own data. Back it up with Laragon (Menu → MySQL → Backup) or <code>mysqldump</code> before big changes; on the live server use the hosting provider's daily backups.</div></div>
+      <?php $smp = AmetecsSample::present(); $houseT = array_values(array_filter($tenants, static fn ($t) => ($t['subdomain'] ?? '') === 'ametecs'))[0]['id'] ?? ($tenants[0]['id'] ?? ''); ?>
+      <div class="box"><div class="hd"><h2><i class="fas fa-flask"></i>Sample data</h2><span class="muted">for demos and testing on this PC only: 20 employees with 30 days of attendance, and 10 demo clients with licences and invoices</span></div><div class="bd">
+        <?php if ($prod): ?><p class="muted" style="margin:0">Switched off: this server runs as production (APP_ENV).</p>
+        <?php else: ?><div class="row" style="gap:10px;flex-wrap:wrap;align-items:center">
+          <form method="post" class="row" style="gap:8px" onsubmit="return confirm('Add 20 sample employees and 10 demo clients to this PC\'s database?')"><?= $csrf() ?><input type="hidden" name="do" value="sample-add">
+            <label class="muted" style="font-size:12.5px">Employees go to</label><select name="tenant"><?php foreach ($tenants as $t): if (str_starts_with((string) $t['code'], 'DEMO')) { continue; } ?><option value="<?= (int) $t['id'] ?>"<?= (string) $t['id'] === (string) $houseT ? ' selected' : '' ?>><?= ag_h($t['name']) ?></option><?php endforeach; ?></select>
+            <button class="btn gold"><i class="fas fa-wand-magic-sparkles"></i>Add sample data</button></form>
+          <?php if ($smp !== []): ?><form method="post" onsubmit="return confirm('Remove all sample employees, attendance, demo clients and their invoices?')"><?= $csrf() ?><input type="hidden" name="do" value="sample-remove"><button class="btn danger"><i class="fas fa-trash"></i>Remove sample data</button></form>
+          <span class="pill amber"><?= count($smp['tenants'] ?? []) ?> demo clients &middot; <?= count(array_filter($smp['rows'] ?? [], static fn ($r) => $r[0] === 'employees')) ?> sample employees present</span><?php endif; ?>
+        </div><?php endif; ?></div></div>
       <div class="box"><div class="hd"><h2><i class="fas fa-arrows-rotate"></i>Sync with GitHub (last 40 lines)</h2></div><?= $logTail !== '' ? '<pre class="log">' . ag_h($logTail) . '</pre>' : '<div class="empty"><i class="fas fa-arrows-rotate"></i>No sync log on this PC.</div>' ?></div>
     </div>
   </div>
