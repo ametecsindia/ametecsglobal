@@ -543,7 +543,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && $pdo !== null) {
         }
         AmetecsBilling::saveGateway($kid, (string) ($_POST['secret'] ?? ''), (string) ($_POST['mode'] ?? 'test'), $on);
         AmetecsBilling::saveSettings(['seller' => trim((string) ($_POST['seller'] ?? '')) ?: 'Ametecs India Private Limited', 'gstin' => strtoupper(trim((string) ($_POST['gstin'] ?? ''))),
-            'address' => trim((string) ($_POST['address'] ?? '')), 'email' => trim((string) ($_POST['email'] ?? '')), 'gst_percent' => (float) $gst, 'due_days' => max(0, (int) ($_POST['due_days'] ?? 7))]);
+            'address' => trim((string) ($_POST['address'] ?? '')), 'email' => trim((string) ($_POST['email'] ?? '')), 'gst_percent' => (float) $gst, 'due_days' => max(0, (int) ($_POST['due_days'] ?? 7)),
+            'support_email' => trim((string) ($_POST['support_email'] ?? '')), 'support_phone' => trim((string) ($_POST['support_phone'] ?? '')), 'support_hours' => trim((string) ($_POST['support_hours'] ?? ''))]);
         AmetecsData::log($meEmail, 'Changed payment settings', '', 'Razorpay ' . ($on ? 'ON (' . ((string) ($_POST['mode'] ?? '')) . ')' : 'off') . ', GST ' . $gst . '%');
         $back('?p=gateway', 'Payment settings saved.' . ($on ? ' Online payment is on.' : ' Online payment is off: clients see "contact Ametecs".'));
     }
@@ -918,7 +919,8 @@ main{max-width:1560px;padding:16px 26px 20px}
 .feed .ft2{font-size:12.5px;line-height:1.4}.feed .fm{font-size:11.5px}.feed a{text-decoration:none}
 @media (max-width:1100px){.kstrip{grid-template-columns:repeat(3,1fr)}.dgrid2{grid-template-columns:1fr}}
 .cn b{white-space:nowrap}.mxt td:last-child,.mxt th:last-child{padding-right:16px;white-space:nowrap}.mxt th.ac{padding-left:4px;padding-right:4px}.mxt th:first-child{width:30%}
-</style></head><body>
+</style>
+<link rel="stylesheet" href="assets/shell.css?v=4"></head><body>
 <?php
 $myName = trim((string) ($me['name'] ?? '')) ?: ucfirst((string) strtok($meEmail, '@'));
 $myIni = strtoupper(implode('', array_map(static fn (string $w): string => mb_substr($w, 0, 1), array_slice(preg_split('/[\s._-]+/', $myName) ?: ['S'], 0, 2))));
@@ -948,8 +950,8 @@ $myIni = strtoupper(implode('', array_map(static fn (string $w): string => mb_su
 </div>
 <?php else:
   $navItems = ['Overview' => ['dashboard' => ['Dashboard', 'fa-gauge-high'], 'clients' => ['Clients', 'fa-building'], 'client-new' => ['New client', 'fa-plus'], 'licences' => ['Licences', 'fa-key'], 'releases' => ['Updates & releases', 'fa-cloud-arrow-up'], 'billing' => ['Payments & invoices', 'fa-file-invoice-dollar'], 'apps' => ['Apps', 'fa-puzzle-piece'], 'activity' => ['Activity log', 'fa-clock-rotate-left']],
-      'Settings' => ['gateway' => ['Payment settings', 'fa-credit-card'], 'email' => ['Email settings', 'fa-envelope'], 'staff' => ['Super Admins', 'fa-user-shield'], 'account' => ['My account', 'fa-circle-user']]];
-  $titles = ['dashboard' => 'Dashboard', 'clients' => 'Clients', 'client-new' => 'New client', 'client' => 'Client', 'licences' => 'Licences', 'licence' => 'Licence', 'releases' => 'Updates & releases', 'release' => 'Release', 'billing' => 'Payments & invoices', 'invoice' => 'Invoice', 'gateway' => 'Payment settings', 'apps' => 'Apps', 'activity' => 'Activity log', 'email' => 'Email settings', 'staff' => 'Super Admins', 'account' => 'My account']; ?>
+      'Settings' => ['system' => ['System & health', 'fa-heart-pulse'], 'gateway' => ['Payment settings', 'fa-credit-card'], 'email' => ['Email settings', 'fa-envelope'], 'staff' => ['Super Admins', 'fa-user-shield'], 'account' => ['My account', 'fa-circle-user']]];
+  $titles = ['dashboard' => 'Dashboard', 'clients' => 'Clients', 'client-new' => 'New client', 'client' => 'Client', 'licences' => 'Licences', 'licence' => 'Licence', 'releases' => 'Updates & releases', 'release' => 'Release', 'billing' => 'Payments & invoices', 'invoice' => 'Invoice', 'gateway' => 'Payment settings', 'system' => 'System & health', 'apps' => 'Apps', 'activity' => 'Activity log', 'email' => 'Email settings', 'staff' => 'Super Admins', 'account' => 'My account']; ?>
 <div class="shell">
 <aside class="side">
   <a class="brand" href="?p=dashboard"><span class="lm">AG</span><span>Ametecs<b>Global</b><small>SUPER ADMIN</small></span></a>
@@ -960,7 +962,7 @@ $myIni = strtoupper(implode('', array_map(static fn (string $w): string => mb_su
 </aside>
 <div>
 <header class="top">
-  <button class="ib" type="button" onclick="document.body.classList.toggle('mini');try{localStorage.setItem('agMini',document.body.classList.contains('mini')?1:0)}catch(e){}" title="Collapse menu"><i class="fas fa-bars"></i></button>
+  <button class="ib" type="button" data-drawer onclick="if(innerWidth<=860)return;document.body.classList.toggle('mini');try{localStorage.setItem('agMini',document.body.classList.contains('mini')?1:0)}catch(e){}" title="Collapse menu"><i class="fas fa-bars"></i></button>
   <div class="search" onclick="pal(true)"><i class="fas fa-magnifying-glass"></i><span>Jump to a client or page…</span><kbd>Ctrl K</kbd></div>
   <div class="right">
     <a class="cv" href="./" target="_blank"><i class="fas fa-eye"></i>Client view</a>
@@ -1063,6 +1065,14 @@ $myIni = strtoupper(implode('', array_map(static fn (string $w): string => mb_su
         <?php endforeach; ?></ul><?php endif; ?></div>
     </div>
     <div class="dcol2">
+      <?php if (AmetecsBilling::ready()): $mo = []; $tz = new DateTimeZone('Asia/Kolkata');
+          for ($k = 5; $k >= 0; $k--) { $m0 = (new DateTimeImmutable('first day of this month', $tz))->modify("-{$k} months"); $m1 = $m0->modify('+1 month');
+              $q = $pdo->prepare("SELECT COALESCE(SUM(amount), 0) FROM ag_payments WHERE status = 'succeeded' AND currency = 'INR' AND created_at >= ? AND created_at < ?");
+              $q->execute([$m0->format('Y-m-d 00:00:00'), $m1->format('Y-m-d 00:00:00')]); $mo[$m0->format('M')] = (float) $q->fetchColumn(); }
+          $mx = max(1, max($mo)); ?>
+      <div class="box"><div class="hd"><h2><i class="fas fa-chart-column"></i>Revenue, last 6 months</h2><a href="?p=billing" class="more">Billing <i class="fas fa-arrow-right"></i></a></div>
+        <div class="bars"><?php foreach ($mo as $ml => $mv): ?><div title="₹<?= number_format($mv) ?>"><b><?= $mv > 0 ? '₹' . ($mv >= 100000 ? round($mv / 100000, 1) . 'L' : ($mv >= 1000 ? round($mv / 1000, 1) . 'k' : number_format($mv))) : '' ?></b><i data-h="<?= round($mv * 100 / $mx) ?>" style="height:0"></i><small><?= $ml ?></small></div><?php endforeach; ?></div></div>
+      <?php endif; ?>
       <div class="box"><div class="hd"><h2><i class="fas fa-puzzle-piece"></i>Licences by app</h2><span class="muted sm">clients &middot; seats</span></div>
         <ul class="apl"><?php foreach ($plugins as $c => $p): ?><li><?= $saMark($c, $p) ?><span class="an"><?= ag_h($p['name']) ?><small><?= $p['open'] !== null ? 'Live' : 'Arriving soon' ?></small></span>
           <span class="av2"><b><?= $perApp[$c] ?></b> &middot; <?= $seatsApp[$c] ?></span></li><?php endforeach; ?></ul></div>
@@ -1461,8 +1471,65 @@ $myIni = strtoupper(implode('', array_map(static fn (string $w): string => mb_su
       <div><label>Billing email</label><input type="email" name="email" value="<?= ag_h((string) $bs['email']) ?>"></div>
       <div><label>GST % (INR invoices)</label><input name="gst_percent" value="<?= ag_h((string) $bs['gst_percent']) ?>" inputmode="decimal"></div>
       <div><label>Payment due in (days)</label><input type="number" min="0" name="due_days" value="<?= (int) $bs['due_days'] ?>"></div>
+    </div>
+    <div class="hd"><h2><i class="fas fa-life-ring"></i>Support contact</h2><span class="muted">shown to clients under Support &amp; help; messages they send go to the support email</span></div><div class="bd grid2">
+      <div><label>Support email</label><input type="email" name="support_email" value="<?= ag_h((string) ($bs['support_email'] ?? '')) ?>" placeholder="support@ametecsindia.com"></div>
+      <div><label>Support phone</label><input name="support_phone" value="<?= ag_h((string) ($bs['support_phone'] ?? '')) ?>" placeholder="+91 …"></div>
+      <div class="full"><label>Support hours</label><input name="support_hours" value="<?= ag_h((string) ($bs['support_hours'] ?? '')) ?>" placeholder="Mon-Sat, 10 am - 7 pm IST"></div>
     </div><div class="ft"><button class="btn navy">Save</button></div></form>
   <p class="muted" style="font-size:12px">The Key Secret is stored encrypted and never shown again. Payments are confirmed on the server with Razorpay's signature (or by asking Razorpay directly), never by the browser alone.</p>
+
+<?php elseif ($page === 'system'):
+    $ok = static fn (string $s, string $t, string $d = '') => '<li><span class="s ' . $s . '"><i class="fas fa-' . ['ok' => 'check', 'warn' => 'exclamation', 'bad' => 'xmark'][$s] . '"></i></span><span><b>' . ag_h($t) . '</b>' . ($d !== '' ? '<small>' . $d . '</small>' : '') . '</span></li>';
+    $tables = ['ag_licences', 'ag_licence_events', 'ag_releases', 'ag_release_access', 'ag_release_events', 'ag_invoices', 'ag_payments'];
+    $missing = [];
+    foreach ($tables as $tb) { try { $pdo->query("SELECT 1 FROM {$tb} LIMIT 1"); } catch (\Throwable) { $missing[] = $tb; } }
+    $exts = array_filter(['pdo_mysql', 'openssl', 'zip', 'curl', 'mbstring'], static fn ($e) => !extension_loaded($e));
+    $free = @disk_free_space(__DIR__); $dataW = is_writable(__DIR__ . '/data');
+    $env = \SmartPRS\Surface\Database::env(AG_BASE . '/.env'); $prod = strtolower((string) ($env['APP_ENV'] ?? 'production')) === 'production';
+    $houseQ = $pdo->prepare('SELECT password FROM users WHERE LOWER(email) = ? LIMIT 1'); $houseQ->execute([AmetecsAccess::HOUSE_LOGIN]);
+    $houseDefault = ($hp = $houseQ->fetchColumn()) !== false && $hasher->verify(AmetecsAccess::HOUSE_PASSWORD, (string) $hp);
+    $gw = AmetecsBilling::ready() ? AmetecsBilling::gateway() : null;
+    $staffAll = $pdo->query('SELECT name, email, disabled_at, last_login_at FROM platform_users ORDER BY last_login_at DESC')->fetchAll(\PDO::FETCH_ASSOC);
+    $backups = [];
+    foreach (glob(__DIR__ . '/../plugins/*/storage/updates/backup-*.zip') ?: [] as $bf) { $backups[] = [basename(dirname($bf, 3)), basename($bf), filesize($bf), filemtime($bf)]; }
+    usort($backups, static fn ($a, $b) => $b[3] <=> $a[3]);
+    $relBytes = 0; foreach (glob(__DIR__ . '/data/releases/*/*.zip') ?: [] as $rf) { $relBytes += filesize($rf); }
+    $logF = __DIR__ . '/../sync-log.txt'; $logTail = is_file($logF) ? implode("\n", array_slice(file($logF, FILE_IGNORE_NEW_LINES) ?: [], -40)) : '';
+    $mb = static fn ($b) => $b >= 1073741824 ? round($b / 1073741824, 1) . ' GB' : ($b >= 1048576 ? round($b / 1048576, 1) . ' MB' : max(0, (int) round($b / 1024)) . ' KB'); ?>
+  <h1>System &amp; health</h1><p class="sub">Is this AmetecsGlobal server healthy, safe and backed up? Checked live every time you open this page.</p>
+  <div class="dgrid2">
+    <div class="dcol2">
+      <div class="box"><div class="hd"><h2><i class="fas fa-heart-pulse"></i>Health checks</h2></div><ul class="chk-l">
+        <?= $ok('ok', 'Database connected', ag_h((string) ($env['DB_DATABASE'] ?? '')) . ' on ' . ag_h((string) ($env['DB_HOST'] ?? '')) ) ?>
+        <?= $missing === [] ? $ok('ok', 'All AmetecsGlobal tables present', count($tables) . ' tables: licences, releases, billing') : $ok('bad', 'Tables missing: ' . implode(', ', $missing), 'Run SYNC.bat (or wait for AUTO-SYNC) so the database changes are applied.') ?>
+        <?= version_compare(PHP_VERSION, '8.2', '>=') ? $ok('ok', 'PHP ' . PHP_VERSION) : $ok('bad', 'PHP ' . PHP_VERSION, 'AmetecsGlobal needs PHP 8.2 or newer.') ?>
+        <?= $exts === [] ? $ok('ok', 'PHP extensions', 'pdo_mysql, openssl, zip, curl, mbstring') : $ok('bad', 'Missing PHP extensions: ' . implode(', ', $exts), 'Enable them in php.ini.') ?>
+        <?= $ok('ok', 'Upload limit ' . ini_get('upload_max_filesize') . ' (post ' . ini_get('post_max_size') . ')', 'Bigger release packages go through core\data\releases\incoming.') ?>
+        <?= $dataW ? $ok('ok', 'core\data is writable', 'release packages: ' . $mb($relBytes)) : $ok('bad', 'core\data is NOT writable', 'Uploads, activity log and settings cannot be saved.') ?>
+        <?= $free === false ? $ok('warn', 'Disk space unknown') : ($free < 2 * 1073741824 ? $ok('warn', 'Low disk space: ' . $mb($free) . ' free') : $ok('ok', $mb($free) . ' free disk space')) ?>
+        <?= AmetecsLicences::canSign() ? $ok('ok', 'Licence signing key present', 'releases and .lic files are signed here') : $ok($prod ? 'bad' : 'warn', 'No licence signing key on this server', $prod ? 'This production server cannot sign releases or .lic files.' : 'Fine on a development PC: uploads stay unsigned and test-only.') ?>
+        <?= $gw !== null ? $ok($gw['mode'] === 'live' ? 'ok' : 'warn', 'Razorpay on (' . $gw['mode'] . ' mode)', $gw['mode'] === 'live' ? 'clients pay real money' : 'test keys: no real money moves') : $ok('warn', 'Online payment is off', '<a href="?p=gateway">Payment settings</a>') ?>
+        <?= AmetecsMail::box($pdo)->ready() ? $ok('ok', 'Email is on') : $ok('warn', 'Email is off', 'Password resets, support messages and alerts need it: <a href="?p=email">Email settings</a>') ?>
+      </ul></div>
+      <div class="box"><div class="hd"><h2><i class="fas fa-shield-halved"></i>Security</h2></div><ul class="chk-l">
+        <?= $prod ? $ok('ok', 'Running as production', 'test logins are never created') : $ok('warn', 'Running as a development / test server (APP_ENV=' . ag_h((string) ($env['APP_ENV'] ?? '')) . ')', 'Never use this mode for real clients.') ?>
+        <?= $houseDefault ? $ok($prod ? 'bad' : 'warn', 'The test login ' . AmetecsAccess::HOUSE_LOGIN . ' still has the default password', 'The repository is public: change it under Clients → Ametecs India → Logins.') : $ok('ok', 'No default test password in use') ?>
+        <?= $ok('ok', count(array_filter($staffAll, static fn ($u) => trim((string) $u['disabled_at']) === '')) . ' active Super Admin' . (count($staffAll) === 1 ? '' : 's'), 'sign-in locks for 5 minutes after 5 wrong passwords') ?>
+        <?= $ok('ok', 'Secrets stored encrypted', 'Razorpay secret, SMTP password, licence keys (with this server\'s APP_KEY)') ?>
+      </ul>
+      <table><tr><th>Super Admin</th><th>Status</th><th>Last sign-in</th></tr><?php foreach ($staffAll as $u): ?><tr><td><?= ag_h((string) ($u['name'] ?: $u['email'])) ?><div class="muted" style="font-size:12px"><?= ag_h($u['email']) ?></div></td><td><?= trim((string) $u['disabled_at']) === '' ? '<span class="pill green">Active</span>' : '<span class="pill red">Disabled</span>' ?></td><td><?= ag_h((string) ($u['last_login_at'] ?? '—')) ?></td></tr><?php endforeach; ?></table></div>
+    </div>
+    <div class="dcol2">
+      <div class="box"><div class="hd"><h2><i class="fas fa-cubes"></i>Apps on this server</h2></div><table><tr><th>App</th><th>Folder</th><th>Version</th></tr>
+        <?php foreach ($plugins as $c => $p): $root = AmetecsReleases::pluginRoot($c); ?><tr><td><?= ag_h($p['name']) ?></td><td><?= $root !== null ? '<span class="pill green">plugins/' . ag_h($c) . '</span>' : '<span class="pill grey">not here yet</span>' ?></td><td><?= ag_h(AmetecsReleases::platformVersion($c) ?: '—') ?></td></tr><?php endforeach; ?></table></div>
+      <div class="box"><div class="hd"><h2><i class="fas fa-box-archive"></i>Install backups</h2><span class="muted">made automatically before every install on this server</span></div><table><tr><th>App</th><th>Backup</th><th>Size</th><th>Made</th></tr>
+        <?php foreach (array_slice($backups, 0, 12) as [$ba, $bn, $bs2, $bt]): ?><tr><td><?= ag_h($ba) ?></td><td style="font-size:12px"><code><?= ag_h($bn) ?></code></td><td><?= $mb($bs2) ?></td><td><?= ag_h(date('d M Y H:i', $bt)) ?></td></tr><?php endforeach; ?>
+        <?php if ($backups === []): ?><tr><td colspan="4"><div class="empty"><i class="fas fa-box-archive"></i>No installs on this server yet.</div></td></tr><?php endif; ?></table>
+        <div class="bd muted" style="font-size:12.5px">Database: each PC's MySQL holds its own data. Back it up with Laragon (Menu → MySQL → Backup) or <code>mysqldump</code> before big changes; on the live server use the hosting provider's daily backups.</div></div>
+      <div class="box"><div class="hd"><h2><i class="fas fa-arrows-rotate"></i>Sync with GitHub (last 40 lines)</h2></div><?= $logTail !== '' ? '<pre class="log">' . ag_h($logTail) . '</pre>' : '<div class="empty"><i class="fas fa-arrows-rotate"></i>No sync log on this PC.</div>' ?></div>
+    </div>
+  </div>
 
 <?php elseif ($page === 'apps'): ?>
   <h1>Apps</h1><p class="sub">The apps every client sees. This list is shared: a change here reaches every PC through GitHub within minutes. An app with an "Opens at" link is <b>Live</b> and opens from the client's front door; without one it can already be licensed and shows as coming. Retired apps disappear for clients but their licences and data are kept.</p>
@@ -1561,7 +1628,7 @@ try{if(localStorage.getItem('agMini')==='1')document.body.classList.add('mini')}
 // count-up KPIs
 document.querySelectorAll('[data-count]').forEach(function(el){var n=+el.dataset.count,t0=null;function f(t){t0=t0||t;var k=Math.min(1,(t-t0)/700);el.textContent=Math.round(n*(1-Math.pow(1-k,3))).toLocaleString('en-IN');if(k<1)requestAnimationFrame(f)}requestAnimationFrame(f)});
 // bars + donut grow in
-requestAnimationFrame(function(){setTimeout(function(){document.querySelectorAll('[data-w]').forEach(function(i){i.style.width=Math.max(i.dataset.w>0?3:0,+i.dataset.w)+'%'});document.querySelectorAll('[data-da]').forEach(function(c){c.setAttribute('stroke-dasharray',c.dataset.da)})},60)});
+requestAnimationFrame(function(){setTimeout(function(){document.querySelectorAll('[data-h]').forEach(function(i){i.style.height=Math.max(+i.dataset.h>0?3:0,+i.dataset.h)+'%'});document.querySelectorAll('[data-w]').forEach(function(i){i.style.width=Math.max(i.dataset.w>0?3:0,+i.dataset.w)+'%'});document.querySelectorAll('[data-da]').forEach(function(c){c.setAttribute('stroke-dasharray',c.dataset.da)})},60)});
 // tooltips
 var tip=document.getElementById('tip');document.querySelectorAll('[data-tip]').forEach(function(el){el.addEventListener('mousemove',function(e){tip.textContent=el.dataset.tip;tip.style.opacity=1;tip.style.left=(e.clientX+14)+'px';tip.style.top=(e.clientY+14)+'px'});el.addEventListener('mouseleave',function(){tip.style.opacity=0})});
 // toasts fade away
@@ -1590,5 +1657,6 @@ document.addEventListener('keydown',function(e){if((e.ctrlKey||e.metaKey)&&e.key
 document.addEventListener('click',function(e){document.querySelectorAll('details.me[open],details.act[open]').forEach(function(d){if(!d.contains(e.target))d.removeAttribute('open')})});
 })();
 </script>
+<script src="assets/ui.js?v=4"></script>
 <?php endif; ?>
 </body></html>

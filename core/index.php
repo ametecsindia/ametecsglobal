@@ -153,17 +153,13 @@ if ($user !== null) {
 $activeCount = count($groups['live']) + count($groups['soon']);
 // UPDATES (Phase 2, 18 Nov 2026): what each licensed app is offered. Cloud = the version Ametecs' server runs; on-premise = what
 // the client's server last reported. Only administrators see this; only apps this client holds.
-$view = $user !== null && $isAdmin && in_array($_GET['v'] ?? '', ['updates', 'billing', 'invoice'], true) ? (string) $_GET['v'] : 'home';
+// PHASE 4 (18 Nov 2026): every section of the client administrator's panel (core/shell.php draws the menu).
+$adminViews = ['apps', 'plugins', 'updates', 'upgrades', 'installs', 'licences', 'plans', 'billing', 'invoice', 'activity'];
+$view = (string) ($_GET['v'] ?? 'home');
+$view = $user !== null && (in_array($view, ['notifications', 'support', 'account'], true) || ($isAdmin && in_array($view, $adminViews, true))) ? $view : 'home';
 $upd = [];
 if ($user !== null && $isAdmin && AmetecsReleases::ready()) {
-    foreach (AmetecsAccess::plugins() as $code => $p) {
-        $lr = AmetecsLicences::row($tenant, $code);
-        if ($lr === null || AmetecsLicences::stateOf($lr) !== 'on') {
-            continue;
-        }
-        $cur = $lr['deployment'] === 'onprem' ? (string) ($lr['app_version'] ?? '') : AmetecsReleases::platformVersion($code);
-        $upd[$code] = ['p' => $p, 'l' => $lr, 'current' => $cur, 'offer' => AmetecsReleases::offerFor($tenant, $code, $cur)];
-    }
+    $upd = AmetecsShell::updates($tenant);
     // A client administrator downloading a package for their own on-premise server.
     if (isset($_GET['dl'])) {
         $dr = AmetecsReleases::byId((string) $_GET['dl']);
@@ -250,6 +246,37 @@ if ($billOn && ($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && str_starts_with(
     }
     $out(false, 'Nothing to do.');
 }
+// ACCOUNT SETTINGS + SUPPORT (Phase 4): change own password; send a message to Ametecs.
+$okMsg = null;
+if ($user !== null && $session !== null && ($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && in_array($_POST['do'] ?? '', ['account-password', 'support-send'], true)) {
+    if (!$session->verify((string) ($_POST['csrf'] ?? ''))) {
+        $problem = 'This page had expired. Please try again.';
+    } elseif ($_POST['do'] === 'account-password') {
+        $new = (string) ($_POST['new'] ?? '');
+        if ($new !== (string) ($_POST['again'] ?? '')) {
+            $problem = 'The two new passwords are not the same.';
+        } else {
+            $r = (new \SmartPRS\Surface\Users($platform->forTenant($tenant), new \SmartPRS\Surface\Authorisation(), PasswordHasher::platformDefault()))
+                ->changeOwnPassword((string) $user['id'], (string) ($_POST['current'] ?? ''), $new);
+            $r['ok'] ? ($okMsg = 'Your password is changed. Use it next time you sign in.') : ($problem = (string) $r['why']);
+            $r['ok'] && AmetecsData::log((string) ($user['email'] ?? ''), 'Changed own password', $tenant);
+        }
+    } else {
+        $subj = mb_substr(trim((string) ($_POST['subject'] ?? '')), 0, 150);
+        $msg = mb_substr(trim((string) ($_POST['message'] ?? '')), 0, 5000);
+        $to = (string) (AmetecsBilling::settings()['support_email'] ?? '') ?: (string) AmetecsBilling::settings()['email'];
+        if ($subj === '' || $msg === '') {
+            $problem = 'Write a subject and a message.';
+        } elseif ($to === '' || !AmetecsMail::box($pdo)->ready()) {
+            $problem = 'Messages cannot be sent from here yet. Please email or call Ametecs using the details on this page.';
+        } else {
+            $sent = AmetecsMail::send($pdo, $to, '[AmetecsGlobal support] ' . $company . ': ' . $subj, "From: " . ($user['email'] ?? '') . " (" . $company . ", client #" . $tenant . ")\n\n" . $msg);
+            $sent['ok'] ? ($okMsg = 'Your message was sent to Ametecs. They reply to ' . ($user['email'] ?? 'your email') . '.') : ($problem = 'The message was not sent: ' . $sent['why']);
+            $sent['ok'] && AmetecsData::log((string) ($user['email'] ?? ''), 'Sent a support request', $tenant, $subj);
+        }
+    }
+}
+$notes = $user !== null ? AmetecsShell::notifications($tenant, $isAdmin) : [];
 if ($view === 'invoice' && $billOn && ($pv = AmetecsBilling::byId((string) ($_GET['id'] ?? ''))) !== null && (string) $pv['tenant_id'] === $tenant) {
     echo AmetecsBilling::printHtml($pv);
     exit;
@@ -612,7 +639,8 @@ a{color:inherit}
 .lic-t .btn2{width:auto;display:inline-flex;align-items:center;gap:6px;padding:6px 12px;font-size:12.5px;vertical-align:middle}.lic-t td.r form{display:inline}
 .ucnt{margin-left:auto;font-style:normal;font-size:11px;background:var(--gold);color:#fff;padding:1px 8px;border-radius:99px}.lic-t td.r,.lic-t th.r{text-align:right}
 .lp{display:inline-block;padding:2px 10px;border-radius:99px;font-size:12px;font-weight:600}.lp-green{background:var(--ok-bg);color:var(--ok)}.lp-amber{background:#fffbeb;color:#b45309}.lp-red{background:var(--bad-bg);color:var(--bad)}.lp-grey{background:#f1f5f9;color:var(--mute)}
-</style></head><body>
+</style>
+<link rel="stylesheet" href="assets/shell.css?v=4"></head><body>
 <?php if ($user === null): ?>
 <div class="auth">
   <aside class="auth-side">
@@ -677,32 +705,15 @@ a{color:inherit}
       foreach (AmetecsSetup::CORE as $grp => $items) { foreach ($items as $label => $it) { $paletteItems[] = ['t' => $label, 'h' => 'org.php' . str_replace('?r=', '?s=', AmetecsSetup::href($it)), 'i' => $it[2], 's' => $grp]; } }
   } ?>
 <div class="shell">
-<aside class="side">
-  <a class="brand" href="./"><span class="logo-mark">AG</span><span>Ametecs<b>Global</b></span></a>
-  <?php if ($company !== ''): ?><div class="ws"><span class="ws-i"><?= ag_h(mb_strtoupper(mb_substr($company, 0, 1))) ?></span><span><b><?= ag_h($company) ?></b><small>Workspace</small></span></div><?php endif; ?>
-  <nav class="snav">
-    <a class="nv<?= $view === 'home' ? ' on' : '' ?>" href="./"><i class="fas fa-house"></i><span>Home</span></a>
-    <?php if ($isAdmin): ?>
-    <div class="nav-l">Organization Setup</div>
-    <?php foreach (AmetecsSetup::CORE as $grp => $items): ?>
-      <details class="grp"<?= $grp === 'Organization' || $grp === 'Employees' ? ' open' : '' ?>><summary><i class="fas <?= $orgIcons[$grp] ?? 'fa-folder' ?>"></i><span><?= ag_h($grp) ?></span><i class="fas fa-chevron-down car"></i></summary>
-        <?php foreach ($items as $label => $it): ?><a class="sub" href="org.php<?= ag_h(str_replace('?r=', '?s=', AmetecsSetup::href($it))) ?>"><i class="fas <?= ag_h($it[2]) ?>"></i><span><?= ag_h($label) ?></span></a><?php endforeach; ?>
-      </details>
-    <?php endforeach; ?>
-    <a class="nv" href="org.php?s=ag-apps"><i class="fas fa-puzzle-piece"></i><span>App access</span></a>
-    <div class="nav-l">Software</div>
-    <a class="nv<?= $view === 'updates' ? ' on' : '' ?>" href="?v=updates"><i class="fas fa-cloud-arrow-down"></i><span>Updates</span><?= $updCount > 0 ? '<em class="ucnt">' . $updCount . '</em>' : '' ?></a>
-    <?php $pendCount = $billOn ? count(AmetecsBilling::invoices($tenant, 'pending')) : 0; ?>
-    <a class="nv<?= $view === 'billing' ? ' on' : '' ?>" href="?v=billing"><i class="fas fa-file-invoice"></i><span>Payments &amp; invoices</span><?= $pendCount > 0 ? '<em class="ucnt">' . $pendCount . '</em>' : '' ?></a>
-    <?php endif; ?>
-  </nav>
-  <div class="side-foot"><span class="dotlive"></span><span>All systems normal</span></div>
-</aside>
+<?= AmetecsShell::nav($company, $isAdmin, $view === 'invoice' ? 'billing' : $view, ['updates' => $updCount, 'invoices' => $billOn ? count(AmetecsBilling::invoices($tenant, 'pending')) : 0, 'notifications' => count($notes)]) ?>
 <div class="mainc">
 <header class="top"><div class="top-in">
+  <button type="button" class="drawer-btn" data-drawer aria-label="Menu"><i class="fas fa-bars"></i></button>
+  <a class="bell" href="?v=notifications" title="Notifications"><i class="far fa-bell"></i><?= $notes !== [] ? '<em>' . count($notes) . '</em>' : '' ?></a>
   <div class="clock"><i class="far fa-clock"></i><span id="clock"><?= $now->format('h:i A') ?></span></div>
   <details class="user"><summary><span class="av"><?= ag_h($initials) ?></span><span class="nm"><?= ag_h($who) ?><small><?= ag_h(ucfirst((string) ($user['role'] ?? ''))) ?></small></span><i class="fas fa-chevron-down" style="font-size:11px;color:var(--mute)"></i></summary>
     <div class="menu"><div class="mh"><b><?= ag_h($who) ?></b><span><?= ag_h((string) ($user['email'] ?? '')) ?></span></div>
+      <a href="?v=account"><i class="fas fa-user-gear"></i>Account settings</a>
       <?php if ($isAdmin): ?><a href="org.php?s=users"><i class="fas fa-user-shield"></i>User Management</a><?php endif; ?>
       <form method="post"><?= $cField() ?><input type="hidden" name="csrf" value="<?= ag_h($session->token()) ?>"><button name="do" value="signout"><i class="fas fa-arrow-right-from-bracket"></i>Sign out</button></form>
     </div></details>
@@ -727,11 +738,7 @@ a{color:inherit}
         <?php else: ?><span class="muted2">Install from your server's Updates screen</span><?= $r['downloadable'] ? ' &nbsp;<a class="btn2 ghost" href="?v=updates&amp;dl=' . (int) $r['id'] . '"><i class="fas fa-download"></i>Download</a>' : '' ?><?php endif; ?></td></tr>
     <?php endforeach; ?><?php if ($u['offer']['updates'] === [] && $u['offer']['plugins'] === []): ?><tr><td colspan="5" class="muted2"><i class="fas fa-circle-check" style="color:var(--ok)"></i> Up to date.</td></tr><?php endif; ?></table></div>
   <?php endforeach; ?>
-    <div class="sh" style="margin-top:26px"><div><h2>Update history</h2></div></div>
-    <div class="lic-t"><table><tr><th>When</th><th>App</th><th>What</th><th>Version</th><th>By</th></tr>
-    <?php $h = AmetecsReleases::events(['tenant_id' => $tenant], 50); foreach ($h as $e): ?><tr><td><?= ag_h((string) $e['created_at']) ?></td><td><?= ag_h((string) (AmetecsAccess::plugins()[$e['app']]['name'] ?? $e['app'])) ?></td>
-      <td><?= ag_h(ucfirst(str_replace('_', ' ', (string) $e['action']))) ?></td><td><?= ag_h(trim(($e['from_version'] ?? '') . ' → ' . ($e['to_version'] ?? ''), ' →')) ?></td><td class="muted2"><?= ag_h((string) $e['by_who']) ?></td></tr><?php endforeach; ?>
-    <?php if ($h === []): ?><tr><td colspan="5" class="muted2">Nothing yet.</td></tr><?php endif; ?></table></div>
+    <p class="muted2" style="margin-top:18px"><i class="fas fa-code-branch"></i> Everything installed, downloaded or rolled back so far: <a href="?v=upgrades">Upgrade history</a>.</p>
   <?php endif; ?>
 <?php elseif ($view === 'billing'):
     $myInv = AmetecsBilling::invoices($tenant); $payId = (int) ($_GET['pay'] ?? 0); ?>
@@ -775,6 +782,155 @@ a{color:inherit}
   })();
   </script>
   <?php endif; ?>
+<?php elseif ($view === 'apps'): $myLic = AmetecsLicences::rows()[$tenant] ?? []; ?>
+  <div class="pgh"><div><h1>My applications</h1><p>Every Ametecs application, what your company holds, where it runs and which version. Open a live app straight from here.</p></div></div>
+  <div class="cards"><?php $i = 0; foreach (['live', 'soon'] as $g) { foreach ($groups[$g] as $r) { echo str_replace('style="--c:', 'style="animation-delay:' . (50 * $i++) . 'ms;--c:', $card($r, $g)); } } ?></div>
+  <div class="sh" style="margin-top:26px"><div><h2>Details</h2></div></div>
+  <div class="lic-t"><table><tr><th>Application</th><th>Deployment</th><th>Version</th><th>Licence</th><th>Seats</th><th>Valid till</th><th class="r"></th></tr>
+  <?php foreach (AmetecsAccess::plugins() as $code => $p): $l = $myLic[$code] ?? null; if ($l === null || $l['status'] === 'cancelled') { continue; } $st = AmetecsLicences::stateOf($l); [$sl, $sc] = AmetecsLicences::STATES[$st]; $u = $upd[$code] ?? null; ?><tr>
+    <td><b><?= ag_h((string) $p['name']) ?></b><br><small class="muted2"><?= ag_h((string) ($p['what'] ?: '')) ?></small></td>
+    <td><?= $l['deployment'] === 'onprem' ? '<i class="fas fa-server"></i> On-premise' : '<i class="fas fa-cloud"></i> Cloud' ?></td>
+    <td><?= ag_h($u['current'] ?? '') ?: '<span class="muted2">—</span>' ?><?= $u !== null && $u['offer']['updates'] !== [] ? ' <a class="lp lp-amber" href="?v=updates" style="text-decoration:none">update ' . ag_h((string) $u['offer']['updates'][0]['version']) . '</a>' : '' ?></td>
+    <td><span class="lp lp-<?= $sc ?>"><?= ag_h($sl) ?></span></td><td><?= (int) $l['seats'] ?> <?= ag_h((string) $p['unit']) ?></td><td><?= ag_h($fmtDate((string) ($l['valid_until'] ?? ''))) ?></td>
+    <td class="r"><?= $st === 'on' && $p['open'] !== null ? '<a class="btn2 primary" href="' . ag_h((string) $p['open']) . '"><i class="fas fa-arrow-up-right-from-square"></i>Open</a>' : ($st === 'on' ? '<span class="muted2">arriving on AmetecsGlobal soon</span>' : '') ?></td></tr>
+  <?php endforeach; ?></table></div>
+  <?php if ($groups['other'] !== []): ?><p class="muted2" style="margin-top:14px">Not in your plan: <?= ag_h(implode(', ', array_map(static fn ($r) => (string) $r['p']['name'], $groups['other']))) ?>. <a href="?v=support">Ask Ametecs</a> to add one.</p><?php endif; ?>
+
+<?php elseif ($view === 'plugins'): ?>
+  <div class="pgh"><div><h1>Modules &amp; plugins</h1><p>Add-on modules Ametecs offers for the applications you hold. Installed ones and their history are under <a href="?v=upgrades">Upgrade history</a>.</p></div></div>
+  <?php $anyPl = false; foreach ($upd as $code => $u): if ($u['offer']['plugins'] === []) { continue; } $anyPl = true; $onprem = $u['l']['deployment'] === 'onprem'; ?>
+    <div class="sh" style="margin-top:14px"><div><h2><?= ag_h((string) $u['p']['name']) ?></h2><span class="legend"><em><?= $onprem ? 'On-premise' : 'Cloud' ?></em></span></div></div>
+    <div class="grid2c"><?php foreach ($u['offer']['plugins'] as $r): $pay = AmetecsReleases::payment($r, $tenant);
+      $inst = AmetecsReleases::events(['release_id' => $r['id'], 'tenant_id' => $tenant, 'action' => 'installed'], 1) !== []; ?>
+      <div class="ibox"><h3><i class="fas fa-puzzle-piece" style="color:var(--gold)"></i><?= ag_h((string) ($r['title'] ?: $u['p']['name'] . ' module')) ?> <small class="muted2" style="font-weight:500">v<?= ag_h($r['version']) ?></small></h3>
+        <p class="muted2" style="margin:0 0 12px;font-size:13px"><?= nl2br(ag_h((string) ($r['notes'] ?? ''))) ?></p>
+        <dl><dt>Price</dt><dd><?= ['free' => 'Free', 'granted' => 'Free for you', 'paid' => 'Paid', 'required' => ag_h($r['currency'] . ' ' . number_format((float) $r['price'], 2)) . ' + GST'][$pay] ?></dd><dt>Status</dt><dd><?= $inst ? '<span class="lp lp-green">Installed</span>' : '<span class="lp lp-grey">Not installed</span>' ?></dd></dl>
+        <div style="margin-top:12px"><?php if ($pay === 'required' && $payOnline && $r['currency'] === 'INR'): ?><form method="post" style="display:inline"><input type="hidden" name="csrf" value="<?= ag_h($session->token()) ?>"><input type="hidden" name="do" value="pay-upgrade"><input type="hidden" name="release" value="<?= (int) $r['id'] ?>"><button class="btn2 primary"><i class="fas fa-cart-shopping"></i>Buy module</button></form>
+          <?php elseif ($pay === 'required'): ?><span class="muted2">Contact Ametecs to buy it.</span>
+          <?php elseif (!$onprem): ?><span class="muted2">Ametecs switches it on for your cloud workspace.</span>
+          <?php elseif ($r['downloadable']): ?><a class="btn2 ghost" href="?v=updates&amp;dl=<?= (int) $r['id'] ?>"><i class="fas fa-download"></i>Download</a><?php else: ?><span class="muted2">Install from your server's Updates screen.</span><?php endif; ?></div></div>
+    <?php endforeach; ?></div>
+  <?php endforeach; ?>
+  <?php if (!$anyPl): ?><div class="lic-t"><div class="empty2" style="padding:30px">No add-on modules are offered for your applications yet.</div></div><?php endif; ?>
+
+<?php elseif ($view === 'upgrades'): $hist = AmetecsReleases::events(['tenant_id' => $tenant], 500); $apps = AmetecsAccess::plugins(true); ?>
+  <div class="pgh"><div><h1>Upgrade history</h1><p>Every patch, upgrade and module your company downloaded, installed, paid for or rolled back, and what is still waiting.</p></div></div>
+  <?php $waiting = []; foreach ($upd as $code => $u) { foreach ($u['offer']['updates'] as $r) { $waiting[] = [$u, $r]; } } ?>
+  <?php if ($waiting !== []): ?><div class="grid2c"><?php foreach ($waiting as [$u, $r]): ?><div class="ibox"><h3><i class="fas fa-hourglass-half" style="color:#b45309"></i><?= ag_h($u['p']['name'] . ' ' . $r['version']) ?><?= $r['mandatory'] ? ' <span class="lp lp-red">Mandatory</span>' : '' ?></h3>
+    <dl><dt>Now running</dt><dd><?= ag_h($u['current'] ?: '—') ?></dd><dt>Where</dt><dd><?= $u['l']['deployment'] === 'onprem' ? 'Your server' : 'Ametecs cloud' ?></dd></dl><p style="margin:10px 0 0"><a href="?v=updates">Go to Available updates &rarr;</a></p></div><?php endforeach; ?></div><?php endif; ?>
+  <div class="toolbar2" style="margin-bottom:10px"><label class="fsearch" style="margin:0"><i class="fas fa-magnifying-glass"></i><input data-live="#up-t" placeholder="Filter by app, version or action" autocomplete="off"></label></div>
+  <div class="lic-t"><table id="up-t" class="paged"><tr><th>When</th><th>App</th><th>What happened</th><th>Version</th><th>By</th><th>Detail</th></tr>
+  <?php foreach ($hist as $e): ?><tr><td style="white-space:nowrap"><?= ag_h(date('d M Y H:i', (int) strtotime((string) $e['created_at']))) ?></td><td><?= ag_h((string) ($apps[$e['app']]['name'] ?? $e['app'])) ?></td>
+    <td><?= ['installed' => '<span class="lp lp-green">Installed</span>', 'failed' => '<span class="lp lp-red">Failed</span>', 'rolled_back' => '<span class="lp lp-amber">Rolled back</span>', 'paid' => '<span class="lp lp-green">Paid</span>', 'refunded' => '<span class="lp lp-red">Refunded</span>'][$e['action']] ?? ag_h(ucfirst(str_replace('_', ' ', (string) $e['action']))) ?></td>
+    <td><?= ag_h(trim(($e['from_version'] ?? '') . ' → ' . ($e['to_version'] ?? ''), ' →')) ?></td><td class="muted2"><?= ag_h((string) $e['by_who']) ?></td><td class="muted2" style="white-space:normal;max-width:380px"><?= ag_h(mb_strimwidth((string) $e['detail'], 0, 140, '…')) ?></td></tr>
+  <?php endforeach; ?><?php if ($hist === []): ?><tr><td colspan="6" class="muted2">Nothing yet.</td></tr><?php endif; ?></table></div>
+
+<?php elseif ($view === 'installs'): $myLic = AmetecsLicences::rows()[$tenant] ?? []; $apps = AmetecsAccess::plugins(true); $wk = (new DateTimeImmutable(AmetecsAccess::today()))->modify('-7 days')->format('Y-m-d'); ?>
+  <div class="pgh"><div><h1>Installations</h1><p>Where each of your applications runs. On-premise apps run on your own server and check in with Ametecs; cloud apps run on Ametecs' servers and are kept up to date for you.</p></div></div>
+  <div class="grid2c"><?php foreach ($myLic as $code => $l): if ($l['status'] === 'cancelled') { continue; } $u = $upd[$code] ?? null; $op = $l['deployment'] === 'onprem'; $seen = (string) ($l['last_seen_at'] ?? ''); ?>
+    <div class="ibox"><h3><i class="fas fa-<?= $op ? 'server' : 'cloud' ?>" style="color:var(--gold)"></i><?= ag_h((string) ($apps[$code]['name'] ?? $code)) ?> <span class="lp lp-<?= $op ? 'grey' : 'green' ?>" style="margin-left:auto"><?= $op ? 'On-premise' : 'Cloud' ?></span></h3>
+      <dl><?php if ($op): ?>
+        <dt>Licence key</dt><dd><?= trim((string) ($l['key_hash'] ?? '')) !== '' ? 'Issued by Ametecs' : '<span class="muted2">not issued yet - ask Ametecs</span>' ?></dd>
+        <dt>Server</dt><dd><?= ($l['fingerprint'] ?? '') !== '' ? ag_h((string) ($l['server_name'] ?: 'activated')) . ' <small class="muted2">' . ag_h((string) ($l['server_os'] ?? '')) . '</small>' : '<span class="lp lp-amber">not activated yet</span>' ?></dd>
+        <dt>Activated</dt><dd><?= $l['activated_at'] ? ag_h(date('d M Y', (int) strtotime((string) $l['activated_at']))) : '—' ?></dd>
+        <dt>Last check-in</dt><dd><?= $seen !== '' ? ag_h(date('d M Y H:i', (int) strtotime($seen))) . ($seen < $wk ? ' <span class="lp lp-amber">over a week ago</span>' : ' <span class="lp lp-green">online</span>') : '—' ?></dd>
+        <dt>Version</dt><dd><?= ag_h((string) (($l['app_version'] ?? '') ?: 'not reported yet')) ?><?= $u !== null && $u['offer']['updates'] !== [] ? ' &rarr; <a href="?v=updates">' . ag_h((string) $u['offer']['updates'][0]['version']) . ' available</a>' : '' ?></dd>
+      <?php else: ?>
+        <dt>Hosted by</dt><dd>Ametecs cloud</dd><dt>Version</dt><dd><?= ag_h(($u['current'] ?? '') ?: 'latest') ?></dd><dt>Updates</dt><dd>Installed for you by Ametecs</dd>
+      <?php endif; ?></dl>
+      <?php if ($op && ($l['fingerprint'] ?? '') === ''): ?><p class="muted2" style="margin:12px 0 0;font-size:12.5px"><b>To activate:</b> open the app on your server, go to its licence / activation screen and enter the licence key Ametecs gave you. The first server to activate is bound to this licence.</p><?php endif; ?>
+    </div>
+  <?php endforeach; ?></div>
+  <p class="muted2" style="font-size:12.5px">Moving an on-premise app to a new server? Ask Ametecs to release the licence from the old one first.</p>
+
+<?php elseif ($view === 'licences'): $mine = array_filter(array_merge($groups['live'], $groups['soon'], $groups['other']), static fn ($r) => isset($r['a']['deployment']) && ($r['a']['status'] ?? '') !== 'cancelled'); ?>
+  <div class="pgh"><div><h1>Licences</h1><p>What your company holds, as set by Ametecs: deployment, plan, seats and validity for each application.</p></div></div>
+  <div class="lic-t"><table><tr><th>Application</th><th>Deployment</th><th>Plan</th><th>Status</th><th>Seats</th><th>Valid till</th><th>Installed version</th></tr>
+  <?php foreach ($mine as $r): $a = $r['a']; [$sl, $sc] = AmetecsLicences::STATES[$r['st']] ?? ['', 'grey']; ?><tr>
+    <td><b><?= ag_h((string) $r['p']['name']) ?></b></td>
+    <td><?= $a['deployment'] === 'onprem' ? '<i class="fas fa-server"></i> On-premise' : '<i class="fas fa-cloud"></i> Cloud' ?></td>
+    <td><?= ag_h(AmetecsLicences::PLANS[$a['plan']] ?? '') ?></td><td><span class="lp lp-<?= $sc ?>"><?= ag_h($sl) ?></span></td>
+    <td><?= (int) $a['seats'] ?> <?= ag_h((string) $r['p']['unit']) ?><?= $r['code'] === 'smartprs3' ? ' <small class="muted2">(' . $used . ' in use)</small>' : '' ?></td>
+    <td><?= ag_h($fmtDate((string) ($a['valid_until'] ?? ''))) ?></td>
+    <td class="muted2"><?= $a['deployment'] === 'onprem' ? ag_h((string) (($a['app_version'] ?? '') ?: 'not reported yet')) : 'Kept current by Ametecs' ?></td></tr>
+  <?php endforeach; ?><?php if ($mine === []): ?><tr><td colspan="7" class="muted2">No licences yet.</td></tr><?php endif; ?></table></div>
+  <p class="muted2" style="margin-top:14px">Renewals and prices are under <a href="?v=plans">Subscription &amp; plans</a>. To add an application or change seats, <a href="?v=support">contact Ametecs</a>.</p>
+
+<?php elseif ($view === 'plans'): $myLic = array_filter(AmetecsLicences::rows()[$tenant] ?? [], static fn ($l) => $l['status'] !== 'cancelled'); $apps = AmetecsAccess::plugins(true);
+    uasort($myLic, static fn ($a, $b) => strcmp((string) ($a['valid_until'] ?: '9999'), (string) ($b['valid_until'] ?: '9999'))); ?>
+  <div class="pgh"><div><h1>Subscription &amp; plans</h1><p>Your plan for each application, what it costs, when it renews. Renew online in a minute, or ask Ametecs to change a plan or add seats.</p></div></div>
+  <?php if ($notice !== null): ?><div class="okmsg"><i class="fas fa-circle-check"></i><?= ag_h($notice) ?></div><?php endif; ?>
+  <div class="grid2c"><?php foreach ($myLic as $code => $l): $st = AmetecsLicences::stateOf($l); [$sl, $sc] = AmetecsLicences::STATES[$st]; $until = (string) ($l['valid_until'] ?? '');
+      $days = $until === '' ? null : (int) floor((strtotime($until) - strtotime(AmetecsAccess::today())) / 86400); ?>
+    <div class="ibox"><h3><i class="fas fa-layer-group" style="color:var(--gold)"></i><?= ag_h((string) ($apps[$code]['name'] ?? $code)) ?><span class="lp lp-<?= $sc ?>" style="margin-left:auto"><?= ag_h($sl) ?></span></h3>
+      <dl><dt>Plan</dt><dd><?= ag_h(AmetecsLicences::PLANS[$l['plan']] ?? $l['plan']) ?> &middot; <?= $l['deployment'] === 'onprem' ? 'On-premise' : 'Cloud' ?></dd>
+        <dt>Seats</dt><dd><?= (int) $l['seats'] ?> <?= ag_h((string) ($apps[$code]['unit'] ?? 'users')) ?></dd>
+        <dt>Price</dt><dd><?= (float) ($l['price'] ?? 0) > 0 ? ag_h($l['currency'] . ' ' . number_format((float) $l['price'], 2)) . ' <small class="muted2">per ' . (['monthly' => 'month', 'yearly' => 'year'][$l['plan']] ?? 'period') . ' + GST</small>' : '<span class="muted2">as agreed with Ametecs</span>' ?></dd>
+        <dt>Valid till</dt><dd><?= $until === '' ? 'No end date' : ag_h(date('d M Y', (int) strtotime($until))) . ($days !== null ? ' <small class="' . ($days < 0 ? '' : 'muted2') . '" style="' . ($days < 0 ? 'color:#b91c1c' : ($days <= 30 ? 'color:#b45309' : '')) . '">' . ($days < 0 ? 'ended ' . -$days . ' days ago' : $days . ' days left') . '</small>' : '') ?></dd>
+        <dt>Renews</dt><dd><?= !empty($l['auto_renew']) ? 'Automatically' : 'When you pay the renewal' ?></dd></dl>
+      <div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap"><?php if ($payOnline && (float) ($l['price'] ?? 0) > 0 && $l['currency'] === 'INR' && in_array($l['plan'], ['monthly', 'yearly'], true)): ?>
+        <form method="post" style="display:inline"><input type="hidden" name="csrf" value="<?= ag_h($session->token()) ?>"><input type="hidden" name="do" value="pay-renew"><input type="hidden" name="licence" value="<?= (int) $l['id'] ?>"><button class="btn2 primary"><i class="fas fa-rotate"></i>Renew online</button></form><?php endif; ?>
+        <a class="btn2 ghost" href="?v=support&amp;subject=<?= rawurlencode('Change plan / seats: ' . ($apps[$code]['name'] ?? $code)) ?>"><i class="fas fa-sliders"></i>Change plan or seats</a></div></div>
+  <?php endforeach; ?></div>
+  <?php if ($myLic === []): ?><div class="lic-t"><div class="empty2" style="padding:30px">No subscriptions yet.</div></div><?php endif; ?>
+
+<?php elseif ($view === 'notifications'): ?>
+  <div class="pgh"><div><h1>Notifications</h1><p>Updates, invoices, renewals and installation alerts for <?= ag_h($company ?: 'your company') ?>, most urgent first. They clear by themselves once handled.</p></div></div>
+  <div class="panel"><?= AmetecsShell::notificationList($notes) ?></div>
+
+<?php elseif ($view === 'activity'): $apps = AmetecsAccess::plugins(true);
+    $feed = [];
+    foreach (AmetecsData::activity($tenant, 300) as $a) { $feed[] = [$a['at'], $a['who'], $a['what'], (string) $a['detail'], 'fa-circle-dot']; }
+    foreach (AmetecsReleases::ready() ? AmetecsReleases::events(['tenant_id' => $tenant], 300) : [] as $e) { $feed[] = [$e['created_at'], $e['by_who'], ($apps[$e['app']]['name'] ?? $e['app']) . ' ' . $e['to_version'] . ': ' . str_replace('_', ' ', $e['action']), mb_strimwidth((string) $e['detail'], 0, 120, '…'), 'fa-code-branch']; }
+    foreach (AmetecsLicences::events(null, $tenant, 300) as $e) { $feed[] = [$e['created_at'], $e['by_who'], ($apps[$e['app']]['name'] ?? $e['app']) . ' licence: ' . $e['action'], mb_strimwidth((string) $e['detail'], 0, 120, '…'), 'fa-key']; }
+    usort($feed, static fn ($a, $b) => strcmp((string) $b[0], (string) $a[0])); ?>
+  <div class="pgh"><div><h1>Activity history</h1><p>Everything that changed for your company: logins and settings, licences, payments, updates and installs, by whom and when.</p></div></div>
+  <div style="margin-bottom:10px"><label class="fsearch" style="margin:0"><i class="fas fa-magnifying-glass"></i><input data-live="#act-t" placeholder="Filter by who or what" autocomplete="off"></label></div>
+  <div class="lic-t"><table id="act-t" class="paged"><tr><th>When</th><th>What</th><th>Who</th><th>Detail</th></tr>
+  <?php foreach ($feed as [$at, $who2, $what, $det, $ic]): ?><tr><td style="white-space:nowrap"><?= ag_h(date('d M Y H:i', (int) strtotime((string) $at))) ?></td><td style="white-space:normal"><i class="fas <?= $ic ?>" style="color:var(--gold)"></i> <?= ag_h((string) $what) ?></td><td class="muted2"><?= ag_h((string) $who2) ?></td><td class="muted2" style="white-space:normal;max-width:420px"><?= ag_h($det) ?></td></tr><?php endforeach; ?>
+  <?php if ($feed === []): ?><tr><td colspan="4" class="muted2">Nothing yet.</td></tr><?php endif; ?></table></div>
+
+<?php elseif ($view === 'support'): $bs = AmetecsBilling::settings(); $sEmail = (string) (($bs['support_email'] ?? '') ?: $bs['email']); $sPhone = (string) ($bs['support_phone'] ?? ''); ?>
+  <div class="pgh"><div><h1>Support &amp; help</h1><p>Questions, changes to your plan, or something not working: Ametecs is here to help.</p></div></div>
+  <?php if ($okMsg !== null): ?><div class="okmsg"><i class="fas fa-circle-check"></i><?= ag_h($okMsg) ?></div><?php endif; ?>
+  <?php if ($problem !== null): ?><div class="msg"><i class="fas fa-circle-exclamation"></i><span><?= ag_h($problem) ?></span></div><?php endif; ?>
+  <div class="grid2c">
+    <div class="ibox"><h3><i class="fas fa-headset" style="color:var(--gold)"></i>Contact Ametecs</h3><dl>
+      <dt>Company</dt><dd><?= ag_h((string) $bs['seller']) ?></dd>
+      <?php if ($sEmail !== ''): ?><dt>Email</dt><dd><a href="mailto:<?= ag_h($sEmail) ?>"><?= ag_h($sEmail) ?></a></dd><?php endif; ?>
+      <?php if ($sPhone !== ''): ?><dt>Phone</dt><dd><a href="tel:<?= ag_h(preg_replace('/[^0-9+]/', '', $sPhone)) ?>"><?= ag_h($sPhone) ?></a></dd><?php endif; ?>
+      <?php if (($bs['support_hours'] ?? '') !== ''): ?><dt>Hours</dt><dd><?= ag_h((string) $bs['support_hours']) ?></dd><?php endif; ?>
+      <dt>Address</dt><dd><?= nl2br(ag_h((string) $bs['address'])) ?></dd></dl></div>
+    <div class="ibox"><h3><i class="fas fa-paper-plane" style="color:var(--gold)"></i>Send a message</h3>
+      <form method="post" class="frm"><input type="hidden" name="csrf" value="<?= ag_h($session->token()) ?>"><input type="hidden" name="do" value="support-send">
+        <div><label>Subject</label><input name="subject" required maxlength="150" value="<?= ag_h((string) ($_POST['subject'] ?? $_GET['subject'] ?? '')) ?>"></div>
+        <div><label>Message</label><textarea name="message" rows="5" required maxlength="5000"><?= ag_h($okMsg === null ? (string) ($_POST['message'] ?? '') : '') ?></textarea></div>
+        <div><button class="btn2 primary"><i class="fas fa-paper-plane"></i>Send to Ametecs</button></div></form></div>
+  </div>
+  <div class="sh"><div><h2>Common questions</h2></div></div>
+  <div class="faq">
+    <details><summary>How do I add employees or give someone a login?</summary><p>Administrators add employees under Organization &rarr; Employee directory. Every employee with an email gets a login straight away; set or reset passwords in Users &amp; permissions.</p></details>
+    <details><summary>An update is available. What do I do?</summary><p>Cloud applications are updated by Ametecs for you. For on-premise applications, open the app on your server and use its Updates screen; paid upgrades are unlocked once the invoice is paid under Payments &amp; invoices.</p></details>
+    <details><summary>How do I renew or change my plan?</summary><p>Subscription &amp; plans shows each renewal date. Use Renew online where it is offered, or "Change plan or seats" to ask Ametecs.</p></details>
+    <details><summary>We are moving our server. What happens to the licence?</summary><p>A licence works on one server at a time. Ask Ametecs to release it from the old server, then activate it on the new one with the same key.</p></details>
+    <details><summary>Where are our invoices?</summary><p>Payments &amp; invoices lists every invoice with a printable copy you can save as PDF.</p></details>
+  </div>
+
+<?php elseif ($view === 'account'): ?>
+  <div class="pgh"><div><h1>Account settings</h1><p>Your own login to AmetecsGlobal.</p></div></div>
+  <?php if ($okMsg !== null): ?><div class="okmsg"><i class="fas fa-circle-check"></i><?= ag_h($okMsg) ?></div><?php endif; ?>
+  <?php if ($problem !== null): ?><div class="msg"><i class="fas fa-circle-exclamation"></i><span><?= ag_h($problem) ?></span></div><?php endif; ?>
+  <div class="grid2c">
+    <div class="ibox"><h3><i class="fas fa-user" style="color:var(--gold)"></i>Profile</h3><dl><dt>Name</dt><dd><?= ag_h($who) ?></dd><dt>Email</dt><dd><?= ag_h((string) ($user['email'] ?? '')) ?></dd>
+      <dt>Role</dt><dd><?= ag_h(ucfirst((string) ($user['role'] ?? ''))) ?></dd><dt>Company</dt><dd><?= ag_h($company) ?></dd></dl>
+      <p class="muted2" style="font-size:12.5px;margin:12px 0 0">Your name and email are kept with your employee record<?= $isAdmin ? ' (Organization &rarr; Employee directory)' : '; ask your administrator to change them' ?>.</p></div>
+    <div class="ibox"><h3><i class="fas fa-lock" style="color:var(--gold)"></i>Change password</h3>
+      <form method="post" class="frm"><input type="hidden" name="csrf" value="<?= ag_h($session->token()) ?>"><input type="hidden" name="do" value="account-password">
+        <div><label>Current password</label><input type="password" name="current" required autocomplete="current-password"></div>
+        <div><label>New password (<?= \SmartPRS\Surface\Session::PASSWORD_FLOOR ?>+ characters)</label><input type="password" name="new" required minlength="<?= \SmartPRS\Surface\Session::PASSWORD_FLOOR ?>" autocomplete="new-password"></div>
+        <div><label>New password again</label><input type="password" name="again" required autocomplete="new-password"></div>
+        <div><button class="btn2 primary"><i class="fas fa-check"></i>Change password</button></div></form></div>
+  </div>
 <?php else: ?>
   <?php $prsSeats = (int) (AmetecsAccess::get($tenant, 'smartprs3', $all)['seats'] ?? 0); $pct = $prsSeats > 0 ? min(100, (int) round($used * 100 / $prsSeats)) : 0; ?>
   <div class="ph">
@@ -799,19 +955,20 @@ a{color:inherit}
     <label class="fsearch"><i class="fas fa-magnifying-glass"></i><input id="appq" placeholder="Find an app" autocomplete="off"></label></div>
   <div class="cards"><?php $i = 0; foreach (['live', 'soon', 'other'] as $g) { foreach ($groups[$g] as $r) { echo str_replace('style="--c:', 'style="animation-delay:' . (50 * $i++) . 'ms;--c:', $card($r, $g)); } } ?></div>
   <div class="noapps" id="noapps" hidden><i class="fas fa-magnifying-glass"></i>No apps match.</div>
-  <?php if ($isAdmin): $mine = array_filter(array_merge($groups['live'], $groups['soon'], $groups['other']), static fn ($r) => isset($r['a']['deployment']) && ($r['a']['status'] ?? '') !== 'cancelled'); ?>
-  <div class="sh" style="margin-top:26px"><div><h2>Licences &amp; subscriptions</h2><span class="legend"><em>What your company holds, as set by Ametecs. To add an app, renew or change seats, contact Ametecs.</em></span></div></div>
-  <div class="lic-t"><table><tr><th>Application</th><th>Deployment</th><th>Plan</th><th>Status</th><th>Seats</th><th>Valid till</th><th>Installed version</th><th class="r"></th></tr>
-  <?php foreach ($mine as $r): $a = $r['a']; [$sl, $sc] = AmetecsLicences::STATES[$r['st']] ?? ['', 'grey']; ?><tr>
-    <td><b><?= ag_h((string) $r['p']['name']) ?></b></td>
-    <td><?= $a['deployment'] === 'onprem' ? '<i class="fas fa-server"></i> On-premise' : '<i class="fas fa-cloud"></i> Cloud' ?></td>
-    <td><?= ag_h(AmetecsLicences::PLANS[$a['plan']] ?? '') ?></td>
-    <td><span class="lp lp-<?= $sc ?>"><?= ag_h($sl) ?></span></td>
-    <td><?= (int) $a['seats'] ?> <?= ag_h((string) $r['p']['unit']) ?></td>
-    <td><?= ag_h($fmtDate((string) ($a['valid_until'] ?? ''))) ?></td>
-    <td class="muted2"><?= $a['deployment'] === 'onprem' ? ag_h((string) (($a['app_version'] ?? '') ?: 'not reported yet')) : 'Kept current by Ametecs' ?></td>
-    <td class="r"><?php if ($payOnline && (float) ($a['price'] ?? 0) > 0 && ($a['currency'] ?? 'INR') === 'INR' && in_array($a['plan'], ['monthly', 'yearly'], true)): ?><form method="post" style="display:inline"><input type="hidden" name="csrf" value="<?= ag_h($session->token()) ?>"><input type="hidden" name="do" value="pay-renew"><input type="hidden" name="licence" value="<?= (int) $a['id'] ?>"><button class="btn2 ghost" title="<?= ag_h($a['currency'] . ' ' . number_format((float) $a['price'], 2)) ?> + GST"><i class="fas fa-rotate"></i>Renew online</button></form><?php endif; ?></td></tr>
-  <?php endforeach; ?><?php if ($mine === []): ?><tr><td colspan="8" class="muted2">No licences yet.</td></tr><?php endif; ?></table></div>
+  <?php if ($isAdmin): ?>
+  <div class="panels">
+    <div class="panel"><h3><i class="fas fa-bell" style="color:var(--gold)"></i>Needs attention<a href="?v=notifications">All <?= count($notes) ?> &rarr;</a></h3><?= AmetecsShell::notificationList($notes, 5) ?></div>
+    <div class="panel"><h3><i class="fas fa-file-invoice" style="color:var(--gold)"></i>Recent payments<a href="?v=billing">All &rarr;</a></h3>
+      <?php $recentPaid = $billOn ? array_slice(array_filter(AmetecsBilling::invoices($tenant), static fn ($i) => $i['status'] !== 'cancelled'), 0, 5) : []; ?>
+      <?php if ($recentPaid === []): ?><div class="empty2">No invoices yet.</div><?php else: ?><ul class="nl"><?php foreach ($recentPaid as $i): [$sl, $sc] = AmetecsBilling::STATUSES[$i['status']]; ?>
+        <li><span class="ic <?= ['green' => 'green', 'amber' => 'amber', 'red' => 'red'][$sc] ?? 'blue' ?>"><i class="fas fa-<?= $i['status'] === 'paid' ? 'check' : ($i['status'] === 'pending' ? 'hourglass-half' : 'rotate-left') ?>"></i></span><a href="?v=billing"><b><?= ag_h($i['currency'] . ' ' . number_format((float) $i['total'], 2)) ?> &middot; <?= ag_h($sl) ?></b><small><?= ag_h($i['number'] . ' · ' . $i['description']) ?></small></a></li>
+      <?php endforeach; ?></ul><?php endif; ?></div>
+    <div class="panel"><h3><i class="fas fa-clock-rotate-left" style="color:var(--gold)"></i>Recent activity<a href="?v=activity">All &rarr;</a></h3>
+      <?php $recentAct = AmetecsData::activity($tenant, 5); ?>
+      <?php if ($recentAct === []): ?><div class="empty2">Nothing yet.</div><?php else: ?><ul class="nl"><?php foreach ($recentAct as $a): ?>
+        <li><span class="ic blue"><i class="fas fa-circle-dot"></i></span><span><b><?= ag_h($a['what']) ?></b><small><?= ag_h($a['who'] . ' · ' . $a['at']) ?></small></span></li>
+      <?php endforeach; ?></ul><?php endif; ?></div>
+  </div>
   <?php endif; ?>
 <?php endif; ?>
 </main>
@@ -821,10 +978,10 @@ a{color:inherit}
 (function(){
 document.querySelectorAll('[data-count]').forEach(function(el){var n=+el.dataset.count,t0=null;function f(t){t0=t0||t;var k=Math.min(1,(t-t0)/800);el.textContent=Math.round(n*(1-Math.pow(1-k,3))).toLocaleString('en-IN');if(k<1)requestAnimationFrame(f)}requestAnimationFrame(f)});
 setTimeout(function(){document.querySelectorAll('[data-da]').forEach(function(c){c.setAttribute('stroke-dasharray',c.dataset.da)});document.querySelectorAll('[data-w]').forEach(function(i){i.style.width=i.dataset.w+'%'})},120);
-var ck=document.getElementById('clock');function tick(){ck.textContent=new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',timeZone:'Asia/Kolkata'})}setInterval(tick,15000);
+var ck=document.getElementById('clock');function tick(){if(!ck)return;ck.textContent=new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',timeZone:'Asia/Kolkata'})}setInterval(tick,15000);
 // app search across all sections
 var q=document.getElementById('appq'),cards=[].slice.call(document.querySelectorAll('[data-n]'));
-q.addEventListener('input',function(){var t=q.value.toLowerCase().trim(),n=0;cards.forEach(function(c){var ok=!t||c.dataset.n.indexOf(t)>=0;c.hidden=!ok;n+=ok?1:0});document.getElementById('noapps').hidden=n>0;
+q&&q.addEventListener('input',function(){var t=q.value.toLowerCase().trim(),n=0;cards.forEach(function(c){var ok=!t||c.dataset.n.indexOf(t)>=0;c.hidden=!ok;n+=ok?1:0});document.getElementById('noapps').hidden=n>0;
 });
 // spotlight follows the mouse on live cards
 document.querySelectorAll('.c-live').forEach(function(c){c.addEventListener('mousemove',function(e){var r=c.getBoundingClientRect();c.style.setProperty('--mx',(e.clientX-r.left)+'px');c.style.setProperty('--my',(e.clientY-r.top)+'px')})});
@@ -842,4 +999,5 @@ document.addEventListener('click',function(e){document.querySelectorAll('details
 </script>
 <?php endif; ?>
 <?php if ($user !== null): ?><div class="foot">AmetecsGlobal by Ametecs India &middot; <a href="super.php">Super Admin</a></div><?php endif; ?>
+<script src="assets/ui.js?v=4"></script>
 </body></html>

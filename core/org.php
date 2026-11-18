@@ -64,24 +64,29 @@ if ($cur[0] === 'users') {
         . '<input type="password" name="password" minlength="' . Session::PASSWORD_FLOOR . '" placeholder="' . ($hasDefault ? 'change it' : 'set one') . '" autocomplete="new-password">'
         . '<button class="b">Save</button>' . ($hasDefault ? '<button class="b" name="clear" value="1" style="background:#64748b">Clear</button>' : '') . '</form>';
 }
+// THE SHARED CLIENT SHELL (Phase 4, 18 Nov 2026): same sidebar, top bar and notification bell as the client panel.
+$isAdmin = strtolower((string) ($user['role'] ?? '')) !== 'employee';
+$cq2 = $pdo->prepare('SELECT name FROM tenants WHERE id = ?');
+$cq2->execute([$tid]);
+$company = (string) ($cq2->fetchColumn() ?: '');
+$notes = AmetecsShell::notifications($tid, $isAdmin);
+$active = $own ? 'org:ag-apps' : 'org:' . $cur[0] . ($cur[1] !== '' ? ':' . $cur[1] : '');
+$titles = ['ag-apps' => 'App access', 'users' => 'Users & permissions', 'setup-companies' => 'Company profile'];
+$title = $titles[$cur[0]] ?? 'Organization setup';
+foreach (AmetecsSetup::CORE as $items) { foreach ($items as $label => $it) { if ($it[0] === $cur[0] && $it[1] === $cur[1] && !isset($titles[$cur[0]])) { $title = $label; } } }
 ?><!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Organization Setup · AmetecsGlobal</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 <style>
 :root{--navy:#1F3A5F;--gold:#B8893B;--ink:#1e293b;--mute:#64748b;--line:#e2e8f0}
-*{box-sizing:border-box}html,body{height:100%}body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:var(--ink);background:#f4f6fa;display:flex;flex-direction:column}
-header{background:var(--navy);color:#fff;padding:12px 22px;display:flex;align-items:center;gap:16px}
-header .logo{font-weight:800;font-size:19px}header .logo b{color:var(--gold)}
-header a.back{color:#fff;text-decoration:none;border:1px solid rgba(255,255,255,.4);border-radius:8px;padding:6px 12px;font-size:14px}
-header a.back:hover{background:rgba(255,255,255,.12)}header .t{font-size:16px;opacity:.9}header .who{margin-left:auto;font-size:13px;opacity:.85}
-.wrap{flex:1;display:flex;min-height:0}
-nav{width:260px;background:#fff;border-right:1px solid var(--line);overflow-y:auto;padding:10px 0}
-nav h3{font-size:11px;letter-spacing:.6px;text-transform:uppercase;color:var(--mute);margin:16px 18px 6px}
-nav a{display:flex;gap:10px;align-items:center;padding:8px 18px;color:var(--ink);text-decoration:none;font-size:14px;border-left:3px solid transparent}
-nav a i{width:16px;text-align:center;color:var(--mute)}nav a:hover{background:#f8fafc}
-nav a.on{background:#eef2f8;border-left-color:var(--gold);font-weight:600}nav a.on i{color:var(--navy)}
-iframe{flex:1;border:0;background:#fff}
+*{box-sizing:border-box}html,body{height:100%}body{margin:0;font-family:Inter,"Segoe UI",system-ui,-apple-system,Roboto,sans-serif;color:var(--ink);background:#f4f6fa}
+.orgmain{display:flex;flex-direction:column;height:100vh;min-width:0}
+.top{background:rgba(255,255,255,.9);backdrop-filter:blur(10px);border-bottom:1px solid var(--line);flex:none}
+.top-in{display:flex;align-items:center;gap:14px;height:52px;padding:0 24px}
+.top-in h1{margin:0;font-size:17px;font-weight:700}.top-in h1 small{display:block;font-size:11.5px;font-weight:500;color:var(--mute)}
+.top-in .who{font-size:13px;color:var(--mute);margin-left:14px;white-space:nowrap}
+iframe{flex:1;border:0;background:#fff;width:100%;min-height:0}
 .pane{flex:1;overflow-y:auto;padding:22px 28px}.pane h1{margin:0 0 4px;font-size:22px}.pane .sub{color:var(--mute);margin:0 0 16px;font-size:14px}
 .card{background:#fff;border:1px solid var(--line);border-radius:12px;padding:16px 18px;margin-bottom:18px}.card h2{font-size:16px;margin:0 0 10px}
 .tabs{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap}.tabs a{padding:8px 14px;border-radius:999px;border:1px solid var(--line);background:#fff;color:var(--ink);text-decoration:none;font-weight:600;font-size:14px}
@@ -94,29 +99,29 @@ tr:nth-child(even) td{background:#f8fafc}select,input[type=text]{padding:6px 8px
 .on1{color:#166534;font-weight:700}.off1{color:#991b1b;font-weight:700}.from{color:var(--mute);font-size:12px}
 .msg{padding:10px 14px;border-radius:10px;margin-bottom:14px;background:#f0fdf4;color:#166534;border:1px solid #bbf7d0}.msg.bad{background:#fef2f2;color:#991b1b;border-color:#fecaca}
 .bulk{display:flex;gap:8px;align-items:center;margin:10px 0}
-.col{flex:1;display:flex;flex-direction:column;min-width:0}.umbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:10px 18px;background:#fff;border-bottom:1px solid var(--line);font-size:13px}.umbar .msg{flex-basis:100%;margin:0}.umbar input{padding:6px 8px;border:1px solid var(--line);border-radius:8px}
-</style></head><body>
-<header><a class="back" href="./">&larr; All apps</a><div class="logo">Ametecs<b>Global</b></div><div class="t">Organization Setup</div>
-<div class="who"><?= ag_h((string) ($user['email'] ?? '')) ?></div></header>
-<div class="wrap">
-<nav>
-  <h3>Apps</h3>
-  <a href="?s=ag-apps"<?= $own ? ' class="on"' : '' ?>><i class="fas fa-puzzle-piece"></i>App access</a>
-<?php foreach ($menu as $group => $items): ?>
-  <h3><?= ag_h($group) ?></h3>
-  <?php foreach ($items as $label => $item): $h = AmetecsSetup::href($item); ?>
-  <a href="<?= ag_h(str_replace('?r=', '?s=', $h)) ?>" data-q="<?= ag_h($h) ?>"<?= [$item[0], $item[1]] === $cur ? ' class="on"' : '' ?>><i class="fas <?= ag_h($item[2]) ?>"></i><?= ag_h($label) ?></a>
-  <?php endforeach; ?>
-<?php endforeach; ?>
-</nav>
+.col{flex:1;display:flex;flex-direction:column;min-width:0;min-height:0}.umbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:10px 18px;background:#fff;border-bottom:1px solid var(--line);font-size:13px}.umbar .msg{flex-basis:100%;margin:0}.umbar input{padding:6px 8px;border:1px solid var(--line);border-radius:8px}
+@media (max-width:860px){.top-in .who{display:none}.top-in{padding:0 14px}}
+</style>
+<link rel="stylesheet" href="assets/shell.css?v=4"></head><body>
+<div class="shell">
+<?= AmetecsShell::nav($company, $isAdmin, $active, ['notifications' => count($notes)], './') ?>
+<div class="orgmain">
+<header class="top"><div class="top-in">
+  <button type="button" class="drawer-btn" data-drawer aria-label="Menu"><i class="fas fa-bars"></i></button>
+  <h1><span id="ttl"><?= ag_h($title) ?></span><small>Organization setup &middot; used by every app</small></h1>
+  <a class="bell" href="./?v=notifications" title="Notifications"><i class="far fa-bell"></i><?= $notes !== [] ? '<em>' . count($notes) . '</em>' : '' ?></a>
+  <span class="who"><?= ag_h((string) ($user['email'] ?? '')) ?></span>
+</div></header>
 <?php if ($own): ?><main class="pane"><?= $body ?></main><?php else: ?><div class="col"><?= $umBar ?><iframe id="f" src="<?= ag_h($frame) ?>" title="Setup screen"></iframe></div><?php endif; ?>
-</div>
+</div></div>
 <script>
 // Menu clicks load the screen without reloading the page; the address keeps up so refresh / Back work.
 var f=document.getElementById('f');
-document.querySelectorAll('nav a[data-q]').forEach(function(a){a.addEventListener('click',function(e){if(!f||a.dataset.q.indexOf('r=users')>=0||location.search.indexOf('s=users')>=0)return;e.preventDefault();
-  f.src='../plugins/smartprs3/public/app.php'+a.dataset.q+'&ag_embed=1';history.pushState(null,'',a.getAttribute('href'));mark(a.getAttribute('href'))})});
-function mark(h){document.querySelectorAll('nav a').forEach(function(a){a.classList.toggle('on',a.getAttribute('href')===h)})}
+document.querySelectorAll('.side a[data-q]').forEach(function(a){a.addEventListener('click',function(e){if(!f||a.dataset.q.indexOf('r=users')>=0||location.search.indexOf('s=users')>=0)return;e.preventDefault();
+  f.src='../plugins/smartprs3/public/app.php'+a.dataset.q+'&ag_embed=1';history.pushState(null,'',a.getAttribute('href'));mark(a.getAttribute('href'));
+  var t=document.getElementById('ttl');t&&(t.textContent=(a.querySelector('span')||a).textContent);document.body.classList.remove('nav-open')})});
+function mark(h){document.querySelectorAll('.side a').forEach(function(a){a.classList.toggle('on',a.getAttribute('href')===h)})}
 window.addEventListener('popstate',function(){location.reload()});
 </script>
+<script src="assets/ui.js?v=4"></script>
 </body></html>

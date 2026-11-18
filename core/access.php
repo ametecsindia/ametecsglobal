@@ -35,6 +35,7 @@ require_once __DIR__ . '/setup.php';
 require_once __DIR__ . '/licensing.php';
 require_once __DIR__ . '/releases.php';
 require_once __DIR__ . '/billing.php';
+require_once __DIR__ . '/shell.php';
 
 final class AmetecsAccess
 {
