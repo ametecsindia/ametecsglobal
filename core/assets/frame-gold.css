@@ -1,0 +1,17 @@
+/* SmartPRS3 screens shown inside AmetecsGlobal (framed): the AmetecsGlobal gold look, so the panel reads as one product
+   (owner, 18 Nov 2026: "change all page theme according to my theme"). Only colours; layout stays SmartPRS3's own. */
+html,html[data-theme]{--accent:#b8893b!important;--accent2:#d4a65a!important;--accent-soft:rgba(184,137,59,.12)!important;--navy:#17120b!important;--navy2:#221a10!important;--navy3:#2e2416!important;
+  --bg:#faf6ee!important;--border:#ece3d1!important;--text1:#17130c!important;--text2:#4a3f2e!important}
+body{background:#faf6ee!important;font-family:Inter,"Segoe UI",system-ui,-apple-system,Roboto,sans-serif}
+.btn-primary,.btn-accent{background:linear-gradient(135deg,#e2bf6e,#b8893b)!important;color:#1c1408!important;border:0!important;box-shadow:0 6px 16px -8px rgba(184,137,59,.8)!important}
+.btn-primary:hover,.btn-accent:hover{background:linear-gradient(135deg,#d4a65a,#9a6e25)!important;color:#fff!important}
+.btn-primary i,.btn-accent i{color:inherit!important}
+.card,.panel,.box{border-color:#efe6d4!important;box-shadow:0 1px 2px rgba(60,40,10,.04),0 12px 30px -20px rgba(60,40,10,.18)!important;border-radius:14px}
+input:focus,select:focus,textarea:focus{border-color:#c9a24c!important;box-shadow:0 0 0 3px rgba(201,162,76,.15)!important;outline:none}
+select,input[type=text],input[type=email],input[type=number],input[type=date],textarea{border-color:#e5dccb}
+th{background:#fbf6ea!important;color:#7a6e5b!important}
+tr:hover td{background:#fffcf5}
+a{color:#9a7228}
+.badge-orange,.tl-dot.orange{background:#b8893b!important}
+.note2{color:#7a5a1c!important;border-color:rgba(184,137,59,.3)!important}
+::selection{background:rgba(212,166,90,.3)}

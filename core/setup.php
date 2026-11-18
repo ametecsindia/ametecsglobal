@@ -101,7 +101,8 @@ final class AmetecsSetup
     public static function css(bool $framed): string
     {
         if ($framed) {
-            return '<style>.sidebar,.topbar{display:none!important}.main-wrap{margin-left:0!important}</style>';
+            // inside AmetecsGlobal: its gold look too (core/assets/frame-gold.css), so the panel is one product
+            return '<link rel="stylesheet" href="../../../core/assets/frame-gold.css?v=1"><style>.sidebar,.topbar{display:none!important}.main-wrap{margin-left:0!important}</style>';
         }
         // Hidden by the server's own CSS, so nothing depends on the script below running: every way to add, import,
         // edit or bulk-upload employees inside the app (the Directory stays view and reports only).

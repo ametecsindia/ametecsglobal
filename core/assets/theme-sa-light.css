@@ -1,0 +1,27 @@
+/* SUPER ADMIN, LIGHT (owner, 18 Nov 2026: "change and light weight theme super admin page"): ivory and gold, a white
+   menu instead of the black one, a light hero. Loaded after theme-gold.css on super.php only. */
+.t-gold body{background:#fbf8f2}
+.t-gold .side{background:#fffdf8!important;border-right:1px solid #efe6d4;color:#3d3426}
+.t-gold .side:after{height:3px}
+.t-gold .side .brand,.t-gold .brand{color:#17130c}.t-gold .side .brand small,.t-gold .side .brand em{color:#9a7228}
+.t-gold .side .nav-l,.t-gold .nav-l{color:#a8946c}
+.t-gold .side a.nv,.t-gold .side .grp summary{color:#3d3426}
+.t-gold .side a.nv i,.t-gold .side .grp summary>i:first-child{color:#b8a07a}
+.t-gold .side a.nv:hover,.t-gold .side .grp summary:hover{background:#fbf3e2;color:#17130c}.t-gold .side a.nv:hover i{color:#9a7228}
+.t-gold .side a.nv.on{background:linear-gradient(90deg,#f7ead0,#fdf7ec);color:#17130c;box-shadow:inset 0 0 0 1px #ecd9b0}
+.t-gold .side a.nv.on i{color:#9a7228}.t-gold .side a.nv.on:before{background:#b8893b}
+.t-gold .side .cnt{background:#f5e9cf;color:#7a5a1c}
+.t-gold .side-foot,.t-gold .side .bottom{border-color:#efe6d4;color:#8c7a58}.t-gold .side-foot a,.t-gold .side .bottom a{color:#3d3426}
+.t-gold .side{scrollbar-color:#e2d3b3 transparent}.t-gold .side::-webkit-scrollbar-thumb{background:#e2d3b3}
+.t-gold .hero2{background:radial-gradient(600px 300px at 100% 0%,rgba(232,201,119,.35),transparent 60%),linear-gradient(135deg,#fffaf0,#f8ecd3)!important;color:#17130c;border:1px solid #efe1c2;box-shadow:0 18px 40px -28px rgba(120,85,20,.45)}
+.t-gold .hero2:before,.t-gold .hero2:after{opacity:.25}
+.t-gold .hero2 h1{background:none;-webkit-text-fill-color:#17130c;color:#17130c}
+.t-gold .hero2 p,.t-gold .hero2 .h2t p{color:#5c5040}
+.t-gold .hero2 .eyebrow2{background:#fff;border-color:#ecd9b0;color:#7a5a1c}
+.t-gold .btn.hghost{background:#fff;border:1px solid #e5d3ac;color:#3d3426}.t-gold .btn.hghost:hover{background:#fbf3e2}
+.t-gold .h2k a{background:#fff;border:1px solid #efe1c2;color:#17130c;box-shadow:0 1px 2px rgba(60,40,10,.05)}
+.t-gold .h2k a b{color:#17130c;-webkit-text-fill-color:#17130c}.t-gold .h2k a i{color:#b8893b}.t-gold .h2k span{color:#7a6e5b}
+.t-gold .h2k em.up{color:#15803d}.t-gold .h2k em.down{color:#b91c1c}
+.t-gold .phero{background:linear-gradient(135deg,#fffaf0,#f8ecd3)!important;color:#17130c;border:1px solid #efe1c2}
+.t-gold .phero h1,.t-gold .phero b{color:#17130c;-webkit-text-fill-color:#17130c}.t-gold .phero p,.t-gold .phero small,.t-gold .phero span{color:#5c5040}
+.t-gold .top,.t-gold header.top{background:rgba(255,253,248,.92)}

@@ -369,7 +369,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && $pdo !== null) {
         }
         if ($do === 'licence-status') {
             $act = (string) ($_POST['to'] ?? '');
-            ($_POST['back'] ?? '') === 'licences' && $to = '?p=licences';   // quick action on the Licences list: stay there
+            ($_POST['back'] ?? '') === 'licences' && $to = '?p=licences';
+            ($_POST['back'] ?? '') === 'dashboard' && $to = '?p=dashboard';   // quick action on the Licences list: stay there
             $set = match ($act) {
                 'active' => ['status' => 'active'],
                 'suspended' => ['status' => 'suspended'],
@@ -969,7 +970,7 @@ main{max-width:1560px;padding:16px 26px 20px}
 @media (max-width:1100px){.kstrip{grid-template-columns:repeat(3,1fr)}.dgrid2{grid-template-columns:1fr}}
 .cn b{white-space:nowrap}.mxt td:last-child,.mxt th:last-child{padding-right:16px;white-space:nowrap}.mxt th.ac{padding-left:4px;padding-right:4px}.mxt th:first-child{width:30%}
 </style>
-<link rel="stylesheet" href="assets/shell.css?v=9"><link rel="stylesheet" href="assets/super.css?v=8"><link rel="stylesheet" href="assets/theme-gold.css?v=3"></head><body>
+<link rel="stylesheet" href="assets/shell.css?v=13"><link rel="stylesheet" href="assets/super.css?v=10"><link rel="stylesheet" href="assets/theme-gold.css?v=3"><link rel="stylesheet" href="assets/theme-sa-light.css?v=1"></head><body>
 <?php
 $myName = trim((string) ($me['name'] ?? '')) ?: ucfirst((string) strtok($meEmail, '@'));
 $myIni = strtoupper(implode('', array_map(static fn (string $w): string => mb_substr($w, 0, 1), array_slice(preg_split('/[\s._-]+/', $myName) ?: ['S'], 0, 2))));
@@ -1041,104 +1042,161 @@ $myIni = strtoupper(implode('', array_map(static fn (string $w): string => mb_su
       They sign in at <?= $rl !== '' ? 'their company link <code>' . ag_h($rl) . '</code>' : 'the AmetecsGlobal front door' ?> and can change the password from their profile.<?php endif; ?></span></div><?php endif; ?>
 
 <?php if ($page === 'dashboard'):
-    $active = count(array_filter($tenants, static fn ($t) => $t['status_code'] === 'active'));
-    $expiring = [];
-    $expired = [];
-    $perApp = array_fill_keys(array_keys($plugins), 0);
-    $seatsApp = array_fill_keys(array_keys($plugins), 0);
-    foreach ($tenants as $t) {
-        foreach ($plugins as $c => $p) {
-            $a = AmetecsAccess::get((string) $t['id'], $c, $all);
-            $st = AmetecsAccess::state((string) $t['id'], $c, $all);
-            if ($st === 'on') { $perApp[$c]++; $seatsApp[$c] += (int) ($a['seats'] ?? 0); }
-            if ($st === 'on' && ($a['until'] ?? '') !== '' && $a['until'] <= $soon) { $expiring[] = [$t, $p, $a['until']]; }
-            if ($st === 'expired') { $expired[] = [$t, $p, $a['until']]; }
-        }
-    }
-    $hourNow = (int) (new DateTimeImmutable('now', new DateTimeZone('Asia/Kolkata')))->format('G');
-    $saLogos = ['smartprs3' => 'assets/logos/smartprs3.png', 'smartept' => 'assets/logos/smartept.png', 'leadger' => 'https://rovexy.app/brand/products/leadger.png inv', 'rovexy' => 'https://rovexy.app/brand/rovexy-lockup.svg'];
+    // PHASE 7 (owner, 18 Nov 2026: "redesign and add required features on dashboard"): the business at a glance -
+    // recurring revenue, this month vs last, money owed, the renewals coming up, payments in, the licence mix, the
+    // health of on-premise servers and how far they are behind, plus the client grid and real changes (not sign-ins).
+    $tz = new DateTimeZone('Asia/Kolkata');
+    $hourNow = (int) (new DateTimeImmutable('now', $tz))->format('G');
     $saIcons = ['smartprs3' => 'fa-people-group', 'smartept' => 'fa-chart-line', 'smartdcm' => 'fa-hand-holding-dollar', 'leadger' => 'fa-bullseye', 'rovexy' => 'fa-route', 'qronex' => 'fa-qrcode'];
-    $saMark = static function (string $c, array $p) use ($saIcons): string {
-        return '<span class="am" style="--c:' . ag_h((string) $p['color']) . '"><i class="fas ' . ag_h($saIcons[$c] ?? 'fa-cube') . '"></i></span>';
-    };
+    $saMark = static fn (string $c, array $p): string => '<span class="am" style="--c:' . ag_h((string) $p['color']) . '"><i class="fas ' . ag_h($saIcons[$c] ?? 'fa-cube') . '"></i></span>';
     $chk = static fn (string $st, bool $live): string => match (true) {
         $st === 'on' && $live => '<span class="chk on" title="Licensed - live"><i class="fas fa-check"></i></span>',
         $st === 'on' => '<span class="chk soon" title="Licensed - app arriving on AmetecsGlobal soon"><i class="fas fa-check"></i></span>',
         $st === 'expired' => '<span class="chk bad" title="Licence expired"><i class="fas fa-xmark"></i></span>',
         $st === 'suspended' => '<span class="chk bad" title="Licence suspended" style="background:#d97706"><i class="fas fa-pause"></i></span>',
         default => '<span class="chk off" title="Not licensed"></span>' };
-    $att = array_merge($expired, $expiring); ?>
-  <?php
+    $inr = static function (float $v): string {   // ₹12,34,567 (Indian grouping)
+        $n = (string) (int) round($v); $t = substr($n, -3); $h = substr($n, 0, -3);
+        return '₹' . ($h === '' ? $t : preg_replace('/\B(?=(\d{2})+$)/', ',', $h) . ',' . $t);
+    };
+    $short = static fn (float $v): string => $v >= 10000000 ? '₹' . round($v / 10000000, 1) . 'Cr' : ($v >= 100000 ? '₹' . round($v / 100000, 1) . 'L' : ($v >= 1000 ? '₹' . round($v / 1000, 1) . 'k' : '₹' . number_format($v)));
     $lr = AmetecsLicences::ready() ? array_merge(...array_map('array_values', array_values(AmetecsLicences::rows()) ?: [[]])) : [];
-    $live = array_filter($lr, static fn ($r) => $r['status'] !== 'cancelled');
-    $kc = static fn (callable $f): int => count(array_filter($live, $f));
-    // Updates: releases live now; on-premise licences whose reported version is behind what they are offered.
-    $liveReleases = count(array_filter(AmetecsReleases::all(), static fn ($r) => AmetecsReleases::stateOf($r) === 'published'));
-    $pendingInstalls = count(array_filter($live, static fn ($r) => $r['deployment'] === 'onprem' && AmetecsLicences::stateOf($r) === 'on'
-        && AmetecsReleases::offerFor((string) $r['tenant_id'], (string) $r['app'], (string) ($r['app_version'] ?? ''))['updates'] !== []));
+    $live = array_values(array_filter($lr, static fn ($r) => $r['status'] !== 'cancelled'));
+    $on = array_values(array_filter($live, static fn ($r) => AmetecsLicences::stateOf($r) === 'on'));
+    // recurring revenue: monthly price, or a twelfth of a yearly one (INR, active licences)
+    $mrr = array_sum(array_map(static fn ($r) => $r['currency'] === 'INR' ? (float) ($r['price'] ?? 0) * (['monthly' => 1, 'yearly' => 1 / 12][$r['plan']] ?? 0) : 0, $on));
+    $m0 = (new DateTimeImmutable('first day of this month', $tz))->format('Y-m-d 00:00:00');
+    $mPrev = (new DateTimeImmutable('first day of last month', $tz))->format('Y-m-d 00:00:00');
+    $revThis = AmetecsBilling::revenue($m0);
+    $revLast = AmetecsBilling::revenue($mPrev) - $revThis;
+    $revDelta = $revLast > 0 ? (int) round(100 * ($revThis - $revLast) / $revLast) : null;
+    $pend = AmetecsBilling::ready() ? AmetecsBilling::invoices('', 'pending') : [];
+    $owed = array_sum(array_map(static fn ($i) => $i['currency'] === 'INR' ? (float) $i['total'] : 0, $pend));
+    $overdue = count(array_filter($pend, static fn ($i) => (string) $i['due_on'] < $today));
+    $newClients = count(array_filter($tenants, static fn ($t) => (string) ($t['created_at'] ?? '') >= $m0));
     $admActive = $pdo !== null ? (int) $pdo->query("SELECT COUNT(*) FROM users WHERE status = 'administrator' AND disabled_at IS NULL")->fetchColumn() : 0;
+    $pendingInstalls = count(array_filter($on, static fn ($r) => $r['deployment'] === 'onprem'
+        && AmetecsReleases::offerFor((string) $r['tenant_id'], (string) $r['app'], (string) ($r['app_version'] ?? ''))['updates'] !== []));
+    $in60 = (new DateTimeImmutable($today))->modify('+60 days')->format('Y-m-d');
+    $renewals = array_values(array_filter($live, static fn ($r) => ($r['valid_until'] ?? '') !== '' && $r['plan'] !== 'perpetual' && $r['valid_until'] <= $in60
+        && $r['valid_until'] >= (new DateTimeImmutable($today))->modify('-30 days')->format('Y-m-d')));
+    usort($renewals, static fn ($a, $b) => strcmp((string) $a['valid_until'], (string) $b['valid_until']));
+    $due30 = count(array_filter($renewals, static fn ($r) => $r['valid_until'] >= $today && $r['valid_until'] <= $soon));
+    $renewValue = array_sum(array_map(static fn ($r) => $r['currency'] === 'INR' ? (float) ($r['price'] ?? 0) : 0, $renewals));
+    $op = array_values(array_filter($on, static fn ($r) => $r['deployment'] === 'onprem'));
+    $weekAgo = (new DateTimeImmutable($today))->modify('-7 days')->format('Y-m-d');
+    $dayAgo = (new DateTimeImmutable('now', $tz))->modify('-1 day')->format('Y-m-d H:i:s');
+    $fleet = ['online' => 0, 'silent' => 0, 'pending' => 0];
+    foreach ($op as $r) {
+        $seen = (string) ($r['last_seen_at'] ?? '');
+        $k = ($r['fingerprint'] ?? '') === '' ? 'pending' : ($seen !== '' && $seen >= $dayAgo ? 'online' : ($seen === '' || $seen < $weekAgo ? 'silent' : 'online'));
+        $fleet[$k]++;
+    }
+    $names = array_column($tenants, 'name', 'id');
     $tiles = [
-        ['?p=clients', 'k1', 'fa-building', count($tenants), 'Customers'],
-        ['?p=clients&amp;s=active', 'k2', 'fa-user-tie', $admActive, 'Active administrators'],
-        ['?p=apps', 'k4', 'fa-layer-group', count($plugins), 'Applications'],
-        ['?p=licences&amp;dep=onprem', 'k1', 'fa-server', $kc(static fn ($r) => $r['deployment'] === 'onprem'), 'On-premise licences'],
-        ['?p=licences&amp;dep=cloud', 'k6', 'fa-cloud', $kc(static fn ($r) => $r['deployment'] === 'cloud'), 'Cloud licences'],
-        ['?p=licences&amp;st=on', 'k2', 'fa-circle-check', $kc(static fn ($r) => AmetecsLicences::stateOf($r) === 'on'), 'Active subscriptions'],
-        ['?p=licences&amp;st=expired', 'k3', 'fa-hourglass-end', $kc(static fn ($r) => AmetecsLicences::stateOf($r) === 'expired'), 'Expired subscriptions'],
-        ['?p=releases', 'k5', 'fa-hourglass-half', $pendingInstalls, 'Pending installations'],
-        ['?p=billing&amp;st=pending', 'k5', 'fa-file-invoice', count(AmetecsBilling::invoices('', 'pending')), 'Pending payments'],
-        ['?p=billing', 'k4', 'fa-indian-rupee-sign', '₹' . number_format(AmetecsBilling::revenue()), 'Total revenue'],
-        ['?p=releases', 'k6', 'fa-cloud-arrow-down', $liveReleases, 'Available updates'],
-        ['?p=releases', 'k3', 'fa-triangle-exclamation', AmetecsReleases::countEvents('failed'), 'Failed installations (30 days)'],
-    ]; ?>
-  <?php $tv = array_column(array_map(static fn ($t) => [$t[4], $t], $tiles), 1, 0); ?>
+        'Pending installations' => ['?p=releases', 'fa-hourglass-half', $pendingInstalls, 'amber', 'on-premise servers behind'],
+        'Pending payments' => ['?p=billing&amp;st=pending', 'fa-file-invoice', count($pend), 'amber', $pend !== [] ? ($owed > 0 ? $inr($owed) : count($pend) . ' open') . ($overdue > 0 ? ' · ' . $overdue . ' overdue' : '') : 'all paid'],
+        'Renewals in 30 days' => ['?p=licences&amp;st=expiring', 'fa-calendar-check', $due30, 'blue', 'licences ending soon'],
+        'Expired subscriptions' => ['?p=licences&amp;st=expired', 'fa-hourglass-end', count(array_filter($live, static fn ($r) => AmetecsLicences::stateOf($r) === 'expired')), 'red', 'not renewed'],
+        'Failed installations' => ['?p=releases', 'fa-triangle-exclamation', AmetecsReleases::countEvents('failed'), 'red', 'last 30 days'],
+        'Silent servers' => ['?p=licences&amp;dep=onprem', 'fa-plug-circle-xmark', $fleet['silent'], 'red', 'no check-in for a week'],
+    ];
+    $rm = ($_GET['rm'] ?? '') === '12' ? 12 : 6;
+    $mo = [];
+    for ($k = $rm - 1; $k >= 0; $k--) {
+        $a0 = (new DateTimeImmutable('first day of this month', $tz))->modify("-{$k} months"); $a1 = $a0->modify('+1 month');
+        $q = AmetecsBilling::ready() ? $pdo->prepare("SELECT COALESCE(SUM(amount), 0) FROM ag_payments WHERE status = 'succeeded' AND currency = 'INR' AND created_at >= ? AND created_at < ?") : null;
+        $q?->execute([$a0->format('Y-m-d 00:00:00'), $a1->format('Y-m-d 00:00:00')]);
+        $mo[$a0->format('M y')] = (float) ($q?->fetchColumn() ?: 0);
+    }
+    $mx = max(1, max($mo));
+    $pays = AmetecsBilling::ready() ? $pdo->query("SELECT p.*, i.number, i.tenant_id, i.description FROM ag_payments p JOIN ag_invoices i ON i.id = p.invoice_id ORDER BY p.id DESC LIMIT 6")->fetchAll(\PDO::FETCH_ASSOC) : [];
+    $cloudN = count(array_filter($live, static fn ($r) => $r['deployment'] === 'cloud')); $opN = count($live) - $cloudN;
+    $plans = array_count_values(array_map(static fn ($r) => (string) $r['plan'], $live));
+    $perApp = []; foreach ($live as $r) { $perApp[$r['app']] = [($perApp[$r['app']][0] ?? 0) + 1, ($perApp[$r['app']][1] ?? 0) + (int) $r['seats']]; }
+    $maxSeats = max(1, ...array_values(array_map(static fn ($x) => $x[1], $perApp)) ?: [1]);
+    $adopt = [];
+    foreach ($plugins as $c => $p) {
+        $mine = array_filter($op, static fn ($r) => $r['app'] === $c);
+        if ($mine === []) { continue; }
+        $newest = null; foreach (AmetecsReleases::all($c) as $r) { if ($r['kind'] !== 'plugin' && AmetecsReleases::stateOf($r) === 'published' && ($newest === null || version_compare($r['version'], $newest, '>'))) { $newest = $r['version']; } }
+        $cur = count(array_filter($mine, static fn ($r) => $newest !== null && ($r['app_version'] ?? '') !== '' && version_compare((string) $r['app_version'], $newest, '>=')));
+        $adopt[$c] = [$newest, $cur, count($mine)];
+    }
+    $feed = array_slice(array_values(array_filter(AmetecsData::activity('', 300), static fn ($r) => !in_array($r['what'], ['Signed in', 'Signed out'], true))), 0, 7); ?>
   <section class="hero2">
     <div class="h2t"><span class="eyebrow2"><?= ag_h(date('l, d M Y', (int) strtotime($today))) ?></span>
       <h1><?= $hourNow < 12 ? 'Good morning' : ($hourNow < 17 ? 'Good afternoon' : 'Good evening') ?>, <?= ag_h((string) strtok($myName, ' ')) ?></h1>
-      <p><?= (int) $tv['Cloud licences'][3] ?> cloud and <?= (int) $tv['On-premise licences'][3] ?> on-premise licences across <?= count($plugins) ?> applications.</p>
-      <div class="row"><a class="btn gold" href="?p=client-new"><i class="fas fa-plus"></i>New client</a><a class="btn hghost" href="?p=releases"><i class="fas fa-upload"></i>Publish an update</a><a class="btn hghost" href="?p=billing"><i class="fas fa-file-invoice"></i>New invoice</a></div></div>
-    <div class="h2k"><?php foreach (['Customers', 'Active subscriptions', 'Total revenue', 'Active administrators'] as $lab): [$href, , $ic, $num] = $tv[$lab]; ?>
-      <a href="<?= $href ?>"><i class="fas <?= $ic ?>"></i><b><?= is_string($num) ? ag_h($num) : '<span data-count="' . (int) $num . '">' . (int) $num . '</span>' ?></b><span><?= ag_h($lab) ?></span></a><?php endforeach; ?></div>
+      <p><?= count($tenants) ?> clients &middot; <?= $cloudN ?> cloud and <?= $opN ?> on-premise licences &middot; <?= $admActive ?> client administrators &middot; <?= count($plugins) ?> applications</p>
+      <div class="row"><a class="btn gold" href="?p=client-new"><i class="fas fa-plus"></i>New client</a><a class="btn hghost" href="?p=licences"><i class="fas fa-key"></i>New licence</a><a class="btn hghost" href="?p=releases"><i class="fas fa-upload"></i>Publish an update</a><a class="btn hghost" href="?p=billing"><i class="fas fa-file-invoice"></i>New invoice</a></div></div>
+    <div class="h2k">
+      <a href="?p=clients"><i class="fas fa-building"></i><b><?= count($tenants) ?></b><span>Customers<?= $newClients > 0 ? ' &middot; <em class="up">+' . $newClients . ' this month</em>' : '' ?></span></a>
+      <a href="?p=licences"><i class="fas fa-arrows-rotate"></i><b><?= ag_h($short($mrr)) ?></b><span>Monthly recurring &middot; <?= ag_h($short($mrr * 12)) ?> a year</span></a>
+      <a href="?p=billing"><i class="fas fa-indian-rupee-sign"></i><b><?= ag_h($short($revThis)) ?></b><span>Collected this month<?= $revDelta !== null ? ' &middot; <em class="' . ($revDelta >= 0 ? 'up' : 'down') . '">' . ($revDelta >= 0 ? '▲' : '▼') . abs($revDelta) . '%</em>' : '' ?></span></a>
+      <a href="?p=billing&amp;st=pending"><i class="fas fa-hand-holding-dollar"></i><b><?= ag_h($short($owed)) ?></b><span>Outstanding &middot; <?= count($pend) ?> open<?= $overdue > 0 ? ' &middot; <em class="down">' . $overdue . ' overdue</em>' : '' ?></span></a>
+    </div>
   </section>
-  <section class="actc"><?php foreach (['Pending installations' => 'amber', 'Pending payments' => 'amber', 'Expired subscriptions' => 'red', 'Failed installations (30 days)' => 'red', 'Available updates' => 'blue'] as $lab => $tone): [$href, , $ic, $num] = $tv[$lab]; $zero = (int) $num === 0; ?>
-    <a class="ac2 <?= $zero ? 'zero' : $tone ?>" href="<?= $href ?>"><span class="ai"><i class="fas <?= $ic ?>"></i></span><span><b><?= (int) $num ?></b><small><?= ag_h($lab) ?></small></span><i class="fas fa-chevron-right go"></i></a>
+  <section class="actc six"><?php foreach ($tiles as $lab => [$href, $ic, $num, $tone, $sub]): $zero = (int) $num === 0; ?>
+    <a class="ac2 <?= $zero ? 'zero' : $tone ?>" href="<?= $href ?>"><span class="ai"><i class="fas <?= $ic ?>"></i></span><span><b><?= (int) $num ?></b><small><?= ag_h($lab) ?></small><small class="s2"><?= $sub ?></small></span></a>
   <?php endforeach; ?></section>
-  <div class="dgrid2">
-    <div class="dcol2"><div class="box"><div class="hd"><h2><i class="fas fa-table-cells"></i>Client licences</h2>
-        <span class="lg"><em><span class="chk on"><i class="fas fa-check"></i></span>Live</em><em><span class="chk soon"><i class="fas fa-check"></i></span>Licensed, arriving soon</em><em><span class="chk off"></span>Off</em><em><span class="chk bad"><i class="fas fa-xmark"></i></span>Expired</em></span>
+
+  <div class="dgrid3">
+    <div class="box"><div class="hd"><h2><i class="fas fa-chart-column"></i>Revenue collected</h2>
+      <span class="vsw sm"><a class="<?= $rm === 6 ? 'on' : '' ?>" href="?p=dashboard">6 months</a><a class="<?= $rm === 12 ? 'on' : '' ?>" href="?p=dashboard&amp;rm=12">12 months</a></span></div>
+      <div class="rbars"><?php foreach ($mo as $ml => $mv): ?><div title="<?= ag_h($ml . ': ' . $inr($mv)) ?>"><b><?= $mv > 0 ? ag_h($short($mv)) : '' ?></b><i style="height:<?= max(2, round(100 * $mv / $mx)) ?>%"></i><span><?= ag_h(substr($ml, 0, 3)) ?></span></div><?php endforeach; ?></div>
+      <div class="rfoot"><span>Total <?= $rm ?> months <b><?= ag_h($inr(array_sum($mo))) ?></b></span><span>All time <b><?= ag_h($inr(AmetecsBilling::revenue())) ?></b></span><a href="?p=billing">Billing <i class="fas fa-arrow-right"></i></a></div></div>
+    <div class="box"><div class="hd"><h2><i class="fas fa-chart-pie"></i>Licence mix</h2><span class="muted sm"><?= count($live) ?> licences</span></div><div class="bd">
+      <div class="mixr"><div class="donut2" style="--a:<?= count($live) > 0 ? round(360 * $cloudN / count($live)) : 0 ?>deg"><b><?= count($live) ?></b><small>licences</small></div>
+        <ul class="lg2"><li><i style="background:#c9a24c"></i>Cloud<b><?= $cloudN ?></b></li><li><i style="background:#1c1710"></i>On-premise<b><?= $opN ?></b></li></ul></div>
+      <div class="plans2"><?php foreach (AmetecsLicences::PLANS as $k => $v): $n = (int) ($plans[$k] ?? 0); ?><div><span><?= ag_h($v) ?></span><span class="pbar"><i style="width:<?= count($live) > 0 ? round(100 * $n / count($live)) : 0 ?>%"></i></span><b><?= $n ?></b></div><?php endforeach; ?></div>
+    </div></div>
+  </div>
+
+  <div class="dgrid3">
+    <div class="box"><div class="hd"><h2><i class="fas fa-calendar-check"></i>Renewals pipeline</h2><span class="muted sm">next 60 days and last 30 &middot; <?= ag_h($inr($renewValue)) ?></span><a href="?p=licences&amp;st=expiring" class="more">All <i class="fas fa-arrow-right"></i></a></div>
+      <?php if ($renewals === []): ?><div class="empty"><i class="fas fa-shield-heart"></i>No renewals due in the next 60 days.</div><?php else: ?>
+      <table><tr><th>Client</th><th>App</th><th>Ends</th><th>Value</th><th class="right"></th></tr>
+      <?php foreach (array_slice($renewals, 0, 7) as $r): $days = (int) floor((strtotime((string) $r['valid_until']) - strtotime($today)) / 86400); ?><tr>
+        <td><a href="?p=client&id=<?= (int) $r['tenant_id'] ?>"><b><?= ag_h($names[$r['tenant_id']] ?? '#' . $r['tenant_id']) ?></b></a></td>
+        <td><?= $saMark((string) $r['app'], $plugins[$r['app']] ?? ['color' => '#64748B']) ?> <?= ag_h($plugins[$r['app']]['name'] ?? $r['app']) ?></td>
+        <td><?= $d($r['valid_until']) ?><br><small class="<?= $days < 0 ? 'tred' : ($days <= 30 ? 'tamb' : 'muted') ?>"><?= $days < 0 ? 'ended ' . -$days . ' days ago' : $days . ' days left' ?></small></td>
+        <td><?= (float) ($r['price'] ?? 0) > 0 ? ag_h($r['currency'] . ' ' . number_format((float) $r['price'])) : '<span class="muted">-</span>' ?></td>
+        <td class="right" style="white-space:nowrap"><?php if ((float) ($r['price'] ?? 0) > 0 && AmetecsBilling::ready()): ?><form method="post" class="inline"><?= $csrf() ?><input type="hidden" name="do" value="invoice-new"><input type="hidden" name="licence" value="<?= (int) $r['id'] ?>"><button class="btn ghost" title="Raise renewal invoice"><i class="fas fa-file-invoice"></i>Invoice</button></form><?php endif; ?>
+          <form method="post" class="inline" onsubmit="return confirm('Renew this licence by one period now?')"><?= $csrf() ?><input type="hidden" name="do" value="licence-status"><input type="hidden" name="id" value="<?= (int) $r['id'] ?>"><input type="hidden" name="to" value="renew"><input type="hidden" name="back" value="dashboard"><button class="btn gold"><i class="fas fa-rotate"></i>Renew</button></form></td></tr>
+      <?php endforeach; ?></table><?php endif; ?></div>
+    <div class="box"><div class="hd"><h2><i class="fas fa-receipt"></i>Recent payments</h2><a href="?p=billing" class="more">All <i class="fas fa-arrow-right"></i></a></div>
+      <?php if ($pays === []): ?><div class="empty"><i class="fas fa-receipt"></i>No payments yet.</div><?php else: ?><ul class="pays">
+      <?php foreach ($pays as $py): $ref = $py['status'] === 'refunded'; ?><li><span class="pi <?= $ref ? 'r' : '' ?>"><i class="fas fa-<?= $ref ? 'rotate-left' : 'check' ?>"></i></span>
+        <div><b><?= ag_h($names[$py['tenant_id']] ?? '#' . $py['tenant_id']) ?></b><small><?= ag_h($py['number']) ?> &middot; <?= ag_h(ucfirst((string) $py['gateway'])) ?> &middot; <?= ag_h(date('d M', (int) strtotime((string) $py['created_at']))) ?></small></div>
+        <em class="<?= $ref ? 'r' : '' ?>"><?= $ref ? '−' : '' ?><?= ag_h($py['currency'] . ' ' . number_format((float) $py['amount'])) ?></em></li>
+      <?php endforeach; ?></ul><?php endif; ?></div>
+  </div>
+
+  <div class="dgrid3">
+    <div class="box"><div class="hd"><h2><i class="fas fa-table-cells"></i>Client licences</h2>
+        <span class="lg"><em><span class="chk on"><i class="fas fa-check"></i></span>Live</em><em><span class="chk soon"><i class="fas fa-check"></i></span>Arriving soon</em><em><span class="chk off"></span>Off</em><em><span class="chk bad"><i class="fas fa-xmark"></i></span>Expired</em></span>
         <a href="?p=clients" class="more">All clients <i class="fas fa-arrow-right"></i></a></div>
       <div class="mx"><table class="mxt"><tr><th>Client</th><?php foreach ($plugins as $c => $p): ?><th class="ac" title="<?= ag_h($p['name']) ?>"><?= $saMark($c, $p) ?><small><?= ag_h($p['name']) ?></small></th><?php endforeach; ?><th class="ac">Employees</th><th>Status</th></tr>
       <?php foreach (array_slice($tenants, 0, 8) as $t): $tid = (string) $t['id']; ?><tr>
         <td><a class="cn" href="?p=client&id=<?= (int) $tid ?>"><b><?= ag_h($t['name']) ?></b><small><?= ($t['subdomain'] ?? '') !== '' ? '/c/' . ag_h((string) $t['subdomain']) : 'no sign-in link' ?></small></a></td>
         <?php foreach ($plugins as $c => $p): ?><td class="ac"><?= $chk(AmetecsAccess::state($tid, $c, $all), $p['open'] !== null) ?></td><?php endforeach; ?>
         <td class="ac"><b><?= (int) ($used[$tid] ?? 0) ?></b></td><td><?= $statusPill((string) $t['status_code']) ?></td></tr>
-      <?php endforeach; ?>
-      <?php if ($tenants === []): ?><tr><td colspan="<?= count($plugins) + 3 ?>"><div class="empty"><i class="fas fa-building"></i>No clients yet.</div></td></tr><?php endif; ?></table></div>
-      <?php if ($att !== []): ?><div class="attn"><b><i class="fas fa-triangle-exclamation"></i>Needs attention</b>
-        <?php foreach (array_slice($att, 0, 4) as [$t, $p, $u]): ?><a href="?p=client&id=<?= (int) $t['id'] ?>#apps"><?= ag_h($t['name']) ?> &middot; <?= ag_h($p['name']) ?> &middot; <?= $d($u) ?> <?= $u < $today ? '<span class="pill red">Expired</span>' : '<span class="pill amber">Soon</span>' ?></a><?php endforeach; ?></div>
-      <?php else: ?><div class="attn ok"><i class="fas fa-shield-heart"></i>All licences are valid for the next 30 days.</div><?php endif; ?>
-    </div>
-      <div class="box"><div class="hd"><h2><i class="fas fa-bolt"></i>Latest activity</h2><a href="?p=activity" class="more">All <i class="fas fa-arrow-right"></i></a></div>
-        <?php $feed = AmetecsData::activity('', 5); $names = array_column($tenants, 'name', 'id'); ?>
-        <?php if ($feed === []): ?><div class="empty"><i class="fas fa-wind"></i>No activity yet.</div><?php else: ?>
-        <ul class="feed"><?php foreach ($feed as $r): ?>
-          <li><span class="fd"></span><div><div class="ft2"><?= ag_h($r['what']) ?><?= ($r['tenant'] ?? '') !== '' ? ' &middot; <a href="?p=client&id=' . (int) $r['tenant'] . '">' . ag_h($names[$r['tenant']] ?? '#' . $r['tenant']) . '</a>' : '' ?></div>
-            <div class="fm"><?= ag_h($r['who']) ?> &middot; <time data-at="<?= ag_h($r['at']) ?>"><?= ag_h($r['at']) ?></time></div></div></li>
-        <?php endforeach; ?></ul><?php endif; ?></div>
-    </div>
-    <div class="dcol2">
-      <?php if (AmetecsBilling::ready()): $mo = []; $tz = new DateTimeZone('Asia/Kolkata');
-          for ($k = 5; $k >= 0; $k--) { $m0 = (new DateTimeImmutable('first day of this month', $tz))->modify("-{$k} months"); $m1 = $m0->modify('+1 month');
-              $q = $pdo->prepare("SELECT COALESCE(SUM(amount), 0) FROM ag_payments WHERE status = 'succeeded' AND currency = 'INR' AND created_at >= ? AND created_at < ?");
-              $q->execute([$m0->format('Y-m-d 00:00:00'), $m1->format('Y-m-d 00:00:00')]); $mo[$m0->format('M')] = (float) $q->fetchColumn(); }
-          $mx = max(1, max($mo)); ?>
-      <div class="box"><div class="hd"><h2><i class="fas fa-chart-column"></i>Revenue, last 6 months</h2><a href="?p=billing" class="more">Billing <i class="fas fa-arrow-right"></i></a></div>
-        <div class="bars"><?php foreach ($mo as $ml => $mv): ?><div title="₹<?= number_format($mv) ?>"><b><?= $mv > 0 ? '₹' . ($mv >= 100000 ? round($mv / 100000, 1) . 'L' : ($mv >= 1000 ? round($mv / 1000, 1) . 'k' : number_format($mv))) : '' ?></b><i data-h="<?= round($mv * 100 / $mx) ?>" style="height:0"></i><small><?= $ml ?></small></div><?php endforeach; ?></div></div>
-      <?php endif; ?>
-      <div class="box"><div class="hd"><h2><i class="fas fa-puzzle-piece"></i>Licences by app</h2><span class="muted sm">clients &middot; seats</span></div>
-        <ul class="apl"><?php foreach ($plugins as $c => $p): ?><li><?= $saMark($c, $p) ?><span class="an"><?= ag_h($p['name']) ?><small><?= $p['open'] !== null ? 'Live' : 'Arriving soon' ?></small></span>
-          <span class="av2"><b><?= $perApp[$c] ?></b> &middot; <?= $seatsApp[$c] ?></span></li><?php endforeach; ?></ul></div>
-    </div>
+      <?php endforeach; ?><?php if ($tenants === []): ?><tr><td colspan="<?= count($plugins) + 3 ?>"><div class="empty"><i class="fas fa-building"></i>No clients yet.</div></td></tr><?php endif; ?></table></div></div>
+    <div class="box"><div class="hd"><h2><i class="fas fa-layer-group"></i>Licences by app</h2><span class="muted sm">clients &middot; seats</span></div>
+      <ul class="apl2"><?php foreach ($plugins as $c => $p): [$cn, $sn] = $perApp[$c] ?? [0, 0]; ?><li><?= $saMark($c, $p) ?><div><span class="an"><?= ag_h($p['name']) ?><small><?= $p['open'] !== null ? 'Live' : 'Arriving soon' ?></small></span><span class="pbar"><i style="width:<?= max(1, round(100 * $sn / $maxSeats)) ?>%;background:<?= ag_h((string) $p['color']) ?>"></i></span></div><b><?= $cn ?><small> · <?= $sn ?></small></b></li><?php endforeach; ?></ul></div>
+  </div>
+
+  <div class="dgrid3">
+    <div class="box"><div class="hd"><h2><i class="fas fa-server"></i>On-premise servers</h2><span class="muted sm"><?= count($op) ?> active on-premise licences</span></div><div class="bd">
+      <div class="fleet"><a href="?p=licences&amp;dep=onprem"><b class="g"><?= $fleet['online'] ?></b><span>Checked in this week</span></a><a href="?p=licences&amp;dep=onprem"><b class="r"><?= $fleet['silent'] ?></b><span>Silent for a week+</span></a><a href="?p=licences&amp;dep=onprem"><b class="a"><?= $fleet['pending'] ?></b><span>Not activated yet</span></a></div>
+      <?php if ($adopt !== []): ?><div class="adopt"><b class="sm">On the newest version</b><?php foreach ($adopt as $c => [$nv, $cur, $tot]): ?><div><span><?= ag_h($plugins[$c]['name']) ?> <small><?= $nv !== null ? ag_h($nv) : 'no release yet' ?></small></span><span class="pbar"><i style="width:<?= $tot > 0 ? round(100 * $cur / $tot) : 0 ?>%"></i></span><b><?= $cur ?>/<?= $tot ?></b></div><?php endforeach; ?></div>
+      <?php else: ?><p class="muted" style="margin:12px 0 0;font-size:13px">No on-premise installations yet.</p><?php endif; ?></div></div>
+    <div class="box"><div class="hd"><h2><i class="fas fa-bolt"></i>Latest changes</h2><a href="?p=activity" class="more">All <i class="fas fa-arrow-right"></i></a></div>
+      <?php if ($feed === []): ?><div class="empty"><i class="fas fa-wind"></i>No changes yet.</div><?php else: ?>
+      <ul class="feed"><?php foreach ($feed as $r): ?>
+        <li><span class="fd"></span><div><div class="ft2"><?= ag_h($r['what']) ?><?= ($r['tenant'] ?? '') !== '' ? ' &middot; <a href="?p=client&id=' . (int) $r['tenant'] . '">' . ag_h($names[$r['tenant']] ?? '#' . $r['tenant']) . '</a>' : '' ?></div>
+          <div class="fm"><?= ag_h($r['who']) ?> &middot; <time data-at="<?= ag_h($r['at']) ?>"><?= ag_h($r['at']) ?></time></div></div></li>
+      <?php endforeach; ?></ul><?php endif; ?></div>
   </div>
 <?php elseif ($page === 'clients'):
     $q = strtolower(trim((string) ($_GET['q'] ?? '')));
