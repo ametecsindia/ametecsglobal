@@ -1,5 +1,5 @@
 {
-  "_how": "One block per application. SYNC.bat copies every block's 'source' into its own folder 'target' (plugins/<app>, inside AmetecsGlobal). The source is only read, never changed. 'skipFolders'/'skipFiles' are left out of the copy. 'fixes' are text replacements made in the COPY after every sync, so the copy never touches the source app's database, accounts or folders. To add an app: copy the SmartPRS3 block, change name/source/target (e.g. plugins\\smartept) and its fixes. 'mustContain' = text that must be in the copy after the fixes (the AmetecsGlobal hooks); the sync FAILS if it is missing. 'git' = the AmetecsGlobal GitHub repository this folder is kept in step with; 'neverPush' = files that may never be uploaded (the sync stops if one is about to be). The PC that has an app's 'source' folder brings it in; a PC without it receives the app through GitHub. 'database' = how to bring THIS PC's own database up to date when the app's database changes arrive (run from the app's folder).",
+  "_how": "One block per plugin. plugins/<app> inside AmetecsGlobal is the MASTER copy and is edited here; the original app folder ('source', kept only for the record) is never read or touched again (owner, 17 Nov 2026). 'fixes' = the AmetecsGlobal hooks, re-applied by the sync if a plugin update replaced them; 'mustContain'/'mustNotContain' = checked every sync, nothing is pushed if they fail. 'install' = commands run once per PC; composer, .env and database tables are handled for every plugin automatically. 'git' = the AmetecsGlobal repository; 'neverPush' = files that may never be uploaded.",
   "apps": [
     {
       "name": "SmartPRS3",
@@ -292,6 +292,27 @@
           ],
           "find": "        if ($code === '' || $name === '') {\n            $problem = 'An employee needs a code and a name.';\n        } elseif",
           "replace": "        // AmetecsGlobal: every employee needs a valid email ID (it is their login) - add and edit alike.\n        $agMail = isset($_POST['f_email']) ? trim(post('f_email')) : trim((string) ($existingRow['email'] ?? ''));\n        if ($code === '' || $name === '') {\n            $problem = 'An employee needs a code and a name.';\n        } elseif (filter_var($agMail, FILTER_VALIDATE_EMAIL) === false) {\n            $problem = $agMail === '' ? 'Enter the employee\\'s email ID - it is their login. Not saved.'\n                : '\"' . $agMail . '\" is not a valid email ID. Correct it and save again. Not saved.';\n        } elseif"
+        },
+        {
+          "files": [
+            "public\\app.php"
+          ],
+          "find": "                } elseif (($soHrProblems = employeeFieldProblems($selfOnboarding->hrOnly($employeeFields->inUse()), $employeeImport)) !== []) {",
+          "replace": "                } elseif (filter_var(trim((string) ((SelfOnboarding::data($soTarget)['columns']['email'] ?? '') ?: ($soTarget['email'] ?? ''))), FILTER_VALIDATE_EMAIL) === false) {\n                    $problem = 'Not injected - the joiner needs a valid email ID (it is their login). Correct it with Edit on the invitation first.';   // AmetecsGlobal: email required\n                } elseif (($soHrProblems = employeeFieldProblems($selfOnboarding->hrOnly($employeeFields->inUse()), $employeeImport)) !== []) {"
+        },
+        {
+          "files": [
+            "surface\\SelfOnboarding.php"
+          ],
+          "find": "        if ($submit && $missing !== []) {",
+          "replace": "        // AmetecsGlobal: every employee needs an email ID (their login) - asked on the form, or the invitation's own.\n        if (in_array('email', array_map(static fn (array $f): string => (string) ($f['column'] ?? ''), $fields), true)\n            && trim((string) ($data['columns']['email'] ?? '')) === '' && trim((string) ($row['email'] ?? '')) === '') {\n            $missing[] = 'Email ID';\n        }\n\n        if ($submit && $missing !== []) {"
+        },
+        {
+          "files": [
+            "surface\\EmployeeImport.php"
+          ],
+          "find": "                foreach (OrgConsistency::problems($this->store, $after) as $orgProblem) {",
+          "replace": "                if (trim((string) ($after['email'] ?? '')) === '') {   // AmetecsGlobal: email ID required (it is the login)\n                    $row['problems'][] = 'Email ID is required (it is the employee\\'s login), and this row has none.';\n                }\n\n                foreach (OrgConsistency::problems($this->store, $after) as $orgProblem) {"
         }
       ],
       "makeEnvFromExample": true,
@@ -370,6 +391,24 @@
             "public\\app.php"
           ],
           "text": "FILTER_VALIDATE_EMAIL) === false) {\n            $problem = $agMail"
+        },
+        {
+          "files": [
+            "public\\app.php"
+          ],
+          "text": "Not injected - the joiner needs a valid email ID"
+        },
+        {
+          "files": [
+            "surface\\SelfOnboarding.php"
+          ],
+          "text": "AmetecsGlobal: every employee needs an email ID (their login)"
+        },
+        {
+          "files": [
+            "surface\\EmployeeImport.php"
+          ],
+          "text": "AmetecsGlobal: email ID required (it is the login)"
         }
       ],
       "database": {
@@ -379,7 +418,10 @@
           "tools/db/grant-application-account.php --apply"
         ]
       },
-      "_attendance": "QR attendance, mobile devices and biometric are AmetecsGlobal core modules (core/attendance). These files are no longer copied from SmartPRS3; plugins/smartprs3 holds one-line pointers to the core copies, which are the masters."
+      "_attendance": "QR attendance, mobile devices and biometric are AmetecsGlobal core modules (core/attendance). These files are no longer copied from SmartPRS3; plugins/smartprs3 holds one-line pointers to the core copies, which are the masters.",
+      "install": [
+        "tools/db/bootstrap-local.php --if-broken"
+      ]
     }
   ],
   "git": {

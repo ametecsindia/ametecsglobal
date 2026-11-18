@@ -1,14 +1,13 @@
 # AmetecsGlobal sync. Run through SYNC.bat (one click) or AUTO-SYNC.bat (automatic).
 #
-#   1. APPS IN   every app in sync-apps.json is copied in from its own folder (that folder is ONLY read),
-#                then the app's fixes are applied so the copy never uses the app's own database or folders.
+#   1. PLUGINS   plugins/<app> is the master copy, edited here; the original app folders are never read (17 Nov 2026).
+#                The AmetecsGlobal fixes are re-applied if missing and the hooks are checked before anything is pushed.
 #   2. GITHUB    this folder <-> the AmetecsGlobal repository (sync-apps.json "git"): local changes are
 #                committed, GitHub's changes are merged in, everything is pushed. A guard refuses to push
 #                passwords, client data or keys (the repository is public).
 #
 # Writes ONLY inside this folder and to the AmetecsGlobal repository. No other folder, repository or setting.
-# ponytail: copies new/changed files only and never deletes here (no /PURGE), so AmetecsGlobal-only files survive.
-param([string]$Only = '', [switch]$NoCopy, [switch]$NoGit)
+param([string]$Only = '', [switch]$NoGit)
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $cfg = Get-Content -Raw -Path (Join-Path $root 'sync-apps.json') | ConvertFrom-Json
@@ -21,113 +20,39 @@ $failed = 0
 $mutex = New-Object System.Threading.Mutex($false, 'AmetecsGlobalSync')
 if (-not $mutex.WaitOne([TimeSpan]::FromMinutes(5))) { Say 'Another sync is still running - skipped.'; exit 1 }
 
-# Copy new or changed files (robocopy on Windows; this plain copy where robocopy is missing). Never deletes.
-function Copy-Newer([string]$from, [string]$to, $skipFolders, $skipFiles) {
-  if (Get-Command robocopy -ErrorAction SilentlyContinue) {
-    $xd = @($skipFolders | ForEach-Object { Join-Path $from $_ })
-    # /XO: a file already newer here (an applied fix, or a change pulled from GitHub) is kept until the app changes it again.
-    $rc = @($from, $to, '/E', '/XO', '/R:1', '/W:1', '/NFL', '/NDL', '/NP', '/NJH', '/NJS', '/XD') + $xd + @('/XF') + @($skipFiles)
-    & robocopy @rc | Out-Null
-    if ($LASTEXITCODE -ge 8) { throw "copy failed (robocopy code $LASTEXITCODE)" }
-    return [bool]($LASTEXITCODE -band 1)
-  }
-  $skipD = @($skipFolders | ForEach-Object { ($_ -replace '[\\/]', '/').TrimEnd('/') + '/' })
-  $n = 0
-  foreach ($f in Get-ChildItem -LiteralPath $from -Recurse -File -Force) {
-    $rel = $f.FullName.Substring($from.Length).TrimStart('\', '/') -replace '\\', '/'
-    if (@($skipD | Where-Object { $rel.StartsWith($_, 'OrdinalIgnoreCase') }).Count -or @($skipFiles | Where-Object { $f.Name -like $_ }).Count) { continue }
-    $t = Join-Path $to $rel
-    if (-not (Test-Path -LiteralPath $t) -or (Get-Item -LiteralPath $t -Force).LastWriteTimeUtc -lt $f.LastWriteTimeUtc) {
-      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $t) | Out-Null
-      Copy-Item -LiteralPath $f.FullName -Destination $t -Force; $n++
-    }
-  }
-  return $n -gt 0
-}
-
 try {
-# ------------------------------------------------------------------ one-time move to the plugin layout
-# Until 17 Nov 2026 SmartPRS3's files sat in the AmetecsGlobal root and the core in global/. Now every app has its own
-# folder (plugins/<app>) and the core is core/. Everything is MOVED inside this folder (its .env, storage and uploads
-# included, so the database and logins carry on); only the files the sync re-creates from the app are refreshed.
-$prs = @($cfg.apps | Where-Object { $_.target -eq 'plugins/smartprs3' })[0]
-if ($prs -and (Test-Path (Join-Path $root 'surface')) -and (Test-Path (Join-Path (Join-Path $root 'public') 'app.php'))) {
-  $to = Join-Path $root 'plugins/smartprs3'
-  New-Item -ItemType Directory -Force -Path $to | Out-Null
-  $names = @('.env', '.env.bak', '.env.example', 'env-local.txt', 'CLAUDE.md', 'README.md', 'composer.json', 'composer.lock', 'config', 'database',
-    'deploy', 'deptrac.layers.yaml', 'deptrac.modules.yaml', 'deptrac.yaml', 'docs', 'laragon-setup.bat', 'make-client-package.bat', 'make-release.bat',
-    'mobile', 'packs', 'phpstan.neon', 'public', 'src', 'storage', 'surface', 'tests', 'tools', 'vendor', 'node_modules', '.phpunit.cache')
-  if (Test-Path $prs.source) { $names += @(Get-ChildItem -Force -LiteralPath $prs.source | Where-Object { $_.Name -notin @('.git', '.gitignore') } | ForEach-Object { $_.Name }) }
-  $moved = 0
-  foreach ($n in ($names | Select-Object -Unique)) {
-    $from = Join-Path $root $n
-    if ((Test-Path -LiteralPath $from) -and -not (Test-Path -LiteralPath (Join-Path $to $n))) { Move-Item -LiteralPath $from -Destination (Join-Path $to $n); $moved++ }
-  }
-  # The files the sync patches are taken fresh from the app on THIS pc (if it brings the app in), so they get the new paths.
-  if (Test-Path $prs.source) { foreach ($fx in $prs.fixes) { foreach ($rel in $fx.files) { $f = Join-Path $to $rel; if (Test-Path $f) { Remove-Item -LiteralPath $f -Force } } } }
-  Say "== moved SmartPRS3 ($moved items) into plugins/smartprs3"
-}
-$oldCore = Join-Path $root 'global'
-if (Test-Path (Join-Path $oldCore 'super.php')) {
-  $newData = Join-Path (Join-Path $root 'core') 'data'
-  New-Item -ItemType Directory -Force -Path $newData | Out-Null
-  if (Test-Path (Join-Path $oldCore 'data')) { foreach ($f in Get-ChildItem -Force -LiteralPath (Join-Path $oldCore 'data')) { if (-not (Test-Path (Join-Path $newData $f.Name))) { Move-Item -LiteralPath $f.FullName -Destination (Join-Path $newData $f.Name) } } }
-  Remove-Item -LiteralPath $oldCore -Recurse -Force
-  Say '== moved global/ (clients, licences, activity) into core/'
-}
-
+# NO COPY FROM THE SOURCE APPS (owner, 17 Nov 2026): plugins/<app> inside AmetecsGlobal IS the master copy and is
+# edited here. The original folders (C:\laragon\www\SmartPRS3 etc.) are never read or touched again. Plugins will take
+# their own releases through "Check for updates" (under each plugin's licence information) from that plugin's central.
+# Each sync still re-applies the AmetecsGlobal fixes (they are skipped when already in place - they matter again after
+# a plugin update replaces files) and refuses to push if a plugin lost its AmetecsGlobal hooks.
 foreach ($app in $cfg.apps) {
   if ($Only -and $app.name -ne $Only) { continue }
-  # THE PC THAT HAS THE APP'S FOLDER BRINGS IT IN. A PC without that folder gets the app through GitHub.
-  if (-not (Test-Path -LiteralPath $app.source)) {
-    Say "== $($app.name): its folder ($($app.source)) is not on this PC - this PC gets it through GitHub."
-    continue
-  }
   try {
-    $src = (Resolve-Path $app.source).Path.TrimEnd('\','/')
     $dst = [IO.Path]::GetFullPath((Join-Path $root $app.target)).TrimEnd('\','/')
-    $rootFull = [IO.Path]::GetFullPath($root).TrimEnd('\','/')
-    # Safety: the target must be inside AmetecsGlobal, and source and target must not overlap.
-    if (-not ($dst -eq $rootFull -or $dst.StartsWith($rootFull + [IO.Path]::DirectorySeparatorChar))) { throw "target '$dst' is outside AmetecsGlobal" }
-    if ($dst.StartsWith($src, 'OrdinalIgnoreCase') -or $src.StartsWith($dst, 'OrdinalIgnoreCase')) { throw "source and target overlap ($src / $dst)" }
-    Say "== $($app.name): $src  ->  $dst"
-
-    if (-not $NoCopy) {
-      New-Item -ItemType Directory -Force -Path $dst | Out-Null
-      if (Copy-Newer $src $dst $app.skipFolders $app.skipFiles) { Say '  copied new or changed files' }
-    }
-
+    if (-not (Test-Path -LiteralPath $dst)) { continue }
     foreach ($fx in $app.fixes) {
       foreach ($rel in $fx.files) {
         $f = Join-Path $dst $rel
-        if (-not (Test-Path $f)) { if (-not $fx.optional) { Say "  WARN  $rel not found" }; continue }
+        if (-not (Test-Path $f)) { continue }
         $text = [IO.File]::ReadAllText($f)
         if (-not $fx.regex -and $text.Contains($fx.replace)) { continue }   # already applied: never apply twice
         $new = if ($fx.regex) { [regex]::Replace($text, $fx.find, $fx.replace) } else { $text.Replace($fx.find, $fx.replace) }
-        if ($new -ne $text) { [IO.File]::WriteAllText($f, $new, $utf8); Say "  fixed $rel" }
-        elseif (-not $fx.regex -and -not $fx.optional) { Say "  WARN  rule no longer matches in $rel : $($fx.find)" }
+        if ($new -ne $text) { [IO.File]::WriteAllText($f, $new, $utf8); Say "  $($app.name): re-applied the AmetecsGlobal fix in $rel" }
       }
     }
-
-    if ($app.makeEnvFromExample) {
-      $env = Join-Path $dst '.env'; $ex = Join-Path $dst '.env.example'
-      if (-not (Test-Path $env) -and (Test-Path $ex)) { Copy-Item $ex $env; Say "  made .env from .env.example" }
-    }
-
-    # Last line of defence: refuse to finish if the copy still points at the source app.
     foreach ($chk in $app.mustNotContain) {
       foreach ($rel in $chk.files) {
         $f = Join-Path $dst $rel
-        if ((Test-Path $f) -and ([regex]::IsMatch([IO.File]::ReadAllText($f), $chk.pattern))) { throw "$rel still points at the source app - NOT safe to run setup. Tell Claude." }
+        if ((Test-Path $f) -and ([regex]::IsMatch([IO.File]::ReadAllText($f), $chk.pattern))) { throw "$rel points at the original app's database - NOT safe. Tell Claude." }
       }
     }
     foreach ($chk in $app.mustContain) {
       foreach ($rel in $chk.files) {
         $f = Join-Path $dst $rel
-        if (-not (Test-Path $f) -or -not [IO.File]::ReadAllText($f).Contains($chk.text)) { throw "$rel is missing the AmetecsGlobal hook ($($chk.text)) - the app changed. Tell Claude." }
+        if (-not (Test-Path $f) -or -not [IO.File]::ReadAllText($f).Contains($chk.text)) { throw "$rel is missing the AmetecsGlobal hook ($($chk.text)). Tell Claude." }
       }
     }
-    Say "   OK  $($app.name) synced"
   } catch { $failed++; Say "  FAILED $($app.name): $($_.Exception.Message)" }
 }
 
@@ -200,6 +125,58 @@ if (-not $NoGit -and $cfg.git -and $cfg.git.remote -and $failed -gt 0) {
     }
     Say '   OK  GitHub in step'
   } catch { $failed++; Say "  FAILED GitHub: $($_.Exception.Message)" }
+}
+
+# ------------------------------------------------------------------ every plugin runnable on THIS PC
+# A plugin that arrived through GitHub (tested on the other PC) has its code but not this PC's own parts: its .env,
+# its PHP libraries (vendor) and its database. Each sync makes every plugin folder runnable, whichever PC brought it in:
+#   .env from .env.example once; composer install whenever composer.lock changes; the app's "install" commands once
+#   (creates the database and its accounts); the database step below then builds its tables.
+$phpExe = (Get-Command php -ErrorAction SilentlyContinue).Source
+if (-not $phpExe) { $phpExe = @(Get-ChildItem 'C:\laragon\bin\php\*\php.exe' -ErrorAction SilentlyContinue | Sort-Object FullName -Descending | Select-Object -First 1).FullName }
+$composer = (Get-Command composer -ErrorAction SilentlyContinue).Source
+if (-not $composer -and (Test-Path 'C:\laragon\bin\composer\composer.phar')) { $composer = 'C:\laragon\bin\composer\composer.phar' }
+function Run-In([string]$dir, [string]$exe, [string[]]$argv) {
+  $ErrorActionPreference = 'Continue'
+  Push-Location $dir
+  $out = if ($exe -like '*.phar') { & $phpExe $exe @argv 2>&1 | ForEach-Object { "$_" } } else { & $exe @argv 2>&1 | ForEach-Object { "$_" } }
+  $code = $LASTEXITCODE
+  Pop-Location
+  $ErrorActionPreference = 'Stop'
+  if ($code -ne 0) { throw ("'" + ($argv -join ' ') + "' failed: " + (($out | Select-Object -Last 3) -join ' ')) }
+}
+foreach ($app in $cfg.apps) {
+  if ($Only -and $app.name -ne $Only) { continue }
+  $dir = [IO.Path]::GetFullPath((Join-Path $root $app.target))
+  if (-not (Test-Path -LiteralPath $dir)) { continue }
+  $tag = ($app.name -replace '[^A-Za-z0-9]', '')
+  $dataDir = Join-Path $root 'core/data'
+  New-Item -ItemType Directory -Force -Path $dataDir | Out-Null
+  try {
+    $env = Join-Path $dir '.env'; $ex = Join-Path $dir '.env.example'
+    if (-not (Test-Path $env) -and (Test-Path $ex)) { Copy-Item $ex $env; Say "== $($app.name): made this PC's .env from .env.example" }
+    $lock = Join-Path $dir 'composer.lock'
+    if (Test-Path $lock) {
+      $want = (Get-FileHash -LiteralPath $lock -Algorithm SHA256).Hash
+      $seenF = Join-Path $dataDir "composer-$tag.txt"
+      $have = if (Test-Path $seenF) { [IO.File]::ReadAllText($seenF).Trim() } else { '' }
+      if ($want -ne $have -or -not (Test-Path (Join-Path $dir 'vendor/autoload.php'))) {
+        if (-not $composer -or -not $phpExe) { throw 'Composer / PHP not found (start Laragon) - its PHP libraries could not be installed.' }
+        Say "== $($app.name): installing its PHP libraries on this PC (composer install)"
+        Run-In $dir $composer @('install', '--no-interaction', '--no-progress')
+        [IO.File]::WriteAllText($seenF, $want, $utf8)
+        Say "   OK  $($app.name) libraries installed"
+      }
+    }
+    $doneF = Join-Path $dataDir "installed-$tag.txt"
+    if ($app.install -and -not (Test-Path $doneF)) {
+      if (-not $phpExe) { throw 'PHP was not found (start Laragon), so the plugin could not be set up on this PC.' }
+      Say "== $($app.name): first time on this PC - setting up its database"
+      foreach ($cmd in $app.install) { Run-In $dir $phpExe @($cmd -split ' ') }
+      [IO.File]::WriteAllText($doneF, (Get-Date -Format s), $utf8)
+      Say "   OK  $($app.name) set up on this PC"
+    }
+  } catch { $failed++; Say "  FAILED $($app.name) setup on this PC: $($_.Exception.Message)" }
 }
 
 # ------------------------------------------------------------------ this PC's own database

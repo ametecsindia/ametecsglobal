@@ -323,6 +323,10 @@ final class EmployeeImport
                     ? array_merge((array) ($existing[$lower] ?? []), array_filter($row['values'], static fn ($v): bool => $v !== null && $v !== ''))
                     : $row['values'];
 
+                if (trim((string) ($after['email'] ?? '')) === '') {   // AmetecsGlobal: email ID required (it is the login)
+                    $row['problems'][] = 'Email ID is required (it is the employee\'s login), and this row has none.';
+                }
+
                 foreach (OrgConsistency::problems($this->store, $after) as $orgProblem) {
                     $row['problems'][] = $orgProblem;
                 }

@@ -305,6 +305,12 @@ final class SelfOnboarding
         }
         $progress = $askable === 0 ? 100 : intdiv($filled * 100, $askable);
 
+        // AmetecsGlobal: every employee needs an email ID (their login) - asked on the form, or the invitation's own.
+        if (in_array('email', array_map(static fn (array $f): string => (string) ($f['column'] ?? ''), $fields), true)
+            && trim((string) ($data['columns']['email'] ?? '')) === '' && trim((string) ($row['email'] ?? '')) === '') {
+            $missing[] = 'Email ID';
+        }
+
         if ($submit && $missing !== []) {
             $this->store->put(self::COLLECTION, ['id' => $row['id'], 'data' => json_encode($data), 'progress' => $progress, 'status' => self::DRAFT]);
 

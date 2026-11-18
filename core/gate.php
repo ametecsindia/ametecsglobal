@@ -57,6 +57,9 @@ if (!$superConsole) {
             $agStop('Settings and the employee master are managed centrally, in AmetecsGlobal Organization Setup.');
         }
         $agAction = (string) ($_POST['action'] ?? '');
+        if ($agPost) {
+            register_shutdown_function([AmetecsLogins::class, 'syncAfterSave']);   // a login for every saved employee, straight away
+        }
         $agModuleKind = str_starts_with($agAction, 'module-') ? AmetecsSetup::kind(AmetecsSetup::screenOf('m', (string) ($_POST['k'] ?? $_GET['k'] ?? ''))) : '';
         if (!$agFramed && $agPost && (in_array($agAction, AmetecsSetup::MASTER_ACTIONS, true) || in_array($agAction, AmetecsSetup::DEVICE_ACTIONS, true) || $agModuleKind === 'master')) {
             $agStop('Employees are added and changed centrally, in AmetecsGlobal Organization Setup.');

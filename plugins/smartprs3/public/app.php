@@ -6860,6 +6860,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $problem = 'Only a submitted form can be approved.';
                 } elseif (post('all_verified') !== '1') {
                     $problem = 'Tick that you have verified the submitted fields.';
+                } elseif (filter_var(trim((string) ((SelfOnboarding::data($soTarget)['columns']['email'] ?? '') ?: ($soTarget['email'] ?? ''))), FILTER_VALIDATE_EMAIL) === false) {
+                    $problem = 'Not injected - the joiner needs a valid email ID (it is their login). Correct it with Edit on the invitation first.';   // AmetecsGlobal: email required
                 } elseif (($soHrProblems = employeeFieldProblems($selfOnboarding->hrOnly($employeeFields->inUse()), $employeeImport)) !== []) {
                     $problem = 'Not injected — fix these first: ' . implode(' ', $soHrProblems);
                 } else {

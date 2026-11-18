@@ -29,7 +29,7 @@ final class AmetecsSetup
             'Employee fields' => ['employee-fields', '', 'fa-list-check'],
         ],
         'Logins & access' => [
-            'Users & passwords' => ['users', '', 'fa-user-shield'],
+            'User Management' => ['users', '', 'fa-user-shield'],
             'Mobile devices' => ['mobile-devices', '', 'fa-mobile-screen'],
         ],
         'Attendance devices' => [
@@ -43,7 +43,7 @@ final class AmetecsSetup
     /** Saves that change the employee master: refused unless they come from Organization Setup. */
     public const MASTER_ACTIONS = ['add-employee', 'update-employee', 'save-employee-fields', 'add-employee-field',
         'import-preview', 'import-commit', 'employee-delete', 'employee-rejoin', 'employee-status',
-        'add-user', 'bind-user', 'reset-employee-password'];
+        'add-user', 'bind-user', 'reset-employee-password', 'employee-import-sample', 'employee-delete-cancel'];
 
     /** Shown in the app too (the directory is a view every app needs); only adding/editing is central. */
     /** Shown in the app too: the employee directory is a view every app needs; only adding/editing is central. */
@@ -70,6 +70,9 @@ final class AmetecsSetup
         }
         if ($r === 'employees' && isset($get['edit'])) {
             return 'employee-edit';
+        }
+        if ($r === 'employees' && isset($get['add'])) {
+            return 'add-employee';   // ?r=employees&add=1 is the Add form, not the directory
         }
         return $r;
     }
@@ -100,7 +103,12 @@ final class AmetecsSetup
         if ($framed) {
             return '<style>.sidebar,.topbar{display:none!important}.main-wrap{margin-left:0!important}</style>';
         }
-        return '<style>.topbar a[href="index.php"]{display:none!important}'
+        // Hidden by the server's own CSS, so nothing depends on the script below running: every way to add, import,
+        // edit or bulk-upload employees inside the app (the Directory stays view and reports only).
+        return '<style>.topbar a[href="index.php"],#add-employment,#add-employee-link,.dir-empty-acts,'
+            . 'a[href*="#add-employment"],a[href*="add=1"],a[href*="r=employee-import"],a[href*="edit="][href*="r=employees"],'
+            . 'form:has(input[name=action][value="employee-import-sample"]),form:has(input[name=action][value="employee-status"]),'
+            . 'form:has(input[name=action][value="employee-delete"]),form:has(input[name=action][value="employee-delete-cancel"]){display:none!important}'
             . '#ag-back{display:flex;align-items:center;gap:8px;margin:10px 14px 4px;padding:8px 12px;border-radius:8px;background:rgba(255,255,255,.1);'
             . 'color:#fff;font:600 13px system-ui,sans-serif;text-decoration:none}#ag-back:hover{background:rgba(255,255,255,.18)}</style>';
     }
@@ -210,5 +218,75 @@ final class AmetecsAppAccess
             if (!self::resolve($rules, $e)[0]) { $off[] = (int) $e['id']; }
         }
         return $off;
+    }
+}
+
+/**
+ * EVERY EMPLOYEE GETS A LOGIN THE MOMENT THEY ARE SAVED (owner, 17 Nov 2026). Before, logins were made only when
+ * someone opened User Management. Now, after any save in any app (add, edit, import, self-onboarding approval),
+ * each employee with an email and no login gets one - SmartPRS3's own rules: an unlinked login on the same email
+ * is linked, the role follows the designation, an inactive employee's login starts disabled.
+ * DEFAULT PASSWORD (User Management, per client, per PC like the rest of core/data): set = new logins get it and
+ * can sign in straight away; not set = a random one, and User Management -> Reset password gives them theirs.
+ */
+final class AmetecsLogins
+{
+    private const FILE = __DIR__ . '/data/user-management.json';
+
+    public static function defaultPassword(string $tenant): ?string
+    {
+        $all = is_file(self::FILE) ? (json_decode((string) file_get_contents(self::FILE), true) ?: []) : [];
+        $enc = (string) ($all[$tenant]['default_password'] ?? '');
+        return $enc === '' ? null : \SmartPRS\Surface\Secret::decrypt($enc, AG_BASE . '/.env');
+    }
+
+    /** $plain = '' clears it. */
+    public static function setDefaultPassword(string $tenant, string $plain): void
+    {
+        $all = is_file(self::FILE) ? (json_decode((string) file_get_contents(self::FILE), true) ?: []) : [];
+        $all[$tenant]['default_password'] = $plain === '' ? '' : \SmartPRS\Surface\Secret::encrypt($plain, AG_BASE . '/.env');
+        file_put_contents(self::FILE, json_encode($all, JSON_PRETTY_PRINT), LOCK_EX);
+    }
+
+    /** Runs at the end of a SmartPRS3 request (after its save and redirect). Uses app.php's own objects. */
+    public static function syncAfterSave(): void
+    {
+        $g = $GLOBALS;
+        if (!isset($g['users'], $g['access'], $g['pdo'], $g['session']) || !function_exists('employeeLoginRole')) { return; }
+        $tenant = (string) ($g['ametecs_tenant'] ?? '');
+        if ($tenant === '') { return; }
+        try {
+            /** @var \PDO $pdo */
+            $pdo = $g['pdo'];
+            // Straight from the table: employees switched off for this app still get their login.
+            $q = $pdo->prepare("SELECT e.* FROM employees e WHERE e.tenant_id = ? AND (e.deleted_at IS NULL) AND TRIM(COALESCE(e.email, '')) <> ''
+                AND NOT EXISTS (SELECT 1 FROM users u WHERE u.tenant_id = e.tenant_id AND u.employee_id = e.id)");
+            $q->execute([$tenant]);
+            $todo = $q->fetchAll(\PDO::FETCH_ASSOC);
+            $users = $g['users'];
+            $store = (new \SmartPRS\Surface\SqlStore($pdo))->forTenant($tenant);
+            $actor = (array) $g['session']->user();
+            $default = $todo === [] ? null : self::defaultPassword($tenant);
+            $byEmail = [];
+            foreach ($todo === [] ? [] : ($users->all()['users'] ?? []) as $u) { $byEmail[strtolower(trim((string) $u['email']))] = $u; }
+            foreach ($todo as $e) {
+                $mail = trim((string) $e['email']);
+                $same = $byEmail[strtolower($mail)] ?? null;
+                if ($same !== null) {
+                    if ((string) $same['employment_id'] === '') { $users->bind((string) $same['id'], (string) $e['id']); }
+                    continue;   // already someone else's login: User Management lists it as a problem
+                }
+                $r = $users->create($mail, $default ?? bin2hex(random_bytes(12)), employeeLoginRole($store, $g['access'], $e, (string) ($actor['role'] ?? '')), (string) $e['id']);
+                if (!$r['ok']) { continue; }
+                isset($g['audit']) && ($g['audit'])('user.created', 'user', (string) $r['user']['id'], null, ['email' => $mail, 'employment' => (string) $e['id'],
+                    'default_password' => $default !== null], 'Login created when the employee was saved (AmetecsGlobal)');
+                if (!in_array(strtolower(trim((string) ($e['status'] ?? 'active'))), ['active', ''], true)) {
+                    $users->setDisabled((string) $r['user']['id'], true, (string) ($actor['id'] ?? ''));
+                }
+            }
+            isset($g['employeeSync']) && $g['employeeSync']->syncLogins();   // email / name changes follow onto the login
+        } catch (\Throwable $x) {
+            error_log('AmetecsGlobal login sync: ' . $x->getMessage());   // never breaks the save; User Management catches up
+        }
     }
 }

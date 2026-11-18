@@ -42,10 +42,32 @@ if (isset($_GET['go'])) {
 if ($own) {
     require __DIR__ . '/app-access.php';   // handles its save, then sets $body
 }
+// USER MANAGEMENT -> DEFAULT PASSWORD (owner, 17 Nov 2026): set = every new employee's login gets it and is enabled;
+// empty = random, sent with Reset password. Shown above SmartPRS3's own User Management screen.
+$tid = (string) ($user['tenant_id'] ?? '');
+$umNote = '';
+if ($cur[0] === 'users' && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && ($_POST['do'] ?? '') === 'default-password' && $session->verify((string) ($_POST['csrf'] ?? ''))) {
+    $pw = isset($_POST['clear']) ? '' : (string) ($_POST['password'] ?? '');
+    if ($pw !== '' && strlen($pw) < Session::PASSWORD_FLOOR) {
+        $umNote = '<div class="msg bad">At least ' . Session::PASSWORD_FLOOR . ' characters. Not saved.</div>';
+    } else {
+        AmetecsLogins::setDefaultPassword($tid, $pw);
+        AmetecsData::log((string) ($user['email'] ?? ''), $pw === '' ? 'Cleared the default login password' : 'Set the default login password', $tid);
+        $umNote = '<div class="msg">' . ($pw === '' ? 'Default password cleared: new logins get a random one; use Reset password to give them theirs.' : 'Default password saved: every employee added from now on can sign in with it straight away.') . '</div>';
+    }
+}
+$umBar = '';
+if ($cur[0] === 'users') {
+    $hasDefault = AmetecsLogins::defaultPassword($tid) !== null;
+    $umBar = '<form method="post" class="umbar">' . $umNote . '<input type="hidden" name="csrf" value="' . ag_h($session->token()) . '"><input type="hidden" name="do" value="default-password">'
+        . '<b><i class="fas fa-key"></i> Default password for new logins</b><span class="from">' . ($hasDefault ? 'Set &mdash; new employees can sign in with it right away.' : 'Not set &mdash; new employees get a login without a usable password; use Reset password.') . '</span>'
+        . '<input type="password" name="password" minlength="' . Session::PASSWORD_FLOOR . '" placeholder="' . ($hasDefault ? 'change it' : 'set one') . '" autocomplete="new-password">'
+        . '<button class="b">Save</button>' . ($hasDefault ? '<button class="b" name="clear" value="1" style="background:#64748b">Clear</button>' : '') . '</form>';
+}
 ?><!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Organization Setup · AmetecsGlobal</title>
-<link rel="stylesheet" href="../plugins/smartprs3/public/vendor/fontawesome/css/all.min.css" onerror="this.remove()">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 <style>
 :root{--navy:#1F3A5F;--gold:#B8893B;--ink:#1e293b;--mute:#64748b;--line:#e2e8f0}
 *{box-sizing:border-box}html,body{height:100%}body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:var(--ink);background:#f4f6fa;display:flex;flex-direction:column}
@@ -72,6 +94,7 @@ tr:nth-child(even) td{background:#f8fafc}select,input[type=text]{padding:6px 8px
 .on1{color:#166534;font-weight:700}.off1{color:#991b1b;font-weight:700}.from{color:var(--mute);font-size:12px}
 .msg{padding:10px 14px;border-radius:10px;margin-bottom:14px;background:#f0fdf4;color:#166534;border:1px solid #bbf7d0}.msg.bad{background:#fef2f2;color:#991b1b;border-color:#fecaca}
 .bulk{display:flex;gap:8px;align-items:center;margin:10px 0}
+.col{flex:1;display:flex;flex-direction:column;min-width:0}.umbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:10px 18px;background:#fff;border-bottom:1px solid var(--line);font-size:13px}.umbar .msg{flex-basis:100%;margin:0}.umbar input{padding:6px 8px;border:1px solid var(--line);border-radius:8px}
 </style></head><body>
 <header><a class="back" href="./">&larr; All apps</a><div class="logo">Ametecs<b>Global</b></div><div class="t">Organization Setup</div>
 <div class="who"><?= ag_h((string) ($user['email'] ?? '')) ?></div></header>
@@ -86,12 +109,12 @@ tr:nth-child(even) td{background:#f8fafc}select,input[type=text]{padding:6px 8px
   <?php endforeach; ?>
 <?php endforeach; ?>
 </nav>
-<?php if ($own): ?><main class="pane"><?= $body ?></main><?php else: ?><iframe id="f" src="<?= ag_h($frame) ?>" title="Setup screen"></iframe><?php endif; ?>
+<?php if ($own): ?><main class="pane"><?= $body ?></main><?php else: ?><div class="col"><?= $umBar ?><iframe id="f" src="<?= ag_h($frame) ?>" title="Setup screen"></iframe></div><?php endif; ?>
 </div>
 <script>
 // Menu clicks load the screen without reloading the page; the address keeps up so refresh / Back work.
 var f=document.getElementById('f');
-document.querySelectorAll('nav a[data-q]').forEach(function(a){a.addEventListener('click',function(e){if(!f)return;e.preventDefault();
+document.querySelectorAll('nav a[data-q]').forEach(function(a){a.addEventListener('click',function(e){if(!f||a.dataset.q.indexOf('r=users')>=0||location.search.indexOf('s=users')>=0)return;e.preventDefault();
   f.src='../plugins/smartprs3/public/app.php'+a.dataset.q+'&ag_embed=1';history.pushState(null,'',a.getAttribute('href'));mark(a.getAttribute('href'))})});
 function mark(h){document.querySelectorAll('nav a').forEach(function(a){a.classList.toggle('on',a.getAttribute('href')===h)})}
 window.addEventListener('popstate',function(){location.reload()});

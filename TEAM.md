@@ -27,7 +27,7 @@ Clients and their logins live in the database set in `plugins\smartprs3\.env` (S
   SmartPRS3 applies them through a SYNC fix in surface/SqlStore.php.
 - Fully wired: every module reads and writes the central tables (employees, companies, branches, departments,
   designations, teams, users). SmartPRS3 self-onboarding approval writes the new joiner into the central employees
-  table; User management (Users & passwords) creates a login for every employee with an email, ready for Reset password.
+  table; a login is created for every employee with an email the moment they are saved (User Management; default password optional).
 - QR attendance, mobile device registration and biometric are core modules (Organization Setup only). If an app has
   its own version of these, hide it in that app (as done for SmartPRS3) and map the app to the core's records.
 - New app: use these central tables for employees and organisation; never its own employee table or employee screens.
@@ -43,12 +43,12 @@ Clients and their logins live in the database set in `plugins\smartprs3\.env` (S
 4. Create your Super Admin (in `C:\laragon\www\AmetecsGlobal`): `php plugins\smartprs3\tools\make-super-admin.php you@ametecsindia.com "Your Name"`
 
 ## Every day
-- Double-click `AUTO-SYNC.bat` and leave it running (minimised). About a minute after you stop saving, your changes go to GitHub; others' changes arrive within 5 minutes.
+- **Once per PC:** double-click `INSTALL-AUTOSYNC.bat`. AUTO-SYNC then runs hidden and starts by itself at every Windows sign-in (no window to keep open). Without it, `AUTO-SYNC.bat` must be left running (minimised). About a minute after you stop saving, your changes go to GitHub; others' changes arrive within 5 minutes. Only the AmetecsGlobal folder is watched.
 - `SYNC.bat` does the same once, on click.
 - If the window says **"the same file was changed here and on GitHub"**: you and someone else edited the same lines. Nothing was overwritten. Tell Claude which file; it gets merged by hand.
 
 ## Rules
-- **The PC that has an app's own folder brings it in** (the `source` in `sync-apps.json`, e.g. `C:\laragon\www\SmartPRS3`): SmartPRS3 and SmartEPT on this PC, the other apps on the second PC. A PC without that folder receives the app through GitHub. Keep each app's own folder on one PC only.
+- **Plugins are edited inside AmetecsGlobal** (`plugins\<app>` is the master copy). The original app folders (e.g. `C:\laragon\www\SmartPRS3`) are never read or touched by the sync. A plugin built or changed on one PC reaches the other through GitHub, and the sync sets it up there by itself (.env, PHP libraries, database). Later each plugin takes its own releases through **Check for updates** (under its licence information) from that plugin's own central.
 - **Shared through GitHub (same on every PC):** all code, screens and logic - client view, Super Admin console, every app in `plugins\`, and the app list (`core\apps.json`).
 - **Kept on each PC:** its own database and `core\data` - clients, licences, logins, Super Admins, activity log. Each person creates their own Super Admin on their own PC.
 - **Database changes travel automatically:** when an app's code arrives with new database tables, the sync updates that PC's database by itself.

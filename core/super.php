@@ -333,7 +333,13 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && $pdo !== null) {
                 $back('?p=apps', null, 'There is already an app called ' . $name . '.');
             }
         }
-        $app = ['name' => $name, 'what' => trim((string) ($_POST['what'] ?? '')), 'unit' => trim((string) ($_POST['unit'] ?? '')) ?: 'users',
+        // LOGO (owner, 17 Nov 2026): a web address or a file in AmetecsGlobal (assets/logos/x.png). Best: a white logo with a transparent
+        // background - it sits on a white card on the client's home (add " inv" after the address for a white-only logo). Empty = AmetecsGlobal's built-in logo for that app, if any.
+        $logo = trim((string) ($_POST['logo'] ?? ''));
+        if ($logo !== '' && preg_match('~^(https?://[^\s"<>]+|[A-Za-z0-9._/\-]+\.(png|svg|webp|jpe?g))( inv)?$~i', $logo) !== 1) {
+            $back('?p=apps', null, 'The logo must be a web address (https://…) or a file like assets/logos/myapp.png.');
+        }
+        $app = ['name' => $name, 'what' => trim((string) ($_POST['what'] ?? '')), 'unit' => trim((string) ($_POST['unit'] ?? '')) ?: 'users', 'logo' => $logo,
             'open' => $open === '' ? null : $open, 'color' => preg_match('/^#[0-9A-Fa-f]{6}$/', $color) === 1 ? strtoupper($color) : '#64748B',
             'retired' => isset($_POST['retired'])];
         AmetecsAccess::saveApp($code, $app);
@@ -348,8 +354,13 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && $pdo !== null) {
     }
 
     if ($do === 'email-test') {
-        $r = AmetecsMail::send($pdo, $meEmail, 'AmetecsGlobal test email', "This is a test from AmetecsGlobal.\nIf you can read this, password reset emails will work.");
-        $back('?p=email', $r['ok'] ? 'Test email sent to ' . $meEmail . '. Check your inbox.' : null, $r['ok'] ? null : 'The test email failed: ' . $r['why']);
+        $to = strtolower(trim((string) ($_POST['to'] ?? ''))) ?: $meEmail;   // any address (owner, 17 Nov 2026)
+        if (filter_var($to, FILTER_VALIDATE_EMAIL) === false) {
+            $back('?p=email', null, '"' . $to . '" is not a valid email address.');
+        }
+        $r = AmetecsMail::send($pdo, $to, 'AmetecsGlobal test email', "This is a test from AmetecsGlobal.\nIf you can read this, password reset emails will work.");
+        $r['ok'] && AmetecsData::log($meEmail, 'Sent a test email', '', $to);
+        $back('?p=email', $r['ok'] ? 'Test email sent to ' . $to . '. Check the inbox (and spam).' : null, $r['ok'] ? null : 'The test email to ' . $to . ' failed: ' . $r['why']);
     }
 
     if ($do === 'staff-add') {
@@ -453,73 +464,207 @@ $statusPill = static fn (string $s): string => '<span class="pill ' . (['active'
 $f = static fn (string $k, string $default = '') => ag_h((string) ($form[$k] ?? $default));
 ?><!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>AmetecsGlobal · Super Admin</title>
+<title>Super Admin · AmetecsGlobal</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 <style>
-:root{--navy:#1F3A5F;--navy2:#16304f;--gold:#B8893B;--ink:#1e293b;--mute:#64748b;--line:#e2e8f0;--bg:#f4f6fa}
-*{box-sizing:border-box}body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:var(--ink);background:var(--bg);font-size:14px}
-a{color:var(--navy)}header{background:var(--navy);color:#fff;height:56px;padding:0 22px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:5}
-.logo{font-weight:800;font-size:19px}.logo b{color:var(--gold)}.badge{background:var(--gold);color:#fff;font-size:11px;font-weight:700;padding:3px 9px;border-radius:999px}
-header .right{margin-left:auto;display:flex;gap:14px;align-items:center;font-size:13px}header .right a{color:#fff;opacity:.85}
-header button{background:transparent;border:1px solid rgba(255,255,255,.4);color:#fff;border-radius:8px;padding:5px 11px;cursor:pointer}
-.wrap{display:flex;min-height:calc(100vh - 56px)}nav{width:220px;background:#fff;border-right:1px solid var(--line);padding:16px 10px;flex-shrink:0}
-nav a{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:9px;color:var(--ink);text-decoration:none;font-weight:600;margin-bottom:2px}
-nav a:hover{background:#f1f5f9}nav a.on{background:var(--navy);color:#fff}nav .sep{height:1px;background:var(--line);margin:10px 4px}
-main{flex:1;padding:26px 30px;max-width:1240px}h1{margin:0 0 4px;font-size:23px}h2{font-size:17px;margin:0}.sub{color:var(--mute);margin:0 0 20px}
-.msg{padding:12px 14px;border-radius:10px;margin-bottom:16px}.bad{background:#fef2f2;color:#991b1b;border:1px solid #fecaca}.ok{background:#f0fdf4;color:#166534;border:1px solid #bbf7d0}
-.reveal{background:#fffbeb;border:1px solid #fcd34d;color:#78350f;padding:14px 16px;border-radius:10px;margin-bottom:16px}.reveal code{font-size:15px;background:#fff;padding:2px 8px;border-radius:6px;border:1px solid #fcd34d}
-.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:14px;margin-bottom:22px}
-.kpi{background:#fff;border:1px solid var(--line);border-radius:14px;padding:16px}.kpi .n{font-size:28px;font-weight:800;color:var(--navy)}.kpi .l{color:var(--mute);font-size:13px}
-.box{background:#fff;border:1px solid var(--line);border-radius:14px;margin-bottom:20px;overflow:hidden}.box .hd{display:flex;align-items:center;gap:12px;padding:14px 18px;border-bottom:3px solid var(--navy)}
-.box .bd{padding:16px 18px}.box .ft{padding:12px 18px;border-top:1px solid var(--line);text-align:right;background:#fafbfc}
-table{width:100%;border-collapse:collapse}th{background:var(--navy);color:#fff;text-align:left;font-size:12px;padding:9px 14px;font-weight:600;letter-spacing:.2px}
-td{padding:9px 14px;border-top:1px solid var(--line);vertical-align:middle}tr:nth-child(even) td{background:#f8fafc}
-input,select,textarea{font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:#fff}td input[type=number]{width:84px}
-.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px 18px}.grid2 label,.stack label{display:block;font-size:12px;font-weight:700;color:var(--mute);margin-bottom:5px;text-transform:uppercase;letter-spacing:.3px}
-.grid2 input,.grid2 select,.grid2 textarea,.stack input{width:100%}.full{grid-column:1/-1}.req{color:#dc2626}
-.btn{display:inline-block;border:0;border-radius:9px;padding:9px 16px;font-weight:700;cursor:pointer;text-decoration:none;font-size:14px}
-.gold{background:var(--gold);color:#fff}.navy{background:var(--navy);color:#fff}.ghost{background:#fff;border:1px solid var(--line);color:var(--ink)}.danger{background:#fff;border:1px solid #fecaca;color:#b91c1c}
-.pill{display:inline-block;font-size:11px;font-weight:700;padding:2px 9px;border-radius:999px;white-space:nowrap}.green{background:#dcfce7;color:#166534}.grey{background:#f1f5f9;color:#475569}.red{background:#fee2e2;color:#991b1b}.amber{background:#fef3c7;color:#92400e}
-.dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:8px;vertical-align:middle}.muted{color:var(--mute)}.right{text-align:right}
-.sw{display:inline-flex;align-items:center;gap:7px;font-weight:600;cursor:pointer}.sw input{width:18px;height:18px;accent-color:#16a34a}
-.chips span{margin-right:4px}.inline{display:inline}.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
-.act{display:inline-block;position:relative;text-align:left}.act summary{list-style:none;display:inline-block}.act summary::-webkit-details-marker{display:none}
-.act .menu{position:absolute;right:0;top:42px;z-index:3;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 12px 30px rgba(15,23,42,.15);padding:6px;width:340px}
-.act .menu form{display:flex;flex-direction:column;gap:6px;padding:12px;border-bottom:1px solid var(--line)}.act .menu form:last-child{border-bottom:0}.act .menu .row input{flex:1}
+:root{--navy:#1F3A5F;--navy2:#16304f;--navy3:#0c1f38;--gold:#B8893B;--gold2:#d4a65a;--ink:#0f172a;--ink2:#334155;--mute:#64748b;--line:#e6eaf1;--bg:#f4f6fa;--card:#fff;
+  --ok:#15803d;--okb:#ecfdf3;--warn:#b45309;--warnb:#fffbeb;--bad:#b91c1c;--badb:#fef2f2;--r:14px;--sh:0 1px 2px rgba(15,23,42,.04),0 6px 18px -8px rgba(15,23,42,.10)}
+*{box-sizing:border-box}html,body{height:100%}
+body{margin:0;font:14px/1.5 Inter,"Segoe UI",system-ui,-apple-system,Roboto,sans-serif;color:var(--ink);background:var(--bg);-webkit-font-smoothing:antialiased}
+a{color:var(--navy)}
+/* shell */
+.shell{display:grid;grid-template-columns:248px 1fr;min-height:100vh;transition:grid-template-columns .2s}
+body.mini .shell{grid-template-columns:72px 1fr}
+.side{background:var(--navy3);color:#cbd5e1;position:sticky;top:0;height:100vh;display:flex;flex-direction:column;padding:16px 12px;overflow:hidden}
+.brand{display:flex;align-items:center;gap:10px;padding:4px 8px 18px;color:#fff;text-decoration:none;font-weight:800;font-size:17px;white-space:nowrap}
+.brand .lm{width:34px;height:34px;flex:none;border-radius:9px;background:linear-gradient(135deg,var(--gold2),var(--gold));display:grid;place-items:center;color:var(--navy3);font-weight:900;font-size:13px}
+.brand b{color:var(--gold2)}.brand small{display:block;font-size:10.5px;letter-spacing:1.2px;color:var(--gold2);font-weight:700;margin-top:-2px}
+.nav-l{font-size:10.5px;letter-spacing:1px;text-transform:uppercase;color:#64748b;padding:14px 12px 6px;white-space:nowrap}
+.side a.nv{display:flex;align-items:center;gap:12px;padding:9px 12px;border-radius:9px;color:#cbd5e1;text-decoration:none;font-weight:500;white-space:nowrap;margin-bottom:2px;position:relative}
+.side a.nv i{width:18px;text-align:center;font-size:15px;color:#8193ab}
+.side a.nv:hover{background:rgba(255,255,255,.06);color:#fff}
+.side a.nv.on{background:rgba(212,166,90,.14);color:#fff}.side a.nv.on i{color:var(--gold2)}
+.side a.nv.on:before{content:"";position:absolute;left:-12px;top:8px;bottom:8px;width:3px;border-radius:0 3px 3px 0;background:var(--gold2)}
+.side .cnt{margin-left:auto;font-size:11px;background:rgba(255,255,255,.08);padding:1px 8px;border-radius:99px;color:#cbd5e1}
+.side .bottom{margin-top:auto;border-top:1px solid rgba(255,255,255,.08);padding-top:12px}
+body.mini .brand span,body.mini .nav-l,body.mini .side a.nv span,body.mini .side .cnt{display:none}
+body.mini .side a.nv{justify-content:center}
+.top{height:64px;background:#fff;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:14px;padding:0 26px;position:sticky;top:0;z-index:20}
+.ib{width:38px;height:38px;border-radius:10px;border:1px solid var(--line);background:#fff;display:grid;place-items:center;color:var(--ink2);cursor:pointer}.ib:hover{background:#f6f8fb}
+.search{flex:1;max-width:460px;display:flex;align-items:center;gap:10px;height:40px;padding:0 12px;border:1px solid var(--line);border-radius:10px;background:#f8fafc;color:var(--mute);cursor:pointer}
+.search kbd{margin-left:auto;font:600 11px/1 inherit;background:#fff;border:1px solid var(--line);border-radius:6px;padding:4px 6px}
+.top .right{margin-left:auto;display:flex;align-items:center;gap:12px}
+.top .cv{display:inline-flex;gap:8px;align-items:center;height:38px;padding:0 12px;border-radius:10px;border:1px solid var(--line);color:var(--ink2);text-decoration:none;font-weight:600;font-size:13px}.top .cv:hover{background:#f6f8fb}
+.me{position:relative}.me summary{list-style:none;display:flex;align-items:center;gap:10px;cursor:pointer;padding:4px 8px 4px 4px;border-radius:10px}.me summary::-webkit-details-marker{display:none}.me summary:hover{background:#f6f8fb}
+.av{width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,var(--navy),var(--navy3));color:var(--gold2);display:grid;place-items:center;font-weight:800;font-size:13px}
+.me .nm{font-size:13px;font-weight:600;line-height:1.2}.me .nm small{display:block;color:var(--mute);font-weight:500;font-size:11.5px}
+.dd{position:absolute;right:0;top:calc(100% + 8px);background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 20px 40px -14px rgba(15,23,42,.3);min-width:220px;padding:6px;z-index:30}
+.dd a,.dd button{display:flex;gap:10px;align-items:center;width:100%;padding:9px 12px;border:0;background:none;border-radius:8px;font:inherit;color:var(--ink2);text-decoration:none;cursor:pointer}.dd a:hover,.dd button:hover{background:#f1f5f9}.dd i{width:16px;color:var(--mute)}.dd form{margin:0}
+main{padding:26px 30px 50px;max-width:1320px}
+h1{margin:0;font-size:24px;letter-spacing:-.4px}h2{font-size:15px;margin:0;letter-spacing:-.1px}.sub{color:var(--mute);margin:4px 0 22px}
+.ph{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:22px}.ph .sub{margin-bottom:0}
+/* bits */
+.btn{display:inline-flex;align-items:center;gap:8px;border:0;border-radius:9px;padding:9px 15px;font:inherit;font-weight:600;cursor:pointer;text-decoration:none;font-size:13.5px;transition:background .15s,box-shadow .15s}
+.gold{background:var(--gold);color:#fff}.gold:hover{background:#a67a32}.navy{background:var(--navy);color:#fff}.navy:hover{background:var(--navy2)}
+.ghost{background:#fff;border:1px solid var(--line);color:var(--ink2)}.ghost:hover{background:#f6f8fb}.danger{background:#fff;border:1px solid #fecaca;color:var(--bad)}.danger:hover{background:var(--badb)}
 button[disabled]{opacity:.45;cursor:not-allowed}
-.signin{max-width:420px;margin:70px auto;background:#fff;border:1px solid var(--line);border-radius:16px;padding:28px}.signin .stack input{margin-bottom:14px;padding:11px}
-.signin button{width:100%;padding:12px}.toolbar{display:flex;gap:10px;align-items:center;margin-bottom:14px}.toolbar input{flex:1;max-width:340px}
-</style></head><body>
-<header><span class="logo">Ametecs<b>Global</b></span><span class="badge">SUPER ADMIN</span>
-<?php if ($me !== null): ?><span class="right"><a href="./" target="_blank">Client view ↗</a><span><?= ag_h($meEmail) ?></span>
-<form method="post" class="inline"><?= $csrf() ?><button name="do" value="signout">Sign out</button></form></span><?php endif; ?></header>
+.pill{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:600;padding:3px 9px;border-radius:999px;white-space:nowrap}
+.pill:before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor;opacity:.8}
+.green{background:var(--okb);color:var(--ok)}.grey{background:#f1f5f9;color:#475569}.red{background:var(--badb);color:var(--bad)}.amber{background:var(--warnb);color:var(--warn)}
+.dot{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:8px;vertical-align:middle}.muted{color:var(--mute)}.right{text-align:right}
+.box{background:var(--card);border:1px solid var(--line);border-radius:var(--r);margin-bottom:20px;overflow:hidden;box-shadow:var(--sh)}
+.box .hd{display:flex;align-items:center;gap:12px;padding:15px 18px;border-bottom:1px solid var(--line)}.box .hd h2{display:flex;align-items:center;gap:9px}.box .hd h2 i{color:var(--gold)}
+.box .bd{padding:18px}.box .ft{padding:12px 18px;border-top:1px solid var(--line);text-align:right;background:#fafbfd}
+table{width:100%;border-collapse:collapse}
+th{background:#f8fafc;color:var(--mute);text-align:left;font-size:11.5px;text-transform:uppercase;letter-spacing:.5px;padding:10px 16px;font-weight:600;border-bottom:1px solid var(--line);white-space:nowrap}
+th.sort{cursor:pointer;user-select:none}th.sort:hover{color:var(--ink)}th.sort:after{content:"\f0dc";font:900 10px "Font Awesome 6 Free";margin-left:6px;opacity:.35}th.asc:after{content:"\f0de";opacity:.9}th.desc:after{content:"\f0dd";opacity:.9}
+td{padding:11px 16px;border-top:1px solid #f0f3f7;vertical-align:middle}tr:first-child td{border-top:0}tbody tr,table tr{transition:background .1s}table tr:hover td{background:#fafcff}
+input,select,textarea{font:inherit;padding:9px 11px;border:1px solid #d9e0ea;border-radius:9px;background:#fff;color:var(--ink);transition:border-color .15s,box-shadow .15s}
+input:focus,select:focus,textarea:focus{outline:0;border-color:var(--navy);box-shadow:0 0 0 4px rgba(31,58,95,.10)}td input[type=number]{width:90px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px 20px}.grid2 label,.stack label{display:block;font-size:12.5px;font-weight:600;color:var(--ink2);margin-bottom:6px}
+.grid2 input,.grid2 select,.grid2 textarea,.stack input{width:100%}.full{grid-column:1/-1}.req{color:#dc2626}
+.sw{display:inline-flex;align-items:center;gap:8px;font-weight:600;cursor:pointer}
+.sw input{appearance:none;width:38px;height:22px;border-radius:99px;background:#cbd5e1;position:relative;cursor:pointer;padding:0;border:0;transition:background .15s;flex:none}
+.sw input:after{content:"";position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.2);transition:transform .15s}
+.sw input:checked{background:#16a34a}.sw input:checked:after{transform:translateX(16px)}.sw input:focus{box-shadow:0 0 0 4px rgba(22,163,74,.15)}
+.chips{display:flex;flex-wrap:wrap;gap:4px}.inline{display:inline}.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.act{display:inline-block;position:relative;text-align:left}.act summary{list-style:none;display:inline-flex}.act summary::-webkit-details-marker{display:none}
+.act .menu{position:absolute;right:0;top:44px;z-index:3;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 18px 40px -12px rgba(15,23,42,.25);padding:6px;width:340px}
+.act .menu form{display:flex;flex-direction:column;gap:6px;padding:12px;border-bottom:1px solid var(--line)}.act .menu form:last-child{border-bottom:0}.act .menu .row input{flex:1}
+.toolbar{display:flex;gap:10px;align-items:center;margin-bottom:16px;flex-wrap:wrap}.toolbar .si{position:relative;flex:1;max-width:380px}.toolbar .si i{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:#94a3b8}.toolbar .si input{width:100%;padding-left:36px}
+.msg{display:flex;gap:10px;align-items:flex-start;padding:12px 14px;border-radius:10px;margin-bottom:16px}.bad{background:var(--badb);color:var(--bad);border:1px solid #fecaca}.ok{background:var(--okb);color:var(--ok);border:1px solid #bbf7d0}
+.reveal{background:var(--warnb);border:1px solid #fcd34d;color:#78350f;padding:14px 16px;border-radius:12px;margin-bottom:18px}.reveal code{font-size:14px;background:#fff;padding:2px 8px;border-radius:6px;border:1px solid #fcd34d}
+/* toasts */
+.toasts{position:fixed;right:22px;bottom:22px;display:grid;gap:10px;z-index:60}
+.toast{display:flex;gap:12px;align-items:flex-start;min-width:300px;max-width:420px;background:#fff;border:1px solid var(--line);border-left:4px solid var(--ok);border-radius:12px;padding:13px 14px;box-shadow:0 20px 40px -14px rgba(15,23,42,.35);animation:tin .3s ease-out}
+.toast.bad{border-left-color:var(--bad);background:#fff;color:var(--ink)}.toast i{margin-top:2px;color:var(--ok)}.toast.bad i{color:var(--bad)}.toast button{margin-left:auto;border:0;background:none;color:var(--mute);cursor:pointer}
+@keyframes tin{from{transform:translateY(12px);opacity:0}}
+/* dashboard */
+.kpis{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:14px;margin-bottom:20px}
+.kpi{background:#fff;border:1px solid var(--line);border-radius:var(--r);padding:16px 18px;box-shadow:var(--sh);position:relative;overflow:hidden;text-decoration:none;color:inherit;transition:transform .15s,box-shadow .15s}
+a.kpi:hover{transform:translateY(-2px);box-shadow:0 14px 28px -14px rgba(15,23,42,.3)}
+.kpi .ki{width:40px;height:40px;border-radius:11px;display:grid;place-items:center;font-size:16px;margin-bottom:12px}
+.kpi .n{font-size:28px;font-weight:800;letter-spacing:-.6px;line-height:1}.kpi .l{color:var(--mute);font-size:12.5px;margin-top:6px}
+.kpi .tr{position:absolute;right:16px;top:18px;font-size:11.5px;font-weight:600}
+.k1 .ki{background:#eef3fa;color:var(--navy)}.k2 .ki{background:var(--okb);color:var(--ok)}.k3 .ki{background:var(--badb);color:var(--bad)}.k4 .ki{background:#fbf5ea;color:var(--gold)}.k5 .ki{background:var(--warnb);color:var(--warn)}.k6 .ki{background:#f3efff;color:#6d28d9}
+.dgrid{display:grid;grid-template-columns:1.35fr 1fr;gap:20px}.dgrid .box{margin-bottom:0}.dcol{display:grid;gap:20px;align-content:start}
+.bars{display:grid;gap:14px}.brow{display:grid;grid-template-columns:150px 1fr 70px;gap:12px;align-items:center;font-size:13px}
+.brow .bn{display:flex;align-items:center;gap:8px;font-weight:600}.track{height:10px;background:#eef1f6;border-radius:99px;overflow:hidden;position:relative}
+.track i{display:block;height:100%;border-radius:99px;width:0;transition:width .9s cubic-bezier(.2,.8,.2,1)}
+.brow .bv{text-align:right;color:var(--ink2);font-weight:600;font-variant-numeric:tabular-nums}
+.donut{display:flex;gap:22px;align-items:center}.donut svg{flex:none}.donut circle{transition:stroke-dasharray .9s cubic-bezier(.2,.8,.2,1);cursor:pointer}
+.legend{display:grid;gap:8px;font-size:13px}.legend div{display:flex;align-items:center;gap:8px}.legend b{margin-left:auto;padding-left:14px}
+.feed{list-style:none;margin:0;padding:6px 0}.feed li{display:flex;gap:12px;padding:10px 18px;position:relative}
+.feed li:not(:last-child):before{content:"";position:absolute;left:33px;top:42px;bottom:-6px;width:1px;background:var(--line)}
+.feed .fi{width:30px;height:30px;flex:none;border-radius:50%;background:#eef3fa;color:var(--navy);display:grid;place-items:center;font-size:12px}
+.feed .ft2{font-size:13px}.feed .fm{font-size:12px;color:var(--mute)}
+.empty{padding:28px;text-align:center;color:var(--mute)}.empty i{font-size:26px;color:#cbd5e1;display:block;margin-bottom:8px}
+.tip{position:fixed;pointer-events:none;background:var(--navy3);color:#fff;font-size:12px;padding:6px 10px;border-radius:8px;z-index:70;opacity:0;transition:opacity .1s}
+/* palette */
+.pal{position:fixed;inset:0;background:rgba(12,31,56,.45);backdrop-filter:blur(3px);display:none;align-items:flex-start;justify-content:center;padding-top:12vh;z-index:80}.pal.open{display:flex}
+.pal .pb{width:min(560px,92vw);background:#fff;border-radius:14px;box-shadow:0 30px 60px -20px rgba(0,0,0,.45);overflow:hidden}
+.pal input{width:100%;border:0;border-bottom:1px solid var(--line);border-radius:0;padding:16px 18px;font-size:15px;box-shadow:none!important}
+.pal ul{list-style:none;margin:0;padding:6px;max-height:50vh;overflow:auto}.pal li a{display:flex;gap:12px;align-items:center;padding:10px 12px;border-radius:8px;text-decoration:none;color:var(--ink)}
+.pal li a i{width:18px;color:var(--mute)}.pal li.sel a,.pal li a:hover{background:#f1f5f9}.pal small{margin-left:auto;color:var(--mute)}
+/* sign-in */
+.auth{min-height:100vh;display:grid;grid-template-columns:1fr 1fr}
+.auth-side{background:radial-gradient(900px 500px at 0% 0%,#2b4f7d 0%,transparent 60%),linear-gradient(160deg,var(--navy),var(--navy3));color:#fff;padding:44px 52px;display:flex;flex-direction:column}
+.auth-side .brand{padding:0}.auth-side h1{font-size:32px;line-height:1.2;margin:auto 0 12px;max-width:420px}.auth-side h1 em{font-style:normal;color:var(--gold2)}
+.auth-side p{color:#c7d3e3;max-width:420px;margin:0 0 auto}.auth-side ul{list-style:none;padding:0;margin:26px 0 auto;display:grid;gap:12px;color:#dbe4f0}.auth-side li i{color:var(--gold2);width:22px}
+.auth-main{display:grid;place-items:center;background:#fff;padding:30px}.auth-box{width:100%;max-width:380px}.auth-box h2{font-size:24px;margin:0 0 6px}
+.auth-box .stack input{height:46px;margin-bottom:16px}.auth-box button{width:100%;justify-content:center;height:46px}
+@media (max-width:1100px){.dgrid{grid-template-columns:1fr}}
+@media (max-width:800px){.shell{grid-template-columns:1fr}.side{display:none}.grid2{grid-template-columns:1fr}.auth{grid-template-columns:1fr}.auth-side{display:none}.search{display:none}}
 
+/* ---------- dashboard v2: light, compact, one screen ---------- */
+main{max-width:1560px;padding:16px 26px 20px}
+.top{height:54px}
+.dh{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:12px}
+.dh-t{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}.dh h1{font-size:21px}.dh-t span{color:var(--mute);font-size:13px}
+.dh .btn{padding:7px 13px;font-size:13px}
+.kstrip{display:grid;grid-template-columns:repeat(6,1fr);background:#fff;border:1px solid var(--line);border-radius:12px;margin-bottom:14px;box-shadow:0 1px 2px rgba(15,23,42,.04)}
+.kstrip>a,.kstrip>div{display:flex;gap:11px;align-items:center;padding:10px 16px;text-decoration:none;color:inherit;position:relative;border-radius:12px}
+.kstrip>a:hover{background:#f8fafc}.kstrip>*+*:before{content:"";position:absolute;left:0;top:12px;bottom:12px;width:1px;background:var(--line)}
+.ki{width:32px;height:32px;border-radius:9px;display:grid;place-items:center;font-size:13px;flex:none}
+.kstrip b{display:block;font-size:18px;font-weight:700;letter-spacing:-.3px;line-height:1.2}.kstrip span:not(.ki){font-size:11.5px;color:var(--mute);white-space:nowrap}
+.k1{background:#eef3fa;color:var(--navy)}.k2{background:var(--okb);color:var(--ok)}.k3{background:var(--badb);color:var(--bad)}.k4{background:#fbf5ea;color:var(--gold)}.k5{background:var(--warnb);color:var(--warn)}.k6{background:#f3efff;color:#6d28d9}
+.dgrid2{display:grid;grid-template-columns:minmax(0,1.9fr) minmax(300px,1fr);gap:14px;align-items:start}
+.dgrid2 .box{margin-bottom:0}.dcol2{display:grid;gap:14px}
+.box .hd{padding:11px 16px;gap:10px;flex-wrap:wrap}.box .hd h2{font-size:14.5px}.more{margin-left:auto;font-size:12.5px;text-decoration:none;font-weight:600}.sm{margin-left:auto;font-size:12px}
+.lg{display:inline-flex;gap:12px;flex-wrap:wrap}.lg em{font-style:normal;display:inline-flex;gap:5px;align-items:center;font-size:11.5px;color:var(--mute)}
+.chk{width:20px;height:20px;border-radius:6px;display:inline-grid;place-items:center;font-size:11px;border:2px solid transparent;vertical-align:middle}
+.chk.on{background:#16a34a;color:#fff}.chk.soon{background:#e5e7eb;color:#9ca3af;border-color:#d1d5db}.chk.off{background:#fff;border-color:#cbd5e1}.chk.bad{background:#dc2626;color:#fff}
+.lg .chk{width:14px;height:14px;font-size:8px;border-radius:4px;border-width:1.5px}
+.mx{overflow-x:auto}.mxt th{background:#fff;text-transform:none;letter-spacing:0;font-size:11.5px;padding:10px 8px;vertical-align:bottom}.mxt th:first-child,.mxt td:first-child{padding-left:16px}
+.mxt th.ac,.mxt td.ac{text-align:center}.mxt th.ac small{display:block;margin-top:5px;color:var(--mute);font-weight:600;font-size:11px;white-space:nowrap}
+.mxt td{padding:9px 8px}.cn{text-decoration:none;color:var(--ink)}.cn b{display:block;font-size:13.5px}.cn small{color:var(--mute);font-size:11.5px}.cn:hover b{color:var(--navy);text-decoration:underline}
+.am{width:28px;height:28px;border-radius:8px;display:inline-grid;place-items:center;background:color-mix(in srgb,var(--c) 13%,#fff);color:var(--c);font-size:12.5px}
+.attn{border-top:1px solid var(--line);padding:10px 16px;display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;font-size:12.5px}
+.attn b{display:inline-flex;gap:7px;align-items:center;color:var(--warn)}.attn a{text-decoration:none;color:var(--ink-2)}.attn.ok{color:var(--ok);gap:8px}
+.apl{list-style:none;margin:0;padding:4px 0}.apl li{display:flex;align-items:center;gap:11px;padding:7px 16px}.apl li+li{border-top:1px solid #f3f5f8}
+.apl .an{flex:1;font-weight:600;font-size:13px;line-height:1.25}.apl .an small{display:block;font-weight:500;color:var(--mute);font-size:11px}
+.av2{font-size:12.5px;color:var(--mute)}.av2 b{color:var(--ink);font-size:14px}
+.feed li{padding:7px 16px;gap:10px}.feed li:not(:last-child):before{display:none}.fd{width:8px;height:8px;border-radius:50%;background:var(--gold);margin-top:6px;flex:none}
+.feed .ft2{font-size:12.5px;line-height:1.4}.feed .fm{font-size:11.5px}.feed a{text-decoration:none}
+@media (max-width:1100px){.kstrip{grid-template-columns:repeat(3,1fr)}.dgrid2{grid-template-columns:1fr}}
+.cn b{white-space:nowrap}.mxt td:last-child,.mxt th:last-child{padding-right:16px;white-space:nowrap}.mxt th.ac{padding-left:4px;padding-right:4px}.mxt th:first-child{width:30%}
+</style></head><body>
+<?php
+$myName = trim((string) ($me['name'] ?? '')) ?: ucfirst((string) strtok($meEmail, '@'));
+$myIni = strtoupper(implode('', array_map(static fn (string $w): string => mb_substr($w, 0, 1), array_slice(preg_split('/[\s._-]+/', $myName) ?: ['S'], 0, 2))));
+?>
 <?php if ($me === null): ?>
-<div class="signin">
-  <h1>Super Admin sign-in</h1><p class="sub">AmetecsGlobal console: clients, apps and licences.</p>
-  <?php if ($problem !== null): ?><div class="msg bad"><?= ag_h($problem) ?></div><?php endif; ?>
-  <?php $noStaff = $pdo !== null && (int) $pdo->query('SELECT COUNT(*) FROM platform_users')->fetchColumn() === 0; ?>
-  <?php if ($noStaff): ?>
-    <p>No Super Admin exists yet. In the Laragon Terminal, in the AmetecsGlobal folder, run:<br><code>php tools\make-super-admin.php you@company.com "Your Name"</code><br>It prints a one-time password.</p>
-  <?php elseif ($pdo !== null): ?>
-  <form method="post" class="stack"><?= $csrf() ?><input type="hidden" name="do" value="signin">
-    <label>Email</label><input type="email" name="email" required autofocus autocomplete="username">
-    <label>Password</label><input type="password" name="password" required autocomplete="current-password">
-    <button class="btn navy">Sign in</button></form>
-  <p class="muted" style="font-size:12px;margin-top:14px">Forgot the password? Another Super Admin can't see it; run <code>php tools\make-super-admin.php your@email "Name"</code> on the server to set a new one.</p>
-  <?php endif; ?>
+<div class="auth">
+  <aside class="auth-side">
+    <span class="brand"><span class="lm">AG</span><span>Ametecs<b>Global</b><small>SUPER ADMIN</small></span></span>
+    <h1>Run every client.<br><em>From one console.</em></h1>
+    <ul><li><i class="fas fa-building"></i>Create and manage client companies</li><li><i class="fas fa-puzzle-piece"></i>Switch apps on, set seats and validity</li><li><i class="fas fa-key"></i>Reset logins, suspend or reactivate</li><li><i class="fas fa-clock-rotate-left"></i>Every change logged</li></ul>
+    <small style="color:#8ea2bd">&copy; <?= date('Y') ?> Ametecs India Private Limited</small>
+  </aside>
+  <div class="auth-main"><div class="auth-box">
+    <h2>Super Admin sign-in</h2><p class="sub">Ametecs staff only.</p>
+    <?php if ($problem !== null): ?><div class="msg bad"><i class="fas fa-circle-exclamation"></i><span><?= ag_h($problem) ?></span></div><?php endif; ?>
+    <?php $noStaff = $pdo !== null && (int) $pdo->query('SELECT COUNT(*) FROM platform_users')->fetchColumn() === 0; ?>
+    <?php if ($noStaff): ?>
+      <p>No Super Admin exists yet. In the Laragon Terminal, in the AmetecsGlobal folder, run:<br><code>php plugins\smartprs3\tools\make-super-admin.php you@company.com "Your Name"</code><br>It prints a one-time password.</p>
+    <?php elseif ($pdo !== null): ?>
+    <form method="post" class="stack"><?= $csrf() ?><input type="hidden" name="do" value="signin">
+      <label>Email</label><input type="email" name="email" required autofocus autocomplete="username" placeholder="you@ametecsindia.com">
+      <label>Password</label><input type="password" name="password" required autocomplete="current-password">
+      <button class="btn navy">Sign in <i class="fas fa-arrow-right"></i></button></form>
+    <p class="muted" style="font-size:12px;margin-top:16px">Forgot the password? Another Super Admin can't see it; run <code>php plugins\smartprs3\tools\make-super-admin.php your@email "Name"</code> to set a new one.</p>
+    <?php endif; ?>
+  </div></div>
 </div>
-<?php else: ?>
-<div class="wrap">
-<nav>
-<?php foreach (['dashboard' => 'Dashboard', 'clients' => 'Clients', 'client-new' => '+ New client', 'apps' => 'Apps', 'activity' => 'Activity log', 'sep' => '', 'email' => 'Email settings', 'staff' => 'Super Admins', 'account' => 'My account'] as $k => $label):
-    if ($k === 'sep') { echo '<div class="sep"></div>'; continue; } ?>
-  <a href="?p=<?= $k ?>" class="<?= $page === $k || ($page === 'client' && $k === 'clients') ? 'on' : '' ?>"><?= ag_h($label) ?></a>
-<?php endforeach; ?>
-</nav>
+<?php else:
+  $navItems = ['Overview' => ['dashboard' => ['Dashboard', 'fa-gauge-high'], 'clients' => ['Clients', 'fa-building'], 'client-new' => ['New client', 'fa-plus'], 'apps' => ['Apps', 'fa-puzzle-piece'], 'activity' => ['Activity log', 'fa-clock-rotate-left']],
+      'Settings' => ['email' => ['Email settings', 'fa-envelope'], 'staff' => ['Super Admins', 'fa-user-shield'], 'account' => ['My account', 'fa-circle-user']]];
+  $titles = ['dashboard' => 'Dashboard', 'clients' => 'Clients', 'client-new' => 'New client', 'client' => 'Client', 'apps' => 'Apps', 'activity' => 'Activity log', 'email' => 'Email settings', 'staff' => 'Super Admins', 'account' => 'My account']; ?>
+<div class="shell">
+<aside class="side">
+  <a class="brand" href="?p=dashboard"><span class="lm">AG</span><span>Ametecs<b>Global</b><small>SUPER ADMIN</small></span></a>
+  <?php foreach ($navItems as $grp => $items): ?><div class="nav-l"><?= $grp ?></div>
+    <?php foreach ($items as $k => [$label, $ic]): ?><a class="nv<?= $page === $k || ($page === 'client' && $k === 'clients') ? ' on' : '' ?>" href="?p=<?= $k ?>" title="<?= ag_h($label) ?>"><i class="fas <?= $ic ?>"></i><span><?= ag_h($label) ?></span><?= $k === 'clients' ? '<em class="cnt">' . count($tenants) . '</em>' : '' ?></a><?php endforeach; ?>
+  <?php endforeach; ?>
+  <div class="bottom"><a class="nv" href="./" target="_blank" title="Client view"><i class="fas fa-arrow-up-right-from-square"></i><span>Client view</span></a></div>
+</aside>
+<div>
+<header class="top">
+  <button class="ib" type="button" onclick="document.body.classList.toggle('mini');try{localStorage.setItem('agMini',document.body.classList.contains('mini')?1:0)}catch(e){}" title="Collapse menu"><i class="fas fa-bars"></i></button>
+  <div class="search" onclick="pal(true)"><i class="fas fa-magnifying-glass"></i><span>Jump to a client or page…</span><kbd>Ctrl K</kbd></div>
+  <div class="right">
+    <a class="cv" href="./" target="_blank"><i class="fas fa-eye"></i>Client view</a>
+    <details class="me"><summary><span class="av"><?= ag_h($myIni) ?></span><span class="nm"><?= ag_h($myName) ?><small>Super Admin</small></span><i class="fas fa-chevron-down" style="font-size:11px;color:var(--mute)"></i></summary>
+      <div class="dd"><a href="?p=account"><i class="fas fa-circle-user"></i>My account</a><a href="?p=staff"><i class="fas fa-user-shield"></i>Super Admins</a>
+        <form method="post"><?= $csrf() ?><button name="do" value="signout"><i class="fas fa-arrow-right-from-bracket"></i>Sign out</button></form></div></details>
+  </div>
+</header>
 <main>
-<?php if ($problem !== null): ?><div class="msg bad"><?= ag_h($problem) ?></div><?php endif; ?>
-<?php if ($notice !== null): ?><div class="msg ok"><?= ag_h($notice) ?></div><?php endif; ?>
-<?php if (is_array($reveal)): ?><div class="reveal"><b>Shown once — copy it now.</b> Sign-in: <code><?= ag_h($reveal['email']) ?></code> Password: <code><?= ag_h($reveal['password']) ?></code><br>
+<div class="toasts" id="toasts">
+<?php if ($problem !== null): ?><div class="toast bad"><i class="fas fa-circle-exclamation"></i><span><?= ag_h($problem) ?></span><button type="button" onclick="this.parentNode.remove()">&times;</button></div><?php endif; ?>
+<?php if ($notice !== null): ?><div class="toast" data-auto><i class="fas fa-circle-check"></i><span><?= ag_h($notice) ?></span><button type="button" onclick="this.parentNode.remove()">&times;</button></div><?php endif; ?>
+</div>
+<?php if (is_array($reveal)): ?><div class="reveal"><b><i class="fas fa-key"></i> Shown once — copy it now.</b> Sign-in: <code><?= ag_h($reveal['email']) ?></code> Password: <code><?= ag_h($reveal['password']) ?></code><br>
   <span style="font-size:13px"><?php if ($reveal['tid'] === 'staff'): ?>They sign in at this Super Admin page.<?php else:
       $rl = $reveal['link'] ?? (($rt = $tenant((string) $reveal['tid'])) !== null && ($rt['subdomain'] ?? '') !== '' ? AmetecsMail::clientLink((string) $rt['subdomain']) : ''); ?>
       They sign in at <?= $rl !== '' ? 'their company link <code>' . ag_h($rl) . '</code>' : 'the AmetecsGlobal front door' ?> and can change the password from their profile.<?php endif; ?></span></div><?php endif; ?>
@@ -529,44 +674,78 @@ button[disabled]{opacity:.45;cursor:not-allowed}
     $expiring = [];
     $expired = [];
     $perApp = array_fill_keys(array_keys($plugins), 0);
+    $seatsApp = array_fill_keys(array_keys($plugins), 0);
     foreach ($tenants as $t) {
         foreach ($plugins as $c => $p) {
             $a = AmetecsAccess::get((string) $t['id'], $c, $all);
             $st = AmetecsAccess::state((string) $t['id'], $c, $all);
-            $st === 'on' && $perApp[$c]++;
+            if ($st === 'on') { $perApp[$c]++; $seatsApp[$c] += (int) ($a['seats'] ?? 0); }
             if ($st === 'on' && ($a['until'] ?? '') !== '' && $a['until'] <= $soon) { $expiring[] = [$t, $p, $a['until']]; }
             if ($st === 'expired') { $expired[] = [$t, $p, $a['until']]; }
         }
-    } ?>
-  <h1>Dashboard</h1><p class="sub"><?= ag_h(date('l, d M Y', (int) strtotime($today))) ?></p>
-  <div class="cards">
-    <div class="kpi"><div class="n"><?= count($tenants) ?></div><div class="l">Clients</div></div>
-    <div class="kpi"><div class="n"><?= $active ?></div><div class="l">Active clients</div></div>
-    <div class="kpi"><div class="n"><?= count($tenants) - $active ?></div><div class="l">Suspended or deactivated</div></div>
-    <div class="kpi"><div class="n"><?= array_sum($perApp) ?></div><div class="l">App licences running</div></div>
-    <div class="kpi"><div class="n"><?= count($expiring) ?></div><div class="l">Expiring in 30 days</div></div>
-    <div class="kpi"><div class="n"><?= array_sum($used) ?></div><div class="l">SmartPRS 3 employees in use</div></div>
+    }
+    $hourNow = (int) (new DateTimeImmutable('now', new DateTimeZone('Asia/Kolkata')))->format('G');
+    $saLogos = ['smartprs3' => 'assets/logos/smartprs3.png', 'smartept' => 'assets/logos/smartept.png', 'leadger' => 'https://rovexy.app/brand/products/leadger.png inv', 'rovexy' => 'https://rovexy.app/brand/rovexy-lockup.svg'];
+    $saIcons = ['smartprs3' => 'fa-people-group', 'smartept' => 'fa-chart-line', 'smartdcm' => 'fa-hand-holding-dollar', 'leadger' => 'fa-bullseye', 'rovexy' => 'fa-route', 'qronex' => 'fa-qrcode'];
+    $saMark = static function (string $c, array $p) use ($saIcons): string {
+        return '<span class="am" style="--c:' . ag_h((string) $p['color']) . '"><i class="fas ' . ag_h($saIcons[$c] ?? 'fa-cube') . '"></i></span>';
+    };
+    $chk = static fn (string $st, bool $live): string => match (true) {
+        $st === 'on' && $live => '<span class="chk on" title="Licensed - live"><i class="fas fa-check"></i></span>',
+        $st === 'on' => '<span class="chk soon" title="Licensed - app arriving on AmetecsGlobal soon"><i class="fas fa-check"></i></span>',
+        $st === 'expired' => '<span class="chk bad" title="Licence expired"><i class="fas fa-xmark"></i></span>',
+        default => '<span class="chk off" title="Not licensed"></span>' };
+    $att = array_merge($expired, $expiring); ?>
+  <div class="dh">
+    <div class="dh-t"><h1><?= $hourNow < 12 ? 'Good morning' : ($hourNow < 17 ? 'Good afternoon' : 'Good evening') ?>, <?= ag_h((string) strtok($myName, ' ')) ?></h1><span><?= ag_h(date('l, d M Y', (int) strtotime($today))) ?> &middot; across AmetecsGlobal</span></div>
+    <div class="row"><a class="btn ghost" href="?p=activity"><i class="fas fa-clock-rotate-left"></i>Activity</a><a class="btn gold" href="?p=client-new"><i class="fas fa-plus"></i>New client</a></div>
   </div>
-  <div class="box"><div class="hd"><h2>Apps in use</h2></div><table><tr><th>App</th><th>Clients using it</th><th>Status</th></tr>
-  <?php foreach ($plugins as $c => $p): ?><tr><td><span class="dot" style="background:<?= ag_h($p['color']) ?>"></span><b><?= ag_h($p['name']) ?></b></td><td><?= $perApp[$c] ?></td>
-    <td><?= $p['open'] !== null ? '<span class="pill green">Live on AmetecsGlobal</span>' : '<span class="pill grey">Coming</span>' ?></td></tr><?php endforeach; ?></table></div>
-  <div class="box"><div class="hd"><h2>Licences needing attention</h2></div>
-  <?php if ($expiring === [] && $expired === []): ?><div class="bd muted">Nothing expires in the next 30 days.</div><?php else: ?>
-  <table><tr><th>Client</th><th>App</th><th>Valid till</th><th></th></tr>
-  <?php foreach (array_merge($expired, $expiring) as [$t, $p, $u]): ?><tr><td><a href="?p=client&id=<?= (int) $t['id'] ?>"><?= ag_h($t['name']) ?></a></td><td><?= ag_h($p['name']) ?></td>
-    <td><?= $d($u) ?> <?= $u < $today ? '<span class="pill red">Expired</span>' : '<span class="pill amber">Soon</span>' ?></td><td class="right"><a class="btn ghost" href="?p=client&id=<?= (int) $t['id'] ?>#apps">Renew</a></td></tr><?php endforeach; ?></table><?php endif; ?></div>
-  <div class="box"><div class="hd"><h2>Latest activity</h2><a href="?p=activity" style="margin-left:auto">All activity →</a></div>
-  <table><tr><th>When</th><th>Who</th><th>What</th></tr><?php foreach (AmetecsData::activity('', 8) as $r): ?><tr><td><?= ag_h($r['at']) ?></td><td><?= ag_h($r['who']) ?></td><td><?= ag_h($r['what']) ?></td></tr><?php endforeach; ?></table></div>
-
+  <section class="kstrip">
+    <a href="?p=clients"><span class="ki k1"><i class="fas fa-building"></i></span><div><b data-count="<?= count($tenants) ?>">0</b><span>Clients</span></div></a>
+    <a href="?p=clients&amp;s=active"><span class="ki k2"><i class="fas fa-circle-check"></i></span><div><b data-count="<?= $active ?>">0</b><span>Active</span></div></a>
+    <a href="?p=clients&amp;s=suspended"><span class="ki k3"><i class="fas fa-ban"></i></span><div><b data-count="<?= count($tenants) - $active ?>">0</b><span>Suspended / closed</span></div></a>
+    <a href="?p=apps"><span class="ki k4"><i class="fas fa-layer-group"></i></span><div><b data-count="<?= array_sum($perApp) ?>">0</b><span>Licences running</span></div></a>
+    <div><span class="ki k5"><i class="fas fa-hourglass-half"></i></span><div><b data-count="<?= count($att) ?>">0</b><span>Expiring / expired</span></div></div>
+    <div><span class="ki k6"><i class="fas fa-users"></i></span><div><b data-count="<?= array_sum($used) ?>">0</b><span>SmartPRS 3 employees</span></div></div>
+  </section>
+  <div class="dgrid2">
+    <div class="dcol2"><div class="box"><div class="hd"><h2><i class="fas fa-table-cells"></i>Client licences</h2>
+        <span class="lg"><em><span class="chk on"><i class="fas fa-check"></i></span>Live</em><em><span class="chk soon"><i class="fas fa-check"></i></span>Licensed, arriving soon</em><em><span class="chk off"></span>Off</em><em><span class="chk bad"><i class="fas fa-xmark"></i></span>Expired</em></span>
+        <a href="?p=clients" class="more">All clients <i class="fas fa-arrow-right"></i></a></div>
+      <div class="mx"><table class="mxt"><tr><th>Client</th><?php foreach ($plugins as $c => $p): ?><th class="ac" title="<?= ag_h($p['name']) ?>"><?= $saMark($c, $p) ?><small><?= ag_h($p['name']) ?></small></th><?php endforeach; ?><th class="ac">Employees</th><th>Status</th></tr>
+      <?php foreach (array_slice($tenants, 0, 8) as $t): $tid = (string) $t['id']; ?><tr>
+        <td><a class="cn" href="?p=client&id=<?= (int) $tid ?>"><b><?= ag_h($t['name']) ?></b><small><?= ($t['subdomain'] ?? '') !== '' ? '/c/' . ag_h((string) $t['subdomain']) : 'no sign-in link' ?></small></a></td>
+        <?php foreach ($plugins as $c => $p): ?><td class="ac"><?= $chk(AmetecsAccess::state($tid, $c, $all), $p['open'] !== null) ?></td><?php endforeach; ?>
+        <td class="ac"><b><?= (int) ($used[$tid] ?? 0) ?></b></td><td><?= $statusPill((string) $t['status_code']) ?></td></tr>
+      <?php endforeach; ?>
+      <?php if ($tenants === []): ?><tr><td colspan="<?= count($plugins) + 3 ?>"><div class="empty"><i class="fas fa-building"></i>No clients yet.</div></td></tr><?php endif; ?></table></div>
+      <?php if ($att !== []): ?><div class="attn"><b><i class="fas fa-triangle-exclamation"></i>Needs attention</b>
+        <?php foreach (array_slice($att, 0, 4) as [$t, $p, $u]): ?><a href="?p=client&id=<?= (int) $t['id'] ?>#apps"><?= ag_h($t['name']) ?> &middot; <?= ag_h($p['name']) ?> &middot; <?= $d($u) ?> <?= $u < $today ? '<span class="pill red">Expired</span>' : '<span class="pill amber">Soon</span>' ?></a><?php endforeach; ?></div>
+      <?php else: ?><div class="attn ok"><i class="fas fa-shield-heart"></i>All licences are valid for the next 30 days.</div><?php endif; ?>
+    </div>
+      <div class="box"><div class="hd"><h2><i class="fas fa-bolt"></i>Latest activity</h2><a href="?p=activity" class="more">All <i class="fas fa-arrow-right"></i></a></div>
+        <?php $feed = AmetecsData::activity('', 5); $names = array_column($tenants, 'name', 'id'); ?>
+        <?php if ($feed === []): ?><div class="empty"><i class="fas fa-wind"></i>No activity yet.</div><?php else: ?>
+        <ul class="feed"><?php foreach ($feed as $r): ?>
+          <li><span class="fd"></span><div><div class="ft2"><?= ag_h($r['what']) ?><?= ($r['tenant'] ?? '') !== '' ? ' &middot; <a href="?p=client&id=' . (int) $r['tenant'] . '">' . ag_h($names[$r['tenant']] ?? '#' . $r['tenant']) . '</a>' : '' ?></div>
+            <div class="fm"><?= ag_h($r['who']) ?> &middot; <time data-at="<?= ag_h($r['at']) ?>"><?= ag_h($r['at']) ?></time></div></div></li>
+        <?php endforeach; ?></ul><?php endif; ?></div>
+    </div>
+    <div class="dcol2">
+      <div class="box"><div class="hd"><h2><i class="fas fa-puzzle-piece"></i>Licences by app</h2><span class="muted sm">clients &middot; seats</span></div>
+        <ul class="apl"><?php foreach ($plugins as $c => $p): ?><li><?= $saMark($c, $p) ?><span class="an"><?= ag_h($p['name']) ?><small><?= $p['open'] !== null ? 'Live' : 'Arriving soon' ?></small></span>
+          <span class="av2"><b><?= $perApp[$c] ?></b> &middot; <?= $seatsApp[$c] ?></span></li><?php endforeach; ?></ul></div>
+    </div>
+  </div>
 <?php elseif ($page === 'clients'):
     $q = strtolower(trim((string) ($_GET['q'] ?? '')));
     $sf = (string) ($_GET['s'] ?? '');
     $list = array_filter($tenants, static fn ($t) => ($q === '' || str_contains(strtolower($t['name'] . ' ' . $t['code'] . ' ' . ($t['subdomain'] ?? '')), $q)) && ($sf === '' || $t['status_code'] === $sf)); ?>
   <h1>Clients</h1><p class="sub">Every company on AmetecsGlobal. Open one to change its apps, licences and logins.</p>
-  <form class="toolbar"><input type="hidden" name="p" value="clients"><input name="q" placeholder="Search name, code or sign-in link" value="<?= ag_h($q) ?>">
+  <form class="toolbar"><input type="hidden" name="p" value="clients"><span class="si"><i class="fas fa-magnifying-glass"></i><input name="q" data-live="#clients-t" placeholder="Search name, code or sign-in link" value="<?= ag_h($q) ?>" autocomplete="off"></span>
     <select name="s"><option value="">All statuses</option><?php foreach ($statuses as $k => $v): ?><option value="<?= $k ?>"<?= $sf === $k ? ' selected' : '' ?>><?= $v ?></option><?php endforeach; ?></select>
-    <button class="btn ghost">Filter</button><a class="btn gold" href="?p=client-new" style="margin-left:auto">+ New client</a></form>
-  <div class="box"><table><tr><th>Client</th><th>Code</th><th>Status</th><th>Apps on</th><th>Employees</th><th>Since</th><th></th></tr>
+    <button class="btn ghost"><i class="fas fa-filter"></i>Filter</button><a class="btn gold" href="?p=client-new" style="margin-left:auto"><i class="fas fa-plus"></i>New client</a></form>
+  <div class="box"><table id="clients-t" class="sortable"><tr><th>Client</th><th>Code</th><th>Status</th><th>Apps on</th><th>Employees</th><th>Since</th><th></th></tr>
   <?php foreach ($list as $t): $tid = (string) $t['id']; ?><tr>
     <td><a href="?p=client&id=<?= (int) $tid ?>"><b><?= ag_h($t['name']) ?></b></a><div class="muted" style="font-size:12px"><?= ($t['subdomain'] ?? '') !== '' ? '/c/' . ag_h((string) $t['subdomain']) : 'no sign-in link' ?><?= ($meta[$tid]['contact_name'] ?? '') !== '' ? ' · ' . ag_h($meta[$tid]['contact_name']) : '' ?></div></td>
     <td><?= ag_h($t['code']) ?></td><td><?= $statusPill((string) $t['status_code']) ?></td>
@@ -665,7 +844,7 @@ button[disabled]{opacity:.45;cursor:not-allowed}
 
 <?php elseif ($page === 'apps'): ?>
   <h1>Apps</h1><p class="sub">The apps every client sees. This list is shared: a change here reaches every PC through GitHub within minutes. An app with an "Opens at" link is <b>Live</b> and opens from the client's front door; without one it can already be licensed and shows as coming. Retired apps disappear for clients but their licences and data are kept.</p>
-  <div class="box"><table><tr><th>App</th><th>What it does</th><th>Counted in</th><th>Colour</th><th>Opens at</th><th>Clients · seats</th><th>Retired</th><th></th></tr>
+  <div class="box"><table><tr><th>App</th><th>What it does</th><th>Counted in</th><th>Colour</th><th>Logo</th><th>Opens at</th><th>Clients · seats</th><th>Retired</th><th></th></tr>
   <?php foreach (AmetecsAccess::plugins(true) as $c => $p):
       $n = 0; $seats = 0;
       foreach ($tenants as $t) { if (AmetecsAccess::state((string) $t['id'], $c, $all) === 'on') { $n++; $seats += (int) AmetecsAccess::get((string) $t['id'], $c, $all)['seats']; } }
@@ -676,6 +855,9 @@ button[disabled]{opacity:.45;cursor:not-allowed}
       <td><input form="<?= $fid ?>" name="what" value="<?= ag_h($p['what']) ?>" style="width:100%"></td>
       <td><input form="<?= $fid ?>" name="unit" value="<?= ag_h($p['unit']) ?>" style="width:90px"></td>
       <td><input form="<?= $fid ?>" type="color" name="color" value="<?= ag_h($p['color']) ?>" style="width:44px;padding:2px;height:32px"></td>
+      <td><?php $lg = trim((string) ($p['logo'] ?? '')) ?: (['smartprs3' => 'assets/logos/smartprs3.png', 'smartept' => 'assets/logos/smartept.png', 'leadger' => 'https://rovexy.app/brand/products/leadger.png inv', 'rovexy' => 'https://rovexy.app/brand/rovexy-lockup.svg'][$c] ?? ''); [$lg, $lgInv] = array_pad(explode(' ', $lg, 2), 2, ''); ?>
+        <div style="display:flex;gap:8px;align-items:center"><span style="width:84px;height:34px;border-radius:8px;background:#fff;border:1px solid var(--line);display:grid;place-items:center;flex:none;padding:4px"><?= $lg !== '' ? '<img src="' . ag_h($lg) . '" alt="" style="max-width:100%;max-height:26px' . ($lgInv === 'inv' ? ';filter:invert(1) hue-rotate(180deg)' : '') . '" onerror="this.remove()">' : '<span style="color:#64748b;font-size:11px">none</span>' ?></span>
+        <input form="<?= $fid ?>" name="logo" value="<?= ag_h((string) ($p['logo'] ?? '')) ?>" placeholder="built-in" style="width:150px"></div></td>
       <td><input form="<?= $fid ?>" name="open" value="<?= ag_h((string) ($p['open'] ?? '')) ?>" placeholder="not live yet" style="width:170px">
         <div style="margin-top:3px"><?= !empty($p['retired']) ? '<span class="pill red">Retired</span>' : ($p['open'] !== null ? '<span class="pill green">Live</span>' : '<span class="pill grey">Coming</span>') ?></div></td>
       <td><?= $n ?> · <?= $seats ?></td>
@@ -689,13 +871,15 @@ button[disabled]{opacity:.45;cursor:not-allowed}
       <div><label>What it does</label><input name="what" placeholder="one line clients will read"></div>
       <div><label>Seats are counted in</label><input name="unit" value="users" placeholder="users, employees, agents, devices…"></div>
       <div><label>Colour</label><input type="color" name="color" value="#1F3A5F" style="height:38px;padding:3px"></div>
+      <div class="full"><label>Logo (web address or assets/logos/file.png &mdash; a full-colour logo on a transparent or white background; add &ldquo; inv&rdquo; after the address if you only have a white version)</label><input name="logo" placeholder="https://example.com/logo-white.png"></div>
       <div class="full"><label>Opens at (leave empty until the app is on AmetecsGlobal)</label><input name="open" placeholder="../plugins/smartvisit/  or  https://smartvisit.example.com"></div>
     </div><div class="ft"><button class="btn gold">Add app</button></div></form>
 
 <?php elseif ($page === 'activity'):
     $names = array_column($tenants, 'name', 'id'); ?>
   <h1>Activity log</h1><p class="sub">Every change made in this console, newest first. Entries are never edited or removed.</p>
-  <div class="box"><table><tr><th>When</th><th>Who</th><th>Client</th><th>What</th><th>Detail</th></tr>
+  <div class="toolbar"><span class="si"><i class="fas fa-magnifying-glass"></i><input data-live="#act-t" placeholder="Filter by who, client or what…" autocomplete="off"></span></div>
+  <div class="box"><table id="act-t" class="sortable"><tr><th>When</th><th>Who</th><th>Client</th><th>What</th><th>Detail</th></tr>
   <?php foreach (AmetecsData::activity() as $r): ?><tr><td><?= ag_h($r['at']) ?></td><td><?= ag_h($r['who']) ?></td>
     <td><?= $r['tenant'] !== '' ? '<a href="?p=client&id=' . (int) $r['tenant'] . '">' . ag_h($names[$r['tenant']] ?? '#' . $r['tenant']) . '</a>' : '' ?></td><td><?= ag_h($r['what']) ?></td><td class="muted"><?= ag_h($r['detail']) ?></td></tr>
   <?php endforeach; ?></table></div>
@@ -728,7 +912,10 @@ button[disabled]{opacity:.45;cursor:not-allowed}
       <div><label>Reply-to (optional)</label><input type="email" name="reply_to" value="<?= ag_h((string) $mc['reply_to']) ?>"></div>
     </div><div class="ft"><button class="btn navy">Save</button></div></form>
   <form method="post" class="box" style="max-width:760px"><?= $csrf() ?><input type="hidden" name="do" value="email-test">
-    <div class="bd row"><span>Send a test email to <b><?= ag_h($meEmail) ?></b></span><button class="btn gold"<?= AmetecsMail::box($pdo)->ready() ? '' : ' disabled' ?>>Send test</button></div></form>
+    <div class="hd"><h2><i class="fas fa-paper-plane"></i>Send a test email</h2></div>
+    <div class="bd row"><input type="email" name="to" required value="<?= ag_h($meEmail) ?>" placeholder="any email address" style="flex:1;min-width:240px">
+      <button class="btn gold"<?= AmetecsMail::box($pdo)->ready() ? '' : ' disabled title="Save the mail server and switch on Send emails first"' ?>><i class="fas fa-paper-plane"></i>Send test</button></div>
+    <?php if (!AmetecsMail::box($pdo)->ready()): ?><div class="bd muted" style="padding-top:0;font-size:12.5px">Save the mail server above with <b>Send emails</b> switched on, then send a test.</div><?php endif; ?></form>
   <p class="muted" style="font-size:12px">The password is stored encrypted. These are the same mail settings SmartPRS 3's console uses, so there is one mailbox to look after.</p>
 
 <?php elseif ($page === 'account'): ?>
@@ -743,6 +930,43 @@ button[disabled]{opacity:.45;cursor:not-allowed}
 <?php else: ?>
   <h1>Not found</h1><p class="sub">That page or client does not exist. <a href="?p=clients">Back to clients</a></p>
 <?php endif; ?>
-</main></div>
+</main></div></div>
+<div class="pal" id="pal" onclick="if(event.target===this)pal(false)"><div class="pb"><input id="palq" placeholder="Type a client or page name…" autocomplete="off"><ul id="pall"></ul></div></div>
+<div class="tip" id="tip"></div>
+<script>
+(function(){
+try{if(localStorage.getItem('agMini')==='1')document.body.classList.add('mini')}catch(e){}
+// count-up KPIs
+document.querySelectorAll('[data-count]').forEach(function(el){var n=+el.dataset.count,t0=null;function f(t){t0=t0||t;var k=Math.min(1,(t-t0)/700);el.textContent=Math.round(n*(1-Math.pow(1-k,3))).toLocaleString('en-IN');if(k<1)requestAnimationFrame(f)}requestAnimationFrame(f)});
+// bars + donut grow in
+requestAnimationFrame(function(){setTimeout(function(){document.querySelectorAll('[data-w]').forEach(function(i){i.style.width=Math.max(i.dataset.w>0?3:0,+i.dataset.w)+'%'});document.querySelectorAll('[data-da]').forEach(function(c){c.setAttribute('stroke-dasharray',c.dataset.da)})},60)});
+// tooltips
+var tip=document.getElementById('tip');document.querySelectorAll('[data-tip]').forEach(function(el){el.addEventListener('mousemove',function(e){tip.textContent=el.dataset.tip;tip.style.opacity=1;tip.style.left=(e.clientX+14)+'px';tip.style.top=(e.clientY+14)+'px'});el.addEventListener('mouseleave',function(){tip.style.opacity=0})});
+// toasts fade away
+document.querySelectorAll('.toast[data-auto]').forEach(function(t){setTimeout(function(){t.style.transition='opacity .4s';t.style.opacity=0;setTimeout(function(){t.remove()},400)},5000)});
+// relative times
+document.querySelectorAll('time[data-at]').forEach(function(el){var d=new Date(el.dataset.at.replace(' ','T')+'+05:30'),s=(Date.now()-d)/1000;if(isNaN(s))return;el.title=el.dataset.at;
+  el.textContent=s<60?'just now':s<3600?Math.floor(s/60)+' min ago':s<86400?Math.floor(s/3600)+' h ago':s<604800?Math.floor(s/86400)+' d ago':el.dataset.at.slice(0,10)});
+// live filter
+document.querySelectorAll('input[data-live]').forEach(function(inp){var t=document.querySelector(inp.dataset.live);if(!t)return;function go(){var q=inp.value.toLowerCase().trim();t.querySelectorAll('tr').forEach(function(r,i){if(r.querySelector('th'))return;r.style.display=!q||r.textContent.toLowerCase().indexOf(q)>=0?'':'none'})}inp.addEventListener('input',go);go()});
+// sortable tables
+document.querySelectorAll('table.sortable').forEach(function(t){var head=t.querySelector('tr');head.querySelectorAll('th').forEach(function(th,ix){if(!th.textContent.trim())return;th.classList.add('sort');th.addEventListener('click',function(){var asc=!th.classList.contains('asc');head.querySelectorAll('th').forEach(function(h){h.classList.remove('asc','desc')});th.classList.add(asc?'asc':'desc');
+  var rows=[].slice.call(t.querySelectorAll('tr')).filter(function(r){return !r.querySelector('th')});rows.sort(function(a,b){var x=(a.children[ix]||{}).textContent||'',y=(b.children[ix]||{}).textContent||'',nx=parseFloat(x),ny=parseFloat(y);var c=!isNaN(nx)&&!isNaN(ny)?nx-ny:x.localeCompare(y,undefined,{numeric:true});return asc?c:-c});rows.forEach(function(r){r.parentNode.appendChild(r)})})})});
+// command palette
+var items=<?= json_encode(array_merge(
+    array_map(static fn ($k, $v) => ['t' => $v[0], 'h' => '?p=' . $k, 'i' => $v[1], 's' => 'Page'], array_keys(array_merge(...array_values($navItems))), array_values(array_merge(...array_values($navItems)))),
+    array_map(static fn ($t) => ['t' => (string) $t['name'], 'h' => '?p=client&id=' . (int) $t['id'], 'i' => 'fa-building', 's' => (string) ($t['code'] ?? '')], $tenants)), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+var P=document.getElementById('pal'),Q=document.getElementById('palq'),L=document.getElementById('pall'),sel=0,cur=[];
+function esc(s){return String(s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
+function draw(){var q=Q.value.toLowerCase();cur=items.filter(function(x){return !q||(x.t+' '+x.s).toLowerCase().indexOf(q)>=0}).slice(0,12);sel=Math.min(sel,Math.max(0,cur.length-1));
+  L.innerHTML=cur.map(function(x,i){return '<li'+(i===sel?' class="sel"':'')+'><a href="'+esc(x.h)+'"><i class="fas '+esc(x.i)+'"></i>'+esc(x.t)+'<small>'+esc(x.s)+'</small></a></li>'}).join('')||'<li style="padding:14px;color:#64748b">Nothing matches.</li>'}
+window.pal=function(o){P.classList.toggle('open',o);if(o){Q.value='';sel=0;draw();setTimeout(function(){Q.focus()},10)}};
+Q.addEventListener('input',function(){sel=0;draw()});
+Q.addEventListener('keydown',function(e){if(e.key==='ArrowDown'){sel=Math.min(sel+1,cur.length-1);draw();e.preventDefault()}else if(e.key==='ArrowUp'){sel=Math.max(sel-1,0);draw();e.preventDefault()}else if(e.key==='Enter'&&cur[sel]){location.href=cur[sel].h}});
+document.addEventListener('keydown',function(e){if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();pal(!P.classList.contains('open'))}else if(e.key==='Escape')pal(false)});
+// close open menus on outside click
+document.addEventListener('click',function(e){document.querySelectorAll('details.me[open],details.act[open]').forEach(function(d){if(!d.contains(e.target))d.removeAttribute('open')})});
+})();
+</script>
 <?php endif; ?>
 </body></html>

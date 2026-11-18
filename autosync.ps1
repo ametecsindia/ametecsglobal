@@ -1,16 +1,14 @@
 # AmetecsGlobal AUTOMATIC sync (started by AUTO-SYNC.bat; leave its window open or minimised).
-#   - any saved change in AmetecsGlobal, or in an app folder listed in sync-apps.json  -> sync about a minute later
+#   - any saved change in AmetecsGlobal -> sync about a minute later (the original app folders are not watched or read)
 #     (it waits for a minute with no further saves, so a half-finished edit is not pushed mid-way)
 #   - every 5 minutes anyway, to pick up changes made on GitHub
-# It only WATCHES the app folders; all writing is done by sync.ps1, inside AmetecsGlobal only.
 param([int]$quietSeconds = 60, [int]$pollMinutes = 5)
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $single = New-Object System.Threading.Mutex($false, 'AmetecsGlobalAutoSync')
 if (-not $single.WaitOne(0)) { Write-Host 'AUTO-SYNC is already running in another window.'; Start-Sleep 5; exit }
 
-$cfg = Get-Content -Raw (Join-Path $root 'sync-apps.json') | ConvertFrom-Json
-$watched = @($root) + @($cfg.apps | ForEach-Object { (Resolve-Path $_.source).Path })
+$watched = @($root)
 # Changes here never start a sync: git's own folder, logs, runtime data, libraries.
 $ignore = '[\\/](\.git|storage|vendor|node_modules|core[\\/]data|public[\\/]uploads|Claude outputs|build|\.gradle|\.idea)([\\/]|$)|sync-log\.txt$|\.(log|tmp|swp)$|~$'
 $i = 0
