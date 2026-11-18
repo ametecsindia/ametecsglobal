@@ -90,3 +90,12 @@
   });
   label();
 })();
+// self-service plan form: plan price, credit, GST and total as you change plan or seats
+(function () {
+  function inr(v) { return 'INR ' + v.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+  function calc(f) {
+    var o = f.plan.options[f.plan.selectedIndex], base = (+o.dataset.rate || 0) * (+f.seats.value || 0), net = Math.max(0, base - (+f.dataset.credit || 0)), gst = net * (+f.dataset.gst || 0) / 100;
+    f.querySelector('[data-o=base]').textContent = inr(base); f.querySelector('[data-o=gst]').textContent = inr(gst); f.querySelector('[data-o=tot]').textContent = inr(net + gst);
+  }
+  document.querySelectorAll('form[data-plan]').forEach(function (f) { calc(f); f.addEventListener('input', function () { calc(f); }); });
+})();

@@ -265,6 +265,23 @@ if ($billOn && ($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && str_starts_with(
             $inv = AmetecsBilling::forRenewal($pl);
             $out(true, 'Invoice ' . $inv['number'] . ' is ready. Pay it below to renew.', [], '?v=billing&pay=' . (int) $inv['id']);
         }
+        if ($pdo2 === 'pay-plan') {   // self-service: buy an application, or change plan / seats (owner, 18 Nov 2026)
+            $papp = (string) ($_POST['app'] ?? '');
+            $pl = AmetecsLicences::row($tenant, $papp);
+            if (!isset(AmetecsAccess::plugins(true)[$papp]) || ($pl !== null && in_array($pl['status'], ['suspended', 'cancelled'], true))) {
+                $out(false, 'That application cannot be bought online. Contact Ametecs.', [], '?v=licences');
+            }
+            $pseats = (int) ($_POST['seats'] ?? 0);
+            if ($papp === 'smartprs3' && $pseats < $used) {
+                $out(false, 'You have ' . $used . ' active employees: choose at least that many seats.', [], '?v=licences');
+            }
+            try {
+                $inv = AmetecsBilling::forPlan($tenant, $papp, (string) ($_POST['plan'] ?? ''), $pseats);
+            } catch (\RuntimeException $x) {
+                $out(false, $x->getMessage(), [], '?v=licences');
+            }
+            $out(true, 'Invoice ' . $inv['number'] . ' is ready. Pay it below and your new plan starts at once.', [], '?v=billing&pay=' . (int) $inv['id']);
+        }
         $pi = AmetecsBilling::byId((string) ($_POST['invoice'] ?? ''));
         if ($pi === null || (string) $pi['tenant_id'] !== $tenant) {
             $out(false, 'Unknown invoice.');
@@ -659,7 +676,7 @@ a{color:inherit}
 .ucnt{margin-left:auto;font-style:normal;font-size:11px;background:var(--gold);color:#fff;padding:1px 8px;border-radius:99px}.lic-t td.r,.lic-t th.r{text-align:right}
 .lp{display:inline-block;padding:2px 10px;border-radius:99px;font-size:12px;font-weight:600}.lp-green{background:var(--ok-bg);color:var(--ok)}.lp-amber{background:#fffbeb;color:#b45309}.lp-red{background:var(--bad-bg);color:var(--bad)}.lp-grey{background:#f1f5f9;color:var(--mute)}
 </style>
-<link rel="stylesheet" href="assets/shell.css?v=12"><link rel="stylesheet" href="assets/theme-gold.css?v=2"></head><body>
+<link rel="stylesheet" href="assets/shell.css?v=13"><link rel="stylesheet" href="assets/theme-gold.css?v=2"></head><body>
 <?php if ($user === null): ?>
 <div class="auth">
   <aside class="auth-side">
@@ -868,7 +885,22 @@ a{color:inherit}
   <?php endforeach; ?>
   <?php if (!$anyPl): ?><div class="lic-t"><div class="empty2" style="padding:30px">No add-on modules are offered for your applications yet.</div></div><?php endif; ?>
 
-<?php elseif ($view === 'licences'): $apps = AmetecsAccess::plugins(true); $lics = $myLic;
+<?php elseif ($view === 'licences'): $apps = AmetecsAccess::plugins(true); $lics = $myLic; $prices = $billOn ? AmetecsBilling::prices() : []; $gstP = (float) AmetecsBilling::settings()['gst_percent'];
+    // the self-service plan form (owner, 18 Nov 2026: "self buy and update plan"); the total updates as you type
+    $planForm = static function (string $code, ?array $l, string $label) use ($prices, $gstP, $used, $session, $apps): string {
+        $r = $prices[$code] ?? []; $plans = array_filter(['monthly' => (float) ($r['monthly'] ?? 0), 'yearly' => (float) ($r['yearly'] ?? 0)]);
+        $min = $code === 'smartprs3' ? max(1, $used) : 1; $cr = $l !== null ? AmetecsBilling::creditFor((string) $l['tenant_id'], $code) : 0.0;
+        $seats = max($min, (int) ($l['seats'] ?? 0) ?: $min); $cur = isset($plans[$l['plan'] ?? '']) ? $l['plan'] : array_key_first($plans);
+        $h = '<details class="pform"' . ($l === null ? '' : '') . '><summary class="btn2 ' . ($l === null ? 'primary' : 'ghost') . '"><i class="fas fa-' . ($l === null ? 'cart-shopping' : 'sliders') . '"></i>' . $label . '</summary>'
+            . '<form method="post" data-plan data-gst="' . $gstP . '" data-credit="' . $cr . '"><input type="hidden" name="csrf" value="' . ag_h($session->token()) . '"><input type="hidden" name="do" value="pay-plan"><input type="hidden" name="app" value="' . ag_h($code) . '">'
+            . '<div class="pf-row"><label>Plan<select name="plan">';
+        foreach ($plans as $k => $rate) { $h .= '<option value="' . $k . '" data-rate="' . $rate . '"' . ($k === $cur ? ' selected' : '') . '>' . ($k === 'yearly' ? 'Yearly' : 'Monthly') . ' &middot; INR ' . number_format($rate, 2) . ' per ' . ag_h(rtrim((string) ($apps[$code]['unit'] ?? 'user'), 's')) . '</option>'; }
+        $h .= '</select></label><label>' . ag_h(ucfirst((string) ($apps[$code]['unit'] ?? 'users'))) . '<input type="number" name="seats" min="' . $min . '" value="' . $seats . '" required></label></div>'
+            . '<div class="pf-sum"><span>Plan <b data-o="base">-</b></span>' . ($cr > 0 ? '<span>Unused on current plan <b>&minus; INR ' . number_format($cr, 2) . '</b></span>' : '') . '<span>GST ' . $gstP . '% <b data-o="gst">-</b></span><span class="pf-tot">To pay <b data-o="tot">-</b></span></div>'
+            . ($min > 1 ? '<p class="muted2" style="font-size:12px;margin:6px 0 0">At least ' . $min . ': your active employees.</p>' : '')
+            . '<button class="btn2 primary"><i class="fas fa-lock"></i>Continue to pay</button><p class="muted2" style="font-size:11.5px;margin:8px 0 0">The new plan starts the moment the payment goes through.</p></form></details>';
+        return $h;
+    };
     uasort($lics, static fn ($a, $b) => strcmp((string) ($a['valid_until'] ?: '9999'), (string) ($b['valid_until'] ?: '9999'))); ?>
   <div class="pgh"><div><h1>Licences &amp; plans</h1><p>Your plan for each application: seats, price and validity. Renew online, or ask Ametecs to change a plan or add seats.</p></div></div>
   <?php if ($notice !== null): ?><div class="okmsg"><i class="fas fa-circle-check"></i><?= ag_h($notice) ?></div><?php endif; ?>
@@ -881,8 +913,17 @@ a{color:inherit}
         <dt>Valid till</dt><dd><?= $until === '' ? 'No end date' : ag_h(date('d M Y', (int) strtotime($until))) . ($days !== null ? ' <small style="' . ($days < 0 ? 'color:#b91c1c' : ($days <= 30 ? 'color:#b45309' : 'color:#94a3b8')) . '">' . ($days < 0 ? 'ended ' . -$days . ' days ago' : $days . ' days left') . '</small>' : '') ?></dd></dl>
       <div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap"><?php if ($payOnline && (float) ($l['price'] ?? 0) > 0 && $l['currency'] === 'INR' && in_array($l['plan'], ['monthly', 'yearly'], true) && $st !== 'off'): ?>
         <form method="post" style="display:inline"><input type="hidden" name="csrf" value="<?= ag_h($session->token()) ?>"><input type="hidden" name="do" value="pay-renew"><input type="hidden" name="licence" value="<?= (int) $l['id'] ?>"><button class="btn2 primary"><i class="fas fa-rotate"></i>Renew online</button></form><?php endif; ?>
-        <a class="btn2 ghost" href="?v=support&amp;subject=<?= rawurlencode('Change plan / seats: ' . ($apps[$code]['name'] ?? $code)) ?>"><i class="fas fa-sliders"></i>Change plan or seats</a></div></div>
+        <?php if ($payOnline && ($prices[$code] ?? []) !== [] && !in_array($l['status'], ['suspended', 'cancelled'], true) && $l['plan'] !== 'perpetual'): ?></div><?= $planForm($code, $l, 'Change plan or seats') ?><div>
+        <?php else: ?><a class="btn2 ghost" href="?v=support&amp;subject=<?= rawurlencode('Change plan / seats: ' . ($apps[$code]['name'] ?? $code)) ?>"><i class="fas fa-sliders"></i>Change plan or seats</a><?php endif; ?></div></div>
   <?php endforeach; ?></div>
+  <?php $buyable = $payOnline ? array_filter($apps, static fn ($p, $c) => !isset($lics[$c]) && ($prices[$c] ?? []) !== [] && array_filter((array) $prices[$c]) !== [], ARRAY_FILTER_USE_BOTH) : [];
+  if ($buyable !== []): ?>
+  <h2 class="dsec"><i class="fas fa-cart-shopping"></i>Add an application<span>pay online, start at once</span></h2>
+  <div class="grid2c"><?php foreach ($buyable as $code => $p): $r = $prices[$code]; ?>
+    <div class="ibox"><h3><span class="logo" style="height:28px"><?= $logoOf($code, $p) ?></span><span class="muted2" style="margin-left:auto;font-size:12px;font-weight:500"><?= ag_h((string) $p['what']) ?></span></h3>
+      <p class="muted2" style="font-size:13px;margin:4px 0 12px">From <b style="color:#0f172a">INR <?= number_format(min(array_filter([(float) ($r['monthly'] ?? 0), (float) ($r['yearly'] ?? 0) / 12])), 2) ?></b> per <?= ag_h(rtrim((string) $p['unit'], 's')) ?> a month + GST</p>
+      <?= $planForm($code, null, 'Buy ' . $p['name']) ?></div>
+  <?php endforeach; ?></div><?php endif; ?>
   <?php if ($lics === []): ?><div class="lic-t"><div class="empty2" style="padding:30px">No licences yet.</div></div><?php endif; ?>
 
 <?php elseif ($view === 'notifications'): ?>
@@ -1017,5 +1058,5 @@ document.addEventListener('click',function(e){document.querySelectorAll('details
 </script>
 <?php endif; ?>
 <?php if ($user !== null): ?><div class="foot">AmetecsGlobal by Ametecs India &middot; <a href="super.php">Super Admin</a></div><?php endif; ?>
-<script src="assets/ui.js?v=7"></script>
+<script src="assets/ui.js?v=8"></script>
 </body></html>

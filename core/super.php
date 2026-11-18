@@ -551,6 +551,21 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && $pdo !== null) {
     }
 
     /* ---------------- billing (Phase 3, 18 Nov 2026) */
+    if ($do === 'prices-save') {   // self-service price list (owner, 18 Nov 2026: clients buy and change plans themselves)
+        $pr = [];
+        foreach (array_keys($plugins) as $c) {
+            foreach (['monthly', 'yearly'] as $k) {
+                $v = trim((string) ($_POST['price'][$c][$k] ?? ''));
+                if ($v !== '' && (!is_numeric($v) || (float) $v < 0)) {
+                    $back('?p=gateway', null, 'Prices must be numbers (leave empty for "not sold online").');
+                }
+                (float) $v > 0 && $pr[$c][$k] = round((float) $v, 2);
+            }
+        }
+        AmetecsBilling::savePrices($pr);
+        AmetecsData::log($meEmail, 'Changed self-service prices', '', implode(', ', array_map(static fn ($c) => $c . ' ' . json_encode($pr[$c]), array_keys($pr))));
+        $back('?p=gateway', 'Prices saved. Clients see them under Licences & plans.');
+    }
     if ($do === 'gateway-save') {
         $gst = (string) ($_POST['gst_percent'] ?? '18');
         if (!is_numeric($gst) || (float) $gst < 0 || (float) $gst > 50) {
@@ -1674,6 +1689,15 @@ $myIni = strtoupper(implode('', array_map(static fn (string $w): string => mb_su
       <div class="full"><label>Support hours</label><input name="support_hours" value="<?= ag_h((string) ($bs['support_hours'] ?? '')) ?>" placeholder="Mon-Sat, 10 am - 7 pm IST"></div>
     </div><div class="ft"><button class="btn navy">Save</button></div></form>
   <p class="muted" style="font-size:12px">The Key Secret is stored encrypted and never shown again. Payments are confirmed on the server with Razorpay's signature (or by asking Razorpay directly), never by the browser alone.</p>
+  <?php $prs = AmetecsBilling::prices(); ?>
+  <form method="post" class="box"><?= $csrf() ?><input type="hidden" name="do" value="prices-save">
+    <div class="hd"><h2><i class="fas fa-tags"></i>Self-service prices</h2><span class="muted">INR per seat, before GST. Clients buy an application or change plan and seats themselves under Licences &amp; plans, and pay online. Leave empty to keep a plan off sale.</span></div>
+    <div class="bd"><table><tr><th>Application</th><th>Monthly, per seat</th><th>Yearly, per seat</th></tr>
+    <?php foreach ($plugins as $c => $p): ?><tr><td><b><?= ag_h($p['name']) ?></b> <small class="muted">per <?= ag_h(rtrim((string) $p['unit'], 's')) ?></small></td>
+      <?php foreach (['monthly', 'yearly'] as $k): ?><td><input name="price[<?= ag_h($c) ?>][<?= $k ?>]" value="<?= isset($prs[$c][$k]) ? ag_h((string) $prs[$c][$k]) : '' ?>" inputmode="decimal" placeholder="not sold online" style="max-width:180px"></td><?php endforeach; ?></tr>
+    <?php endforeach; ?></table>
+    <p class="muted" style="font-size:12px;margin:10px 0 0">A plan change starts a new period on payment; the unused part of the current paid plan is taken off. A smaller plan than the current one is not sold online (it waits for renewal).</p></div>
+    <div class="ft"><button class="btn navy">Save prices</button></div></form>
 
 <?php elseif ($page === 'system'):
     $ok = static fn (string $s, string $t, string $d = '') => '<li><span class="s ' . $s . '"><i class="fas fa-' . ['ok' => 'check', 'warn' => 'exclamation', 'bad' => 'xmark'][$s] . '"></i></span><span><b>' . ag_h($t) . '</b>' . ($d !== '' ? '<small>' . $d . '</small>' : '') . '</span></li>';

@@ -18,7 +18,7 @@ declare(strict_types=1);
 final class AmetecsBilling
 {
     public const STATUSES = ['pending' => ['Pending', 'amber'], 'paid' => ['Paid', 'green'], 'cancelled' => ['Cancelled', 'grey'], 'refunded' => ['Refunded', 'red']];
-    public const PURPOSES = ['upgrade' => 'Upgrade', 'renewal' => 'Licence renewal', 'other' => 'Other'];
+    public const PURPOSES = ['upgrade' => 'Upgrade', 'renewal' => 'Licence renewal', 'plan' => 'Plan change', 'other' => 'Other'];
     private const API = 'https://api.razorpay.com/v1';
 
     /** Test hook: replaces the HTTPS call to Razorpay. fn(string $method, string $path, array $body): array{code: int, json: ?array} */
@@ -182,7 +182,7 @@ final class AmetecsBilling
         if ($amount <= 0) {
             throw new \InvalidArgumentException('An invoice needs an amount above zero.');
         }
-        if ($purpose !== 'other') {
+        if ($purpose !== 'other' && $purpose !== 'plan') {
             $q = self::pdo()->prepare("SELECT * FROM ag_invoices WHERE tenant_id = ? AND purpose = ? AND status = 'pending' AND COALESCE(licence_id, 0) = ? AND COALESCE(release_id, 0) = ? ORDER BY id DESC LIMIT 1");
             $q->execute([$tenant, $purpose, (int) $licenceId, (int) $releaseId]);
             if (($ex = $q->fetch(\PDO::FETCH_ASSOC)) !== false) {
@@ -228,6 +228,81 @@ final class AmetecsBilling
         $next = AmetecsLicences::nextUntil($licence);
         return self::create((string) $licence['tenant_id'], 'renewal', 'Renewal: ' . $name . ' (' . (AmetecsLicences::PLANS[$licence['plan']] ?? $licence['plan']) . ', ' . (int) $licence['seats'] . ' seats) till ' . ($next ? date('d M Y', (int) strtotime($next)) : '-'),
             (float) $licence['price'], (string) $licence['currency'], (string) $licence['id']);
+    }
+
+    // ------------------------------------------------------------------ self-service plans (owner, 18 Nov 2026: "self buy and update plan")
+
+    /** Super Admin's price list: [app => ['monthly' => per seat, 'yearly' => per seat]] in INR, before GST. Kept apart from settings(). */
+    public static function prices(): array
+    {
+        try {
+            $q = self::pdo()->prepare('SELECT value FROM platform_settings WHERE ckey = ? LIMIT 1');
+            $q->execute(['ag_prices']);
+            $v = json_decode((string) $q->fetchColumn(), true);
+        } catch (\Throwable) {
+            $v = null;
+        }
+        return is_array($v) ? $v : [];
+    }
+
+    public static function savePrices(array $p): void
+    {
+        $pdo = self::pdo();
+        $now = self::now();
+        $json = json_encode($p, JSON_UNESCAPED_SLASHES);
+        $id = $pdo->prepare('SELECT id FROM platform_settings WHERE ckey = ? LIMIT 1');
+        $id->execute(['ag_prices']);
+        ($row = $id->fetchColumn()) !== false
+            ? $pdo->prepare('UPDATE platform_settings SET value = ?, updated_at = ? WHERE id = ?')->execute([$json, $now, $row])
+            : $pdo->prepare('INSERT INTO platform_settings (ckey, value, created_at, updated_at) VALUES (?, ?, ?, ?)')->execute(['ag_prices', $json, $now, $now]);
+    }
+
+    /**
+     * What a plan costs the client now: the new period starts on payment; the unused part of what they already paid
+     * for is taken off. @return array{base: float, credit: float, amount: float, until: string}
+     */
+    public static function quotePlan(string $tenant, string $app, string $plan, int $seats): array
+    {
+        $rate = (float) (self::prices()[$app][$plan] ?? 0);
+        if ($rate <= 0 || $seats < 1 || !in_array($plan, ['monthly', 'yearly'], true)) {
+            throw new \RuntimeException('This plan is not offered online. Contact Ametecs.');
+        }
+        $today = AmetecsAccess::today();
+        $base = round($rate * $seats, 2);
+        $credit = self::creditFor($tenant, $app);
+        if ($base - $credit < 1) {
+            throw new \RuntimeException('A smaller plan than the one you have starts at your next renewal. Contact Ametecs to arrange it.');
+        }
+        return ['base' => $base, 'credit' => $credit, 'amount' => round($base - $credit, 2), 'until' => (new DateTimeImmutable($today))->modify($plan === 'yearly' ? '+1 year' : '+1 month')->format('Y-m-d')];
+    }
+
+    /** The unused part of the client's current paid plan for this app, in INR (taken off a new plan). */
+    public static function creditFor(string $tenant, string $app): float
+    {
+        $l = AmetecsLicences::row($tenant, $app);
+        $today = AmetecsAccess::today();
+        if ($l === null || AmetecsLicences::stateOf($l) !== 'on' || (float) ($l['price'] ?? 0) <= 0 || $l['currency'] !== 'INR' || (string) ($l['valid_until'] ?? '') <= $today
+            || !in_array($l['plan'], ['monthly', 'yearly'], true)) {
+            return 0.0;
+        }
+        $left = (strtotime((string) $l['valid_until']) - strtotime($today)) / 86400;
+        return round((float) $l['price'] * min(1, $left / ($l['plan'] === 'yearly' ? 365 : 30)), 2);   // ponytail: a month counted as 30 days
+    }
+
+    /** An invoice for a new or changed plan; paying it applies the plan (apply()). */
+    public static function forPlan(string $tenant, string $app, string $plan, int $seats): array
+    {
+        $q = self::quotePlan($tenant, $app, $plan, $seats);
+        foreach (self::invoices($tenant, 'pending') as $old) {   // one open plan invoice per app: the latest choice wins
+            if ($old['purpose'] === 'plan' && (json_decode((string) $old['notes'], true)['app'] ?? '') === $app) {
+                self::cancel($old, 'replaced by a new plan choice');
+            }
+        }
+        $name = AmetecsAccess::plugins(true)[$app]['name'] ?? $app;
+        $l = AmetecsLicences::row($tenant, $app);
+        return self::create($tenant, 'plan', ($l === null ? 'New: ' : 'Plan change: ') . $name . ' (' . AmetecsLicences::PLANS[$plan] . ', ' . $seats . ' seats) till ' . date('d M Y', (int) strtotime($q['until']))
+            . ($q['credit'] > 0 ? ' - less INR ' . number_format($q['credit'], 2) . ' unused on the current plan' : ''), $q['amount'], 'INR', $l !== null ? (string) $l['id'] : null, null,
+            (string) json_encode(['app' => $app, 'plan' => $plan, 'seats' => $seats, 'price' => $q['base']]));
     }
 
     public static function cancel(array $inv, string $why): void
@@ -328,7 +403,7 @@ final class AmetecsBilling
         }
         self::apply($cur, 'paid');
         AmetecsData::log(AmetecsLicences::$actor, 'Payment received for invoice ' . $cur['number'], (string) $cur['tenant_id'], $cur['currency'] . ' ' . number_format($amount, 2) . ' · ' . $gateway . ' ' . $reference);
-        return ['ok' => true, 'why' => 'Payment received for ' . $cur['number'] . '. ' . ($cur['purpose'] === 'upgrade' ? 'The upgrade is unlocked.' : ($cur['purpose'] === 'renewal' ? 'The licence is renewed.' : ''))];
+        return ['ok' => true, 'why' => 'Payment received for ' . $cur['number'] . '. ' . ($cur['purpose'] === 'upgrade' ? 'The upgrade is unlocked.' : ($cur['purpose'] === 'renewal' ? 'The licence is renewed.' : ($cur['purpose'] === 'plan' ? 'Your new plan is active.' : '')))];
     }
 
     /** Full refund of one Razorpay payment (or record an offline refund). Takes back what was bought. @return array{ok: bool, why: string} */
@@ -406,6 +481,14 @@ table{width:100%;border-collapse:collapse;margin-bottom:18px}th{background:#1F3A
                 AmetecsLicences::put($tid, (string) $l['app'], ['valid_until' => $next, 'status' => $l['status'] === 'cancelled' ? 'active' : $l['status']], 'Renewed (paid ' . $inv['number'] . ')');
             } else {
                 AmetecsLicences::event($l, 'Renewal payment refunded', 'invoice ' . $inv['number'] . ' - adjust the valid-till date by hand if needed');
+            }
+        }
+        if ($inv['purpose'] === 'plan' && is_array($n = json_decode((string) $inv['notes'], true)) && isset($n['app'], $n['plan'], $n['seats'])) {
+            if ($what === 'paid') {
+                AmetecsLicences::put($tid, (string) $n['app'], ['plan' => $n['plan'], 'seats' => (int) $n['seats'], 'price' => number_format((float) $n['price'], 2, '.', ''), 'currency' => 'INR',
+                    'status' => 'active', 'valid_until' => (new DateTimeImmutable(AmetecsAccess::today()))->modify($n['plan'] === 'yearly' ? '+1 year' : '+1 month')->format('Y-m-d')], 'Plan bought online (' . $inv['number'] . ')');
+            } elseif (($l = AmetecsLicences::row($tid, (string) $n['app'])) !== null) {
+                AmetecsLicences::event($l, 'Plan payment refunded', 'invoice ' . $inv['number'] . ' - set the plan, seats and date back by hand if needed');
             }
         }
     }
