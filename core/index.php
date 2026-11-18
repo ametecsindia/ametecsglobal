@@ -659,7 +659,7 @@ a{color:inherit}
 .ucnt{margin-left:auto;font-style:normal;font-size:11px;background:var(--gold);color:#fff;padding:1px 8px;border-radius:99px}.lic-t td.r,.lic-t th.r{text-align:right}
 .lp{display:inline-block;padding:2px 10px;border-radius:99px;font-size:12px;font-weight:600}.lp-green{background:var(--ok-bg);color:var(--ok)}.lp-amber{background:#fffbeb;color:#b45309}.lp-red{background:var(--bad-bg);color:var(--bad)}.lp-grey{background:#f1f5f9;color:var(--mute)}
 </style>
-<link rel="stylesheet" href="assets/shell.css?v=7"><link rel="stylesheet" href="assets/theme-gold.css?v=1"></head><body>
+<link rel="stylesheet" href="assets/shell.css?v=8"><link rel="stylesheet" href="assets/theme-gold.css?v=2"></head><body>
 <?php if ($user === null): ?>
 <div class="auth">
   <aside class="auth-side">
@@ -728,6 +728,7 @@ a{color:inherit}
 <div class="mainc">
 <header class="top"><div class="top-in">
   <button type="button" class="drawer-btn" data-drawer aria-label="Menu"><i class="fas fa-bars"></i></button>
+  <div class="crumb"><?= ag_h($company ?: 'AmetecsGlobal') ?> <i class="fas fa-chevron-right"></i> <?= ag_h(['home' => 'Dashboard', 'apps' => 'My applications', 'updates' => 'Updates', 'plugins' => 'Modules & plugins', 'licences' => 'Licences & plans', 'billing' => 'Payments & invoices', 'activity' => 'Activity history', 'support' => 'Support & help', 'account' => 'Account settings', 'notifications' => 'Notifications'][$view] ?? 'Dashboard') ?></div>
   <a class="bell" href="?v=notifications" title="Notifications"><i class="far fa-bell"></i><?= $notes !== [] ? '<em>' . count($notes) . '</em>' : '' ?></a>
   <div class="clock"><i class="far fa-clock"></i><span id="clock"><?= $now->format('h:i A') ?></span></div>
   <details class="user"><summary><span class="av"><?= ag_h($initials) ?></span><span class="nm"><?= ag_h($who) ?><small><?= ag_h(ucfirst((string) ($user['role'] ?? ''))) ?></small></span><i class="fas fa-chevron-down" style="font-size:11px;color:var(--mute)"></i></summary>

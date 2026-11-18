@@ -186,3 +186,10 @@ img,video,canvas{max-width:100%}
   h1{font-size:22px!important}
   .btn,.btn2{white-space:normal}
 }
+
+/* ---------- Audit fixes (18 Nov 2026) ---------- */
+.mainc .wrap{max-width:1480px;margin:0 auto}
+.top-in .crumb{font-size:13px;color:#64748b;font-weight:600;display:flex;align-items:center;gap:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.top-in .crumb i{font-size:9px;color:#b6c0ce}
+.top-in .crumb+.bell{margin-left:auto}
+@media (max-width:860px){.top-in .crumb{display:none}}

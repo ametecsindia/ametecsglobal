@@ -10,7 +10,6 @@
 /* sidebars (both panels) */
 .t-gold .side{background:var(--g-dark);border-right:1px solid rgba(232,201,119,.12);color:#d8cbb2}
 .t-gold .side:after{content:"";position:absolute;inset:0 0 auto;height:2px;background:var(--g-grad);pointer-events:none}
-.t-gold .side{position:sticky}
 .t-gold .brand,.t-gold .side .brand{color:#fff7e6}
 .t-gold .brand b{background:var(--g-grad);-webkit-background-clip:text;background-clip:text;color:transparent}
 .t-gold .brand small{color:#d6ae55}

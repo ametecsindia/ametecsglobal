@@ -954,7 +954,7 @@ main{max-width:1560px;padding:16px 26px 20px}
 @media (max-width:1100px){.kstrip{grid-template-columns:repeat(3,1fr)}.dgrid2{grid-template-columns:1fr}}
 .cn b{white-space:nowrap}.mxt td:last-child,.mxt th:last-child{padding-right:16px;white-space:nowrap}.mxt th.ac{padding-left:4px;padding-right:4px}.mxt th:first-child{width:30%}
 </style>
-<link rel="stylesheet" href="assets/shell.css?v=7"><link rel="stylesheet" href="assets/super.css?v=7"><link rel="stylesheet" href="assets/theme-gold.css?v=1"></head><body>
+<link rel="stylesheet" href="assets/shell.css?v=8"><link rel="stylesheet" href="assets/super.css?v=8"><link rel="stylesheet" href="assets/theme-gold.css?v=2"></head><body>
 <?php
 $myName = trim((string) ($me['name'] ?? '')) ?: ucfirst((string) strtok($meEmail, '@'));
 $myIni = strtoupper(implode('', array_map(static fn (string $w): string => mb_substr($w, 0, 1), array_slice(preg_split('/[\s._-]+/', $myName) ?: ['S'], 0, 2))));
@@ -1761,13 +1761,20 @@ $myIni = strtoupper(implode('', array_map(static fn (string $w): string => mb_su
     </div><div class="ft"><button class="btn gold">Add app</button></div></form>
 
 <?php elseif ($page === 'activity'):
-    $names = array_column($tenants, 'name', 'id'); ?>
-  <h1>Activity log</h1><p class="sub">Every change made in this console, newest first. Entries are never edited or removed.</p>
+    // Phase 7 audit (18 Nov 2026): sign-ins drowned the real changes, so the log opens on Changes; Sign-ins and Everything are one click away.
+    $names = array_column($tenants, 'name', 'id'); $allAct = AmetecsData::activity();
+    $kind = in_array($_GET['k'] ?? '', ['signins', 'all'], true) ? (string) $_GET['k'] : 'changes';
+    $isSign = static fn (array $r): bool => in_array($r['what'], ['Signed in', 'Signed out'], true);
+    $rowsA = array_values(array_filter($allAct, static fn ($r) => $kind === 'all' || ($kind === 'signins') === $isSign($r)));
+    $nSign = count(array_filter($allAct, $isSign)); ?>
+  <div class="lph"><div><h1>Activity log</h1><p class="sub">Every change made in this console, newest first. Entries are never edited or removed.</p></div></div>
+  <div class="ltabs"><?php foreach (['changes' => ['Changes', 'fa-pen-to-square', count($allAct) - $nSign], 'signins' => ['Sign-ins', 'fa-right-to-bracket', $nSign], 'all' => ['Everything', 'fa-layer-group', count($allAct)]] as $k => [$lab, $ic, $n]): ?>
+    <a class="<?= $kind === $k ? 'on' : '' ?>" href="?p=activity<?= $k === 'changes' ? '' : '&amp;k=' . $k ?>"><i class="fas <?= $ic ?>"></i><?= $lab ?><em><?= $n ?></em></a><?php endforeach; ?></div>
   <div class="toolbar"><span class="si"><i class="fas fa-magnifying-glass"></i><input data-live="#act-t" placeholder="Filter by who, client or what…" autocomplete="off"></span></div>
-  <div class="box"><table id="act-t" class="sortable"><tr><th>When</th><th>Who</th><th>Client</th><th>What</th><th>Detail</th></tr>
-  <?php foreach (AmetecsData::activity() as $r): ?><tr><td><?= ag_h($r['at']) ?></td><td><?= ag_h($r['who']) ?></td>
-    <td><?= $r['tenant'] !== '' ? '<a href="?p=client&id=' . (int) $r['tenant'] . '">' . ag_h($names[$r['tenant']] ?? '#' . $r['tenant']) . '</a>' : '' ?></td><td><?= ag_h($r['what']) ?></td><td class="muted"><?= ag_h($r['detail']) ?></td></tr>
-  <?php endforeach; ?></table></div>
+  <div class="box"><table id="act-t" class="sortable paged"><tr><th>When</th><th>Who</th><th>Client</th><th>What</th><th>Detail</th></tr>
+  <?php foreach ($rowsA as $r): ?><tr><td style="white-space:nowrap"><?= ag_h(date('d M Y, h:i A', (int) strtotime((string) $r['at']))) ?></td><td><?= ag_h($r['who']) ?></td>
+    <td><?= $r['tenant'] !== '' ? '<a href="?p=client&id=' . (int) $r['tenant'] . '">' . ag_h($names[$r['tenant']] ?? '#' . $r['tenant']) . '</a>' : '<span class="muted">-</span>' ?></td><td><?= ag_h($r['what']) ?></td><td class="muted"><?= ag_h($r['detail']) ?></td></tr>
+  <?php endforeach; ?><?php if ($rowsA === []): ?><tr><td colspan="5"><div class="empty">Nothing here yet.</div></td></tr><?php endif; ?></table></div>
 
 <?php elseif ($page === 'staff'):
     // PHASE 7 (owner, 18 Nov 2026: "redesign this page"): member cards, figures, add in a pop-up, reset a password.
