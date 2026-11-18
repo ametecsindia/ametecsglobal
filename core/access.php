@@ -2,12 +2,14 @@
 /**
  * AMETECSGLOBAL — WHICH APPS EACH CLIENT MAY USE (set by Super Admin in core/super.php).
  *
- * One file, core/data/access.json:  { "<tenant id>": { "<plugin code>": {"on": true, "seats": 50, "until": "2027-03-31"} } }
- *   on     — Super Admin switched the app on for this client
+ * Since 18 Nov 2026 the licences live in the central database (core/licensing.php: ag_licences, one row per client
+ * per app, cloud or on-premise). all() still hands every caller the old shape:
+ *   { "<tenant id>": { "<plugin code>": {"on": true, "seats": 50, "until": "2027-03-31", "state": "on", ...} } }
+ *   on     — licensed (not cancelled)
  *   seats  — how many the client may use (employees for SmartPRS3); 0/empty = no AmetecsGlobal cap
  *   until  — last valid day; after it the app is "expired" and will not open
- * ponytail: a JSON file, one server; move to a table when AmetecsGlobal runs on more than one server.
- * This folder is AmetecsGlobal's own: SYNC.bat never copies over it.
+ *   state  — on | suspended | expired | off: only "on" opens
+ * Until the licence migration has run on a PC, the old core/data/access.json is used (and then imported once).
  */
 declare(strict_types=1);
 
@@ -30,6 +32,7 @@ spl_autoload_register(static function (string $class): void {
 });
 
 require_once __DIR__ . '/setup.php';
+require_once __DIR__ . '/licensing.php';
 
 final class AmetecsAccess
 {
@@ -81,12 +84,34 @@ final class AmetecsAccess
 
     public static function all(): array
     {
+        if (AmetecsLicences::ready()) {
+            return AmetecsLicences::asAccess();
+        }
         $j = is_file(self::FILE) ? json_decode((string) file_get_contents(self::FILE), true) : [];
         return is_array($j) ? $j : [];
     }
 
+    /**
+     * Save the quick "Apps & licences" table: on/seats/until per app. With the licence tables this changes only what
+     * differs: switching an app off cancels its licence; switching it on again reactivates it (a suspension is kept).
+     */
     public static function save(array $all): void
     {
+        if (AmetecsLicences::ready()) {
+            $rows = AmetecsLicences::rows();
+            foreach ($all as $tid => $apps) {
+                foreach ((array) $apps as $app => $a) {
+                    $old = $rows[(string) $tid][(string) $app] ?? null;
+                    if ($old === null && empty($a['on'])) {
+                        continue;   // never licensed, still not: nothing to record
+                    }
+                    $status = empty($a['on']) ? 'cancelled' : (($old['status'] ?? 'cancelled') === 'cancelled' ? 'active' : (string) $old['status']);
+                    AmetecsLicences::put((string) $tid, (string) $app, ['status' => $status, 'seats' => max(0, (int) ($a['seats'] ?? 0)),
+                        'valid_until' => ((string) ($a['until'] ?? '')) ?: null], empty($a['on']) ? 'Switched off' : 'Changed seats / validity');
+                }
+            }
+            return;
+        }
         if (!is_dir(dirname(self::FILE))) {
             mkdir(dirname(self::FILE), 0775, true);
         }
@@ -105,15 +130,29 @@ final class AmetecsAccess
         return (new DateTimeImmutable('now', new DateTimeZone('Asia/Kolkata')))->format('Y-m-d');
     }
 
-    /** on | off | expired */
+    /** on | suspended | expired | off - only "on" opens the app */
     public static function state(string $tenant, string $plugin, ?array $all = null): string
     {
         $a = self::get($tenant, $plugin, $all);
+        if ($tenant !== '' && isset($a['state'])) {
+            return (string) $a['state'];
+        }
         if ($tenant === '' || empty($a['on'])) {
             return 'off';
         }
         $until = (string) ($a['until'] ?? '');
         return $until !== '' && $until < self::today() ? 'expired' : 'on';
+    }
+
+    public static function tenantName(string $tid): string
+    {
+        $pdo = AmetecsLicences::pdo();
+        if ($pdo === null) {
+            return '';
+        }
+        $q = $pdo->prepare('SELECT name FROM tenants WHERE id = ?');
+        $q->execute([$tid]);
+        return (string) ($q->fetchColumn() ?: '');
     }
 
     /** The seat cap for an app that is on, or null when there is none. */

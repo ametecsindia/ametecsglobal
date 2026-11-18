@@ -172,10 +172,12 @@ $card = static function (array $r, string $kind) use ($used, $fmtDate, $logoOf):
     $pill = match (true) { $live => '<span class="chk on" title="Active - ready to use"><i class="fas fa-check"></i></span>',
         $kind === 'soon' => '<span class="chk soon" title="Activated in your plan - arriving on AmetecsGlobal soon"><i class="fas fa-check"></i></span>',
         $st === 'expired' => '<span class="chk bad" title="Licence expired - contact Ametecs to renew"><i class="fas fa-xmark"></i></span>',
+        $st === 'suspended' => '<span class="chk bad" style="background:#d97706" title="Licence suspended - contact Ametecs"><i class="fas fa-pause"></i></span>',
         default => '<span class="chk off" title="Not in your plan - contact Ametecs to add it"></span>' };
     $pct = $code === 'smartprs3' && $cap > 0 ? min(100, (int) round($used * 100 / $cap)) : null;
     $meta = $st === 'off' ? '<div class="meta"><span class="muted2">Not in your current plan</span></div>' : '<div class="meta"><span><i class="fas fa-users"></i>' . ($pct !== null ? $used . ' / ' : '') . ($cap > 0 ? $cap : '&infin;') . ' ' . ag_h((string) $p['unit']) . '</span>'
-        . '<span><i class="far fa-calendar"></i>' . ag_h($fmtDate($r['until'])) . '</span></div>'
+        . '<span><i class="far fa-calendar"></i>' . ag_h($fmtDate($r['until'])) . '</span>'
+        . (isset($r['a']['deployment']) ? '<span><i class="fas fa-' . ($r['a']['deployment'] === 'onprem' ? 'server' : 'cloud') . '"></i>' . ($r['a']['deployment'] === 'onprem' ? 'On-premise' : 'Cloud') . '</span>' : '') . '</div>'
         ;
     $foot = $live ? '<span class="go">Open ' . ag_h((string) $p['name']) . '<i class="fas fa-arrow-right"></i></span>' : '';
     $tag = $live ? 'a href="' . ag_h((string) $p['open']) . '"' : 'div';
@@ -498,6 +500,11 @@ a{color:inherit}
 .legend{display:inline-flex;gap:14px;flex-wrap:wrap}.legend em{font-style:normal;display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--mute)}
 .legend .chk{width:16px;height:16px;font-size:9px;border-radius:4px;border-width:1.5px;box-shadow:none}
 .c-soon .logo{opacity:.85}.muted2{color:#94a3b8!important}
+/* licences table (Phase 1, 18 Nov 2026) */
+.lic-t{background:#fff;border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--sh);overflow-x:auto}
+.lic-t table{width:100%;border-collapse:collapse;font-size:13.5px}.lic-t th{text-align:left;font-size:11.5px;color:var(--mute);font-weight:600;padding:10px 14px;border-bottom:1px solid var(--line);white-space:nowrap}
+.lic-t td{padding:10px 14px;border-bottom:1px solid #f1f4f8;white-space:nowrap}.lic-t tr:last-child td{border-bottom:0}.lic-t td i{color:var(--mute);margin-right:4px}
+.lp{display:inline-block;padding:2px 10px;border-radius:99px;font-size:12px;font-weight:600}.lp-green{background:var(--ok-bg);color:var(--ok)}.lp-amber{background:#fffbeb;color:#b45309}.lp-red{background:var(--bad-bg);color:var(--bad)}.lp-grey{background:#f1f5f9;color:var(--mute)}
 </style></head><body>
 <?php if ($user === null): ?>
 <div class="auth">
@@ -612,6 +619,19 @@ a{color:inherit}
     <label class="fsearch"><i class="fas fa-magnifying-glass"></i><input id="appq" placeholder="Find an app" autocomplete="off"></label></div>
   <div class="cards"><?php $i = 0; foreach (['live', 'soon', 'other'] as $g) { foreach ($groups[$g] as $r) { echo str_replace('style="--c:', 'style="animation-delay:' . (50 * $i++) . 'ms;--c:', $card($r, $g)); } } ?></div>
   <div class="noapps" id="noapps" hidden><i class="fas fa-magnifying-glass"></i>No apps match.</div>
+  <?php if ($isAdmin): $mine = array_filter(array_merge($groups['live'], $groups['soon'], $groups['other']), static fn ($r) => isset($r['a']['deployment']) && ($r['a']['status'] ?? '') !== 'cancelled'); ?>
+  <div class="sh" style="margin-top:26px"><div><h2>Licences &amp; subscriptions</h2><span class="legend"><em>What your company holds, as set by Ametecs. To add an app, renew or change seats, contact Ametecs.</em></span></div></div>
+  <div class="lic-t"><table><tr><th>Application</th><th>Deployment</th><th>Plan</th><th>Status</th><th>Seats</th><th>Valid till</th><th>Installed version</th></tr>
+  <?php foreach ($mine as $r): $a = $r['a']; [$sl, $sc] = AmetecsLicences::STATES[$r['st']] ?? ['', 'grey']; ?><tr>
+    <td><b><?= ag_h((string) $r['p']['name']) ?></b></td>
+    <td><?= $a['deployment'] === 'onprem' ? '<i class="fas fa-server"></i> On-premise' : '<i class="fas fa-cloud"></i> Cloud' ?></td>
+    <td><?= ag_h(AmetecsLicences::PLANS[$a['plan']] ?? '') ?></td>
+    <td><span class="lp lp-<?= $sc ?>"><?= ag_h($sl) ?></span></td>
+    <td><?= (int) $a['seats'] ?> <?= ag_h((string) $r['p']['unit']) ?></td>
+    <td><?= ag_h($fmtDate((string) ($a['valid_until'] ?? ''))) ?></td>
+    <td class="muted2"><?= $a['deployment'] === 'onprem' ? ag_h((string) (($a['app_version'] ?? '') ?: 'not reported yet')) : 'Kept current by Ametecs' ?></td></tr>
+  <?php endforeach; ?><?php if ($mine === []): ?><tr><td colspan="7" class="muted2">No licences yet.</td></tr><?php endif; ?></table></div>
+  <?php endif; ?>
 </main>
 </div></div>
 <div class="pal" id="pal" onclick="if(event.target===this)pal(false)"><div class="pb"><input id="palq" placeholder="Search apps and settings…" autocomplete="off"><ul id="pall"></ul></div></div>
