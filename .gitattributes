@@ -1,0 +1,2 @@
+# Keep every file byte-for-byte as in the repo on every PC: the sync checks exact text, and Windows Git would otherwise switch line endings on checkout.
+* -text
