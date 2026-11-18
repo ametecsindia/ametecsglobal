@@ -23,12 +23,8 @@ if not exist ".env" (
   exit /b 1
 )
 
-REM Pass a root password straight through to the bootstrap step if one was given.
-set ROOTPW=
-for %%A in (%*) do (
-  echo %%A | findstr /b /c:"--root-password=" >nul
-  if not errorlevel 1 set ROOTPW=%%A
-)
+REM Arguments go to the bootstrap whole (%*): a for-loop over them split
+REM --root-password=x at the "=" and silently dropped the password.
 
 echo.
 echo == 1/5  database accounts ==
@@ -43,7 +39,7 @@ REM account. On a machine whose accounts were created earlier with an
 REM authentication plugin the server no longer loads, .env looked complete, this
 REM step said "Already configured", and migrate failed with SQLSTATE 1524 three
 REM lines later. --if-broken asks the server whether each account can sign in.
-php tools\db\bootstrap-local.php --if-broken %ROOTPW%
+php tools\db\bootstrap-local.php --if-broken %*
 if errorlevel 1 (
   echo.
   echo Could not create the database accounts. Nothing below would work.

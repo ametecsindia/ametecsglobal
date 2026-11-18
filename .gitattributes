@@ -1,2 +1,4 @@
 # Keep every file byte-for-byte as in the repo on every PC: the sync checks exact text, and Windows Git would otherwise switch line endings on checkout.
 * -text
+# Except batch files: cmd.exe needs CRLF.
+*.bat text eol=crlf
