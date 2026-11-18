@@ -940,7 +940,7 @@ main{max-width:1560px;padding:16px 26px 20px}
 @media (max-width:1100px){.kstrip{grid-template-columns:repeat(3,1fr)}.dgrid2{grid-template-columns:1fr}}
 .cn b{white-space:nowrap}.mxt td:last-child,.mxt th:last-child{padding-right:16px;white-space:nowrap}.mxt th.ac{padding-left:4px;padding-right:4px}.mxt th:first-child{width:30%}
 </style>
-<link rel="stylesheet" href="assets/shell.css?v=6"><link rel="stylesheet" href="assets/super.css?v=2"></head><body>
+<link rel="stylesheet" href="assets/shell.css?v=6"><link rel="stylesheet" href="assets/super.css?v=3"></head><body>
 <?php
 $myName = trim((string) ($me['name'] ?? '')) ?: ucfirst((string) strtok($meEmail, '@'));
 $myIni = strtoupper(implode('', array_map(static fn (string $w): string => mb_substr($w, 0, 1), array_slice(preg_split('/[\s._-]+/', $myName) ?: ['S'], 0, 2))));
@@ -1261,7 +1261,31 @@ $myIni = strtoupper(implode('', array_map(static fn (string $w): string => mb_su
     $server = static fn (array $r): string => $r['deployment'] === 'onprem'
         ? (($r['fingerprint'] ?? '') !== '' ? '<span class="srv srv-ok"><i class="fas fa-server"></i>' . ag_h((string) ($r['server_name'] ?: 'bound')) . ' · v' . ag_h((string) ($r['app_version'] ?: '?')) . '</span>'
             : '<span class="srv srv-warn"><i class="fas fa-key"></i>' . (($r['key_hash'] ?? '') !== '' ? 'Key issued, not activated' : 'No key yet') . '</span>')
-        : '<span class="srv"><i class="fas fa-cloud"></i>Ametecs cloud</span>'; ?>
+        : '<span class="srv"><i class="fas fa-cloud"></i>Ametecs cloud</span>';
+    // EXPANDED ROW (owner, 18 Nov 2026: "expand option"): the licence's details and recent history without leaving the list.
+    $detail = static function (array $r) use ($d, $plugins): string {
+        $kv = static fn (string $k, string $v): string => '<div><dt>' . $k . '</dt><dd>' . $v . '</dd></div>';
+        $op = $r['deployment'] === 'onprem';
+        $pl = AmetecsPlugins::ready() ? AmetecsPlugins::catalogue((string) $r['app']) : [];
+        $held = array_filter($pl, static fn ($p) => AmetecsPlugins::authorised(AmetecsPlugins::state((string) $r['tenant_id'], $p['latest'])));
+        $h = '<div class="ldet"><dl>'
+            . $kv('Plan', ag_h(AmetecsLicences::PLANS[$r['plan']] ?? $r['plan']) . ((float) ($r['price'] ?? 0) > 0 ? ' &middot; ' . ag_h($r['currency'] . ' ' . number_format((float) $r['price'], 2)) . ' per period' : ' &middot; no price set'))
+            . $kv('Period', $d($r['starts_on'] ?? null) . ' &rarr; ' . $d($r['valid_until'] ?? null))
+            . $kv('Renews', !empty($r['auto_renew']) ? 'Automatically' : 'When renewed or paid')
+            . $kv('Deployment', $op ? 'On-premise' : 'Ametecs cloud')
+            . ($op ? $kv('Licence key', trim((string) ($r['key_hash'] ?? '')) !== '' ? 'Issued' : '<span class="t-amber">Not issued</span>')
+                . $kv('Server', ($r['fingerprint'] ?? '') !== '' ? ag_h((string) ($r['server_name'] ?: 'bound')) . ' <small>' . ag_h((string) ($r['server_os'] ?? '')) . '</small>' : 'Not activated')
+                . $kv('Activated', ag_h((string) (($r['activated_at'] ?? '') ?: '—')))
+                . $kv('Last check-in', ag_h((string) (($r['last_seen_at'] ?? '') ?: '—')) . (($r['app_version'] ?? '') !== '' ? ' &middot; v' . ag_h((string) $r['app_version']) : '')) : '')
+            . $kv('Plugins', $pl === [] ? 'none offered' : count($held) . ' of ' . count($pl) . ' held')
+            . (trim((string) ($r['notes'] ?? '')) !== '' ? $kv('Notes', nl2br(ag_h((string) $r['notes']))) : '')
+            . '</dl><div class="lhist"><b>Recent changes</b>';
+        $ev = AmetecsLicences::events((string) $r['id'], null, 4);
+        foreach ($ev as $e) {
+            $h .= '<p><span>' . ag_h(date('d M Y H:i', (int) strtotime((string) $e['created_at']))) . '</span>' . ag_h((string) $e['action']) . '<small>' . ag_h((string) $e['by_who']) . '</small></p>';
+        }
+        return $h . ($ev === [] ? '<p><small>Nothing yet.</small></p>' : '') . '<a href="?p=licence&id=' . (int) $r['id'] . '">Full licence page &rarr;</a></div></div>';
+    }; ?>
   <div class="lph"><div><h1>Licences</h1><p class="sub">Every licence of every app, per client: deployment, plan, seats and how long it has left. Open one for keys, .lic files, plugins and history.</p></div>
     <button type="button" class="btn gold" onclick="document.getElementById('newlic').showModal()"><i class="fas fa-plus"></i>New licence</button></div>
   <?php if (!AmetecsLicences::ready()): ?><div class="msg bad"><i class="fas fa-circle-exclamation"></i><span>The licence tables are not on this PC yet. They arrive with the next sync; until then licences work as before.</span></div><?php else: ?>
@@ -1276,14 +1300,16 @@ $myIni = strtoupper(implode('', array_map(static fn (string $w): string => mb_su
     <span class="si"><i class="fas fa-magnifying-glass"></i><input data-lfind placeholder="Search client, app or server…" autocomplete="off" onchange="event.stopPropagation()"></span>
     <select name="app"><option value="">All apps</option><?php foreach ($plugins as $c => $p): ?><option value="<?= ag_h($c) ?>"<?= $fa === $c ? ' selected' : '' ?>><?= ag_h($p['name']) ?></option><?php endforeach; ?></select>
     <select name="dep"><option value="">Cloud &amp; on-premise</option><?php foreach (AmetecsLicences::DEPLOYMENTS as $k => $v): ?><option value="<?= $k ?>"<?= $fd === $k ? ' selected' : '' ?>><?= $v ?></option><?php endforeach; ?></select>
+    <span class="xall"><button type="button" data-xall="1"><i class="fas fa-angles-down"></i>Expand all</button><button type="button" data-xall="0"><i class="fas fa-angles-up"></i>Collapse all</button></span>
     <span class="vsw"><a class="<?= $view2 === 'client' ? 'on' : '' ?>" href="<?= ag_h($url(['view' => ''])) ?>" title="Grouped by client"><i class="fas fa-building"></i>By client</a><a class="<?= $view2 === 'list' ? 'on' : '' ?>" href="<?= ag_h($url(['view' => 'list'])) ?>" title="One list"><i class="fas fa-list"></i>List</a></span></form>
 
   <?php if ($list === []): ?><div class="box"><div class="empty"><i class="fas fa-key"></i>No licences match these filters. <a href="?p=licences">Show all</a></div></div>
   <?php elseif ($view2 === 'client'): ?>
   <div class="lgrp"><?php foreach ($byClient as $tid => $rs): $tn = (string) ($names[$tid] ?? '#' . $tid); $next = min(array_map(static fn ($r) => (string) (($r['valid_until'] ?? '') ?: '9999-12-31'), $rs)); ?>
-    <section class="lcl" data-lf="<?= ag_h(strtolower($tn . ' ' . implode(' ', array_map(static fn ($r) => ($plugins[$r['app']]['name'] ?? $r['app']) . ' ' . ($r['server_name'] ?? ''), $rs)))) ?>">
-      <header><span class="cav"><?= ag_h(mb_strtoupper(mb_substr($tn, 0, 1))) ?></span><div><a href="?p=client&id=<?= (int) $tid ?>"><b><?= ag_h($tn) ?></b></a><small><?= count($rs) ?> licence<?= count($rs) === 1 ? '' : 's' ?><?= $next !== '9999-12-31' ? ' &middot; next renewal ' . $d($next) : '' ?></small></div>
-        <a class="btn ghost" href="?p=client&id=<?= (int) $tid ?>#apps">Client</a></header>
+    <details class="lcl" open data-cl="<?= (int) $tid ?>" data-lf="<?= ag_h(strtolower($tn . ' ' . implode(' ', array_map(static fn ($r) => ($plugins[$r['app']]['name'] ?? $r['app']) . ' ' . ($r['server_name'] ?? ''), $rs)))) ?>">
+      <summary><i class="fas fa-chevron-down car"></i><span class="cav"><?= ag_h(mb_strtoupper(mb_substr($tn, 0, 1))) ?></span><div><a href="?p=client&id=<?= (int) $tid ?>"><b><?= ag_h($tn) ?></b></a><small><?= count($rs) ?> licence<?= count($rs) === 1 ? '' : 's' ?><?= $next !== '9999-12-31' ? ' &middot; next renewal ' . $d($next) : '' ?></small></div>
+        <span class="cpills"><?php foreach ($rs as $r): ?><span title="<?= ag_h($plugins[$r['app']]['name'] ?? $r['app']) ?>"><?= $mark((string) $r['app']) ?></span><?php endforeach; ?></span>
+        <a class="btn ghost" href="?p=client&id=<?= (int) $tid ?>#apps">Client</a></summary>
       <div class="lrows"><?php foreach ($rs as $r): $st = $stOf($r); [$sl, $sc] = $st === 'expiring' ? ['Expiring', 'amber'] : AmetecsLicences::STATES[$st === 'off' ? 'off' : $st]; ?>
         <div class="lr" data-lf="<?= ag_h(strtolower($tn . ' ' . ($plugins[$r['app']]['name'] ?? $r['app']) . ' ' . ($r['server_name'] ?? ''))) ?>">
           <div class="lapp"><?= $mark((string) $r['app']) ?><div><b><?= ag_h($plugins[$r['app']]['name'] ?? $r['app']) ?></b><small><?= ag_h(AmetecsLicences::PLANS[$r['plan']] ?? $r['plan']) ?><?= (float) ($r['price'] ?? 0) > 0 ? ' &middot; ' . ag_h($r['currency'] . ' ' . number_format((float) $r['price'])) : '' ?></small></div></div>
@@ -1291,9 +1317,10 @@ $myIni = strtoupper(implode('', array_map(static fn (string $w): string => mb_su
           <div><?= $server($r) ?></div>
           <?= $seatCell($r) ?>
           <?= $validity($r) ?>
-          <div class="lact"><a class="btn ghost" href="?p=licence&id=<?= (int) $r['id'] ?>">Open</a><?= $quick($r) ?></div></div>
+          <div class="lact"><button type="button" class="xr" title="Show details" aria-expanded="false"><i class="fas fa-chevron-down"></i></button><a class="btn ghost" href="?p=licence&id=<?= (int) $r['id'] ?>">Open</a><?= $quick($r) ?></div>
+          <?= $detail($r) ?></div>
       <?php endforeach; ?></div>
-    </section>
+    </details>
   <?php endforeach; ?></div>
   <?php else: ?>
   <div class="box"><table id="lic-t" class="sortable"><tr><th>Client</th><th>App</th><th>Status</th><th>Where</th><th>Seats</th><th>Valid till</th><th></th></tr>
@@ -1303,7 +1330,8 @@ $myIni = strtoupper(implode('', array_map(static fn (string $w): string => mb_su
     <td><div class="lapp"><?= $mark((string) $r['app']) ?><div><b><?= ag_h($plugins[$r['app']]['name'] ?? $r['app']) ?></b><small><?= ag_h(AmetecsLicences::PLANS[$r['plan']] ?? $r['plan']) ?></small></div></div></td>
     <td><span class="pill <?= $sc ?>"><?= $r['status'] === 'cancelled' ? 'Cancelled' : ag_h($sl) ?></span></td>
     <td><?= $server($r) ?></td><td><?= $seatCell($r) ?></td><td><?= $validity($r) ?></td>
-    <td class="right"><div class="lact"><a class="btn ghost" href="?p=licence&id=<?= (int) $r['id'] ?>">Open</a><?= $quick($r) ?></div></td></tr>
+    <td class="right"><div class="lact"><button type="button" class="xr" title="Show details" aria-expanded="false"><i class="fas fa-chevron-down"></i></button><a class="btn ghost" href="?p=licence&id=<?= (int) $r['id'] ?>">Open</a><?= $quick($r) ?></div></td></tr>
+    <tr class="ldrow" hidden><td colspan="7"><?= $detail($r) ?></td></tr>
   <?php endforeach; ?></table></div>
   <?php endif; ?>
   <dialog id="newlic" class="ldlg"><form method="post"><?= $csrf() ?><input type="hidden" name="do" value="licence-new">
@@ -1318,6 +1346,27 @@ $myIni = strtoupper(implode('', array_map(static fn (string $w): string => mb_su
     </div>
     <footer><button type="button" class="btn ghost" onclick="this.closest('dialog').close()">Cancel</button><button class="btn gold"><i class="fas fa-check"></i>Create licence</button></footer></form></dialog>
   <script>
+  (function () {   // expand / collapse: one licence (chevron), one client (its header), or all; remembered on this browser
+    var key = 'agLicClosed', closed = {};
+    try { closed = JSON.parse(localStorage.getItem(key) || '{}'); } catch (e) {}
+    document.querySelectorAll('.lcl[data-cl]').forEach(function (c) {
+      if (closed[c.dataset.cl]) c.open = false;
+      c.addEventListener('toggle', function () { closed[c.dataset.cl] = !c.open; try { localStorage.setItem(key, JSON.stringify(closed)); } catch (e) {} });
+    });
+    function row(btn, show) {
+      var r = btn.closest('.lr'), panel = r ? r.querySelector('.ldet') : btn.closest('tr').nextElementSibling;
+      show = show === undefined ? btn.getAttribute('aria-expanded') !== 'true' : show;
+      btn.setAttribute('aria-expanded', show ? 'true' : 'false');
+      if (r) r.classList.toggle('open', show); else panel.hidden = !show;
+    }
+    document.addEventListener('click', function (e) {
+      var b = e.target.closest('.xr'); if (b) { row(b); return; }
+      var a = e.target.closest('[data-xall]'); if (!a) return;
+      var on = a.dataset.xall === '1';
+      document.querySelectorAll('.lcl').forEach(function (c) { c.open = on; });
+      document.querySelectorAll('.xr').forEach(function (x) { row(x, on); });
+    });
+  })();
   (function () {   // live search across the client cards / list rows
     var inp = document.querySelector('[data-lfind]'); if (!inp) return;
     inp.addEventListener('input', function () { var t = inp.value.toLowerCase().trim();
