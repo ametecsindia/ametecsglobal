@@ -34,6 +34,7 @@ spl_autoload_register(static function (string $class): void {
 require_once __DIR__ . '/setup.php';
 require_once __DIR__ . '/licensing.php';
 require_once __DIR__ . '/releases.php';
+require_once __DIR__ . '/billing.php';
 
 final class AmetecsAccess
 {

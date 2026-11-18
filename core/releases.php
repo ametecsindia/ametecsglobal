@@ -127,7 +127,8 @@ final class AmetecsReleases
         if (!empty(self::access((string) $r['id'])[$tenant])) {
             return 'granted';
         }
-        $q = self::pdo()->prepare("SELECT COUNT(*) FROM ag_release_events WHERE release_id = ? AND tenant_id = ? AND action = 'paid'");
+        // Paid = more "paid" than "refunded" events (Phase 3 billing writes both).
+        $q = self::pdo()->prepare("SELECT SUM(action = 'paid') - SUM(action = 'refunded') FROM ag_release_events WHERE release_id = ? AND tenant_id = ? AND action IN ('paid', 'refunded')");
         $q->execute([$r['id'], $tenant]);
         return (int) $q->fetchColumn() > 0 ? 'paid' : 'required';
     }

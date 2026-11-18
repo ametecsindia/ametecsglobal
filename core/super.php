@@ -8,6 +8,8 @@
  *   Licences    every licence of every app: cloud / on-premise, plan, status, seats, validity, keys, servers, history
  *   Updates     releases, patches and plugins for every app: upload, publish / schedule, who gets them, free grants,
  *               install on Ametecs' cloud server (with backup) and roll back; every download / install / failure logged
+ *   Billing     invoices and Razorpay payments: raise, check with Razorpay, mark paid offline, cancel, refund, print
+ *   Payments    (Settings) Razorpay keys, GST %, seller details on invoices
  *   Apps        the catalogue, who uses each app, seats
  *   Activity    every change made here: who, when, what
  *   Super Admins Ametecs staff accounts (platform_users)
@@ -528,6 +530,87 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && $pdo !== null) {
         $back($to, null, 'Nothing to do.');
     }
 
+    /* ---------------- billing (Phase 3, 18 Nov 2026) */
+    if ($do === 'gateway-save') {
+        $gst = (string) ($_POST['gst_percent'] ?? '18');
+        if (!is_numeric($gst) || (float) $gst < 0 || (float) $gst > 50) {
+            $back('?p=gateway', null, 'GST % must be a number between 0 and 50.');
+        }
+        $on = isset($_POST['enabled']);
+        $kid = trim((string) ($_POST['key_id'] ?? ''));
+        if ($on && ($kid === '' || (trim((string) ($_POST['secret'] ?? '')) === '' && trim((string) (AmetecsBilling::gatewayRow()['secret'] ?? '')) === ''))) {
+            $back('?p=gateway', null, 'To switch online payment on, enter the Razorpay Key ID and Key Secret.');
+        }
+        AmetecsBilling::saveGateway($kid, (string) ($_POST['secret'] ?? ''), (string) ($_POST['mode'] ?? 'test'), $on);
+        AmetecsBilling::saveSettings(['seller' => trim((string) ($_POST['seller'] ?? '')) ?: 'Ametecs India Private Limited', 'gstin' => strtoupper(trim((string) ($_POST['gstin'] ?? ''))),
+            'address' => trim((string) ($_POST['address'] ?? '')), 'email' => trim((string) ($_POST['email'] ?? '')), 'gst_percent' => (float) $gst, 'due_days' => max(0, (int) ($_POST['due_days'] ?? 7))]);
+        AmetecsData::log($meEmail, 'Changed payment settings', '', 'Razorpay ' . ($on ? 'ON (' . ((string) ($_POST['mode'] ?? '')) . ')' : 'off') . ', GST ' . $gst . '%');
+        $back('?p=gateway', 'Payment settings saved.' . ($on ? ' Online payment is on.' : ' Online payment is off: clients see "contact Ametecs".'));
+    }
+    if (str_starts_with($do, 'invoice-') || $do === 'payment-refund') {
+        if (!AmetecsBilling::ready()) {
+            $back('?p=billing', null, 'The billing tables are not on this PC yet. They arrive with the next sync.');
+        }
+        if ($do === 'invoice-new') {
+            $tid = (string) ($_POST['tenant'] ?? '');
+            $amt = trim((string) ($_POST['amount'] ?? ''));
+            $lic = AmetecsLicences::byId((string) ($_POST['licence'] ?? ''));
+            try {
+                if ($lic !== null) {
+                    if ((float) ($lic['price'] ?? 0) <= 0 || $lic['plan'] === 'perpetual') {
+                        throw new \RuntimeException('Set a price on the licence (and a monthly or yearly plan) first.');
+                    }
+                    $inv = AmetecsBilling::forRenewal($lic);
+                } else {
+                    if ($tenant($tid) === null || !is_numeric($amt) || trim((string) ($_POST['description'] ?? '')) === '') {
+                        throw new \RuntimeException('Choose a client and give a description and an amount.');
+                    }
+                    $inv = AmetecsBilling::create($tid, 'other', trim((string) $_POST['description']), (float) $amt,
+                        in_array($_POST['currency'] ?? '', ['INR', 'USD', 'AED', 'SAR', 'EUR', 'GBP'], true) ? (string) $_POST['currency'] : 'INR');
+                }
+            } catch (\Throwable $x) {
+                $back($lic !== null ? '?p=licence&id=' . (int) $lic['id'] : '?p=billing', null, $x->getMessage());
+            }
+            $back('?p=invoice&id=' . (int) $inv['id'], 'Invoice ' . $inv['number'] . ' raised. The client pays it from Payments & invoices in their panel.');
+        }
+        if ($do === 'payment-refund') {
+            $pq = $pdo->prepare('SELECT * FROM ag_payments WHERE id = ?');
+            $pq->execute([$id]);
+            $pay = $pq->fetch(\PDO::FETCH_ASSOC);
+            if (!$pay || trim((string) ($_POST['why'] ?? '')) === '') {
+                $back('?p=billing', null, $pay ? 'Give the reason for the refund.' : 'Unknown payment.');
+            }
+            $res = AmetecsBilling::refund($pay, trim((string) $_POST['why']));
+            $back('?p=invoice&id=' . (int) $pay['invoice_id'], $res['ok'] ? $res['why'] : null, $res['ok'] ? null : $res['why']);
+        }
+        $inv = AmetecsBilling::byId($id);
+        if ($inv === null) {
+            $back('?p=billing', null, 'Unknown invoice.');
+        }
+        $to = '?p=invoice&id=' . (int) $id;
+        if ($do === 'invoice-reconcile') {
+            $res = AmetecsBilling::reconcile($inv);
+            $back($to, $res['ok'] ? $res['why'] : null, $res['ok'] ? null : $res['why']);
+        }
+        if ($do === 'invoice-paid') {
+            $ref = trim((string) ($_POST['reference'] ?? ''));
+            if ($ref === '') {
+                $back($to, null, 'Give the bank / UTR / cheque reference of the payment.');
+            }
+            $res = AmetecsBilling::markPaid($inv, (float) $inv['total'], 'offline', 'OFF-' . $inv['number'], 'recorded by ' . $meEmail . ': ' . $ref, (string) ($_POST['method'] ?? 'bank transfer'));
+            $back($to, $res['ok'] ? $res['why'] : null, $res['ok'] ? null : $res['why']);
+        }
+        if ($do === 'invoice-cancel') {
+            try {
+                AmetecsBilling::cancel($inv, trim((string) ($_POST['why'] ?? '')) ?: 'cancelled by ' . $meEmail);
+            } catch (\Throwable $x) {
+                $back($to, null, $x->getMessage());
+            }
+            $back($to, 'Invoice cancelled.');
+        }
+        $back($to, null, 'Nothing to do.');
+    }
+
     if ($do === 'app-save') {
         $catalogue = AmetecsAccess::plugins(true);
         $code = (string) ($_POST['code'] ?? '');
@@ -638,6 +721,10 @@ if ($me !== null && $pdo !== null) {
     AmetecsAccess::ensureHouseClient($pdo);
 }
 $page = $me === null ? 'signin' : (string) ($_GET['p'] ?? 'dashboard');
+if ($page === 'invoice-print' && ($pi = AmetecsBilling::byId((string) ($_GET['id'] ?? ''))) !== null) {
+    echo AmetecsBilling::printHtml($pi);
+    exit;
+}
 $all = AmetecsAccess::all();
 $meta = AmetecsData::clients();
 $tenants = [];
@@ -860,14 +947,14 @@ $myIni = strtoupper(implode('', array_map(static fn (string $w): string => mb_su
   </div></div>
 </div>
 <?php else:
-  $navItems = ['Overview' => ['dashboard' => ['Dashboard', 'fa-gauge-high'], 'clients' => ['Clients', 'fa-building'], 'client-new' => ['New client', 'fa-plus'], 'licences' => ['Licences', 'fa-key'], 'releases' => ['Updates & releases', 'fa-cloud-arrow-up'], 'apps' => ['Apps', 'fa-puzzle-piece'], 'activity' => ['Activity log', 'fa-clock-rotate-left']],
-      'Settings' => ['email' => ['Email settings', 'fa-envelope'], 'staff' => ['Super Admins', 'fa-user-shield'], 'account' => ['My account', 'fa-circle-user']]];
-  $titles = ['dashboard' => 'Dashboard', 'clients' => 'Clients', 'client-new' => 'New client', 'client' => 'Client', 'licences' => 'Licences', 'licence' => 'Licence', 'releases' => 'Updates & releases', 'release' => 'Release', 'apps' => 'Apps', 'activity' => 'Activity log', 'email' => 'Email settings', 'staff' => 'Super Admins', 'account' => 'My account']; ?>
+  $navItems = ['Overview' => ['dashboard' => ['Dashboard', 'fa-gauge-high'], 'clients' => ['Clients', 'fa-building'], 'client-new' => ['New client', 'fa-plus'], 'licences' => ['Licences', 'fa-key'], 'releases' => ['Updates & releases', 'fa-cloud-arrow-up'], 'billing' => ['Payments & invoices', 'fa-file-invoice-dollar'], 'apps' => ['Apps', 'fa-puzzle-piece'], 'activity' => ['Activity log', 'fa-clock-rotate-left']],
+      'Settings' => ['gateway' => ['Payment settings', 'fa-credit-card'], 'email' => ['Email settings', 'fa-envelope'], 'staff' => ['Super Admins', 'fa-user-shield'], 'account' => ['My account', 'fa-circle-user']]];
+  $titles = ['dashboard' => 'Dashboard', 'clients' => 'Clients', 'client-new' => 'New client', 'client' => 'Client', 'licences' => 'Licences', 'licence' => 'Licence', 'releases' => 'Updates & releases', 'release' => 'Release', 'billing' => 'Payments & invoices', 'invoice' => 'Invoice', 'gateway' => 'Payment settings', 'apps' => 'Apps', 'activity' => 'Activity log', 'email' => 'Email settings', 'staff' => 'Super Admins', 'account' => 'My account']; ?>
 <div class="shell">
 <aside class="side">
   <a class="brand" href="?p=dashboard"><span class="lm">AG</span><span>Ametecs<b>Global</b><small>SUPER ADMIN</small></span></a>
   <?php foreach ($navItems as $grp => $items): ?><div class="nav-l"><?= $grp ?></div>
-    <?php foreach ($items as $k => [$label, $ic]): ?><a class="nv<?= $page === $k || ($page === 'client' && $k === 'clients') || ($page === 'licence' && $k === 'licences') || ($page === 'release' && $k === 'releases') ? ' on' : '' ?>" href="?p=<?= $k ?>" title="<?= ag_h($label) ?>"><i class="fas <?= $ic ?>"></i><span><?= ag_h($label) ?></span><?= $k === 'clients' ? '<em class="cnt">' . count($tenants) . '</em>' : '' ?></a><?php endforeach; ?>
+    <?php foreach ($items as $k => [$label, $ic]): ?><a class="nv<?= $page === $k || ($page === 'client' && $k === 'clients') || ($page === 'licence' && $k === 'licences') || ($page === 'release' && $k === 'releases') || ($page === 'invoice' && $k === 'billing') ? ' on' : '' ?>" href="?p=<?= $k ?>" title="<?= ag_h($label) ?>"><i class="fas <?= $ic ?>"></i><span><?= ag_h($label) ?></span><?= $k === 'clients' ? '<em class="cnt">' . count($tenants) . '</em>' : '' ?></a><?php endforeach; ?>
   <?php endforeach; ?>
   <div class="bottom"><a class="nv" href="./" target="_blank" title="Client view"><i class="fas fa-arrow-up-right-from-square"></i><span>Client view</span></a></div>
 </aside>
@@ -942,13 +1029,13 @@ $myIni = strtoupper(implode('', array_map(static fn (string $w): string => mb_su
         ['?p=licences&amp;st=on', 'k2', 'fa-circle-check', $kc(static fn ($r) => AmetecsLicences::stateOf($r) === 'on'), 'Active subscriptions'],
         ['?p=licences&amp;st=expired', 'k3', 'fa-hourglass-end', $kc(static fn ($r) => AmetecsLicences::stateOf($r) === 'expired'), 'Expired subscriptions'],
         ['?p=releases', 'k5', 'fa-hourglass-half', $pendingInstalls, 'Pending installations'],
-        [null, 'k5', 'fa-file-invoice', null, 'Pending payments'],
-        [null, 'k4', 'fa-indian-rupee-sign', null, 'Total revenue'],
+        ['?p=billing&amp;st=pending', 'k5', 'fa-file-invoice', count(AmetecsBilling::invoices('', 'pending')), 'Pending payments'],
+        ['?p=billing', 'k4', 'fa-indian-rupee-sign', '₹' . number_format(AmetecsBilling::revenue()), 'Total revenue'],
         ['?p=releases', 'k6', 'fa-cloud-arrow-down', $liveReleases, 'Available updates'],
         ['?p=releases', 'k3', 'fa-triangle-exclamation', AmetecsReleases::countEvents('failed'), 'Failed installations (30 days)'],
     ]; ?>
   <section class="kstrip">
-    <?php foreach ($tiles as [$href, $kk, $ic, $num, $label]): $inner = '<span class="ki ' . $kk . '"><i class="fas ' . $ic . '"></i></span><div>' . ($num === null ? '<b title="Arrives with the payments / update phases">&mdash;</b>' : '<b data-count="' . (int) $num . '">0</b>') . '<span>' . $label . '</span></div>'; ?>
+    <?php foreach ($tiles as [$href, $kk, $ic, $num, $label]): $inner = '<span class="ki ' . $kk . '"><i class="fas ' . $ic . '"></i></span><div>' . ($num === null ? '<b title="Arrives with the payments / update phases">&mdash;</b>' : (is_string($num) ? '<b>' . ag_h($num) . '</b>' : '<b data-count="' . (int) $num . '">0</b>')) . '<span>' . $label . '</span></div>'; ?>
       <?= $href !== null ? '<a href="' . $href . '">' . $inner . '</a>' : '<div title="Arrives with the payments / update phases" style="opacity:.6">' . $inner . '</div>' ?>
     <?php endforeach; ?>
   </section>
@@ -1139,6 +1226,7 @@ $myIni = strtoupper(implode('', array_map(static fn (string $w): string => mb_su
     <?= $lc['plan'] !== 'perpetual' ? $btn('renew', '<i class="fas fa-rotate"></i> Renew ' . ['monthly' => '1 month', 'yearly' => '1 year', 'trial' => '14 days'][$lc['plan']], 'gold', 'Extend this licence by one period?') : '' ?>
     <?= $lc['status'] === 'active' ? $btn('suspended', '<i class="fas fa-pause"></i> Suspend', 'danger', 'Suspend this licence? The app stops opening for this client; nothing is deleted.') : '' ?>
     <?= $lc['status'] !== 'cancelled' ? $btn('cancelled', '<i class="fas fa-ban"></i> Cancel', 'danger', 'Cancel this licence? The client loses the app; history and data are kept.') : '' ?>
+    <?php if ((float) ($lc['price'] ?? 0) > 0 && $lc['plan'] !== 'perpetual' && AmetecsBilling::ready()): ?><form method="post" class="inline"><?= $csrf() ?><input type="hidden" name="do" value="invoice-new"><input type="hidden" name="licence" value="<?= $lid ?>"><button class="btn ghost"><i class="fas fa-file-invoice"></i> Raise renewal invoice</button></form><?php endif; ?>
     <span class="muted"><b>Suspend</b> = temporary stop (e.g. unpaid). <b>Cancel</b> = the client no longer takes this app. Neither deletes anything; Activate undoes both.</span></div></div>
 
   <form method="post" class="box"><?= $csrf() ?><input type="hidden" name="do" value="licence-save"><input type="hidden" name="id" value="<?= $lid ?>">
@@ -1291,6 +1379,90 @@ $myIni = strtoupper(implode('', array_map(static fn (string $w): string => mb_su
   <?php $tn = array_column($tenants, 'name', 'id'); foreach (AmetecsReleases::events(['release_id' => $rid]) as $e): ?><tr><td style="white-space:nowrap"><?= ag_h($e['created_at']) ?></td><td><?= (int) $e['tenant_id'] === 0 ? 'Ametecs' : ag_h($tn[$e['tenant_id']] ?? '#' . $e['tenant_id']) ?></td>
     <td><?= ag_h(ucfirst(str_replace('_', ' ', (string) $e['action']))) ?></td><td><?= ag_h(trim(($e['from_version'] ?? '') . ' → ' . ($e['to_version'] ?? ''), ' →')) ?></td><td><?= ag_h($e['by_who']) ?></td>
     <td class="muted" style="font-size:12px;max-width:420px;white-space:pre-wrap"><?= ag_h(mb_substr((string) $e['detail'], 0, 400)) ?></td></tr><?php endforeach; ?></table></div>
+
+<?php elseif ($page === 'billing'):
+    $fs = (string) ($_GET['st'] ?? ''); $ft = (string) ($_GET['c'] ?? '');
+    $invs = AmetecsBilling::invoices($ft, $fs); $names = array_column($tenants, 'name', 'id');
+    $pend = AmetecsBilling::invoices('', 'pending'); $gwOn = AmetecsBilling::gateway() !== null;
+    $month = (new DateTimeImmutable('first day of this month', new DateTimeZone('Asia/Kolkata')))->format('Y-m-d 00:00:00'); ?>
+  <h1>Payments &amp; invoices</h1><p class="sub">Upgrade charges, licence renewals and other invoices for every client. Clients pay online with Razorpay from their panel; a payment counts only once the server has verified it.</p>
+  <?php if (!AmetecsBilling::ready()): ?><div class="msg bad"><i class="fas fa-circle-exclamation"></i><span>The billing tables are not on this PC yet. They arrive with the next sync.</span></div><?php else: ?>
+  <?php if (!$gwOn): ?><div class="msg bad"><i class="fas fa-credit-card"></i><span>Online payment is off. Clients see "contact Ametecs" until Razorpay is set up in <a href="?p=gateway">Payment settings</a>.</span></div><?php endif; ?>
+  <section class="kstrip" style="grid-template-columns:repeat(4,1fr)">
+    <div><span class="ki k4"><i class="fas fa-indian-rupee-sign"></i></span><div><b>₹<?= number_format(AmetecsBilling::revenue()) ?></b><span>Received (net of refunds)</span></div></div>
+    <div><span class="ki k2"><i class="fas fa-calendar"></i></span><div><b>₹<?= number_format(AmetecsBilling::revenue($month)) ?></b><span>This month</span></div></div>
+    <a href="?p=billing&amp;st=pending"><span class="ki k5"><i class="fas fa-file-invoice"></i></span><div><b><?= count($pend) ?></b><span>Pending · ₹<?= number_format(array_sum(array_map(static fn ($i) => $i['currency'] === 'INR' ? (float) $i['total'] : 0, $pend))) ?></span></div></a>
+    <a href="?p=billing&amp;st=refunded"><span class="ki k3"><i class="fas fa-rotate-left"></i></span><div><b><?= count(AmetecsBilling::invoices('', 'refunded')) ?></b><span>Refunded</span></div></a>
+  </section>
+  <form class="toolbar"><input type="hidden" name="p" value="billing"><span class="si"><i class="fas fa-magnifying-glass"></i><input data-live="#inv-t" placeholder="Search number, client, description…" autocomplete="off"></span>
+    <select name="c"><option value="">All clients</option><?php foreach ($tenants as $t): ?><option value="<?= (int) $t['id'] ?>"<?= $ft === (string) $t['id'] ? ' selected' : '' ?>><?= ag_h($t['name']) ?></option><?php endforeach; ?></select>
+    <select name="st"><option value="">Any status</option><?php foreach (AmetecsBilling::STATUSES as $k => [$v]): ?><option value="<?= $k ?>"<?= $fs === $k ? ' selected' : '' ?>><?= $v ?></option><?php endforeach; ?></select>
+    <button class="btn ghost"><i class="fas fa-filter"></i>Filter</button>
+    <details class="act" style="margin-left:auto"><summary class="btn gold"><i class="fas fa-plus"></i>New invoice</summary><div class="menu" style="right:0;min-width:340px">
+      <form method="post" class="stack"><?= $csrf() ?><input type="hidden" name="do" value="invoice-new">
+        <label>Client</label><select name="tenant" required><option value="">Choose…</option><?php foreach ($tenants as $t): ?><option value="<?= (int) $t['id'] ?>"><?= ag_h($t['name']) ?></option><?php endforeach; ?></select>
+        <label>Description</label><input name="description" required placeholder="e.g. Training, 2 days">
+        <label>Amount (before GST)</label><div class="row"><select name="currency" style="width:90px"><?php foreach (['INR', 'USD', 'AED', 'SAR', 'EUR', 'GBP'] as $cu): ?><option><?= $cu ?></option><?php endforeach; ?></select><input name="amount" inputmode="decimal" required style="flex:1"></div>
+        <span class="muted" style="font-size:12px">For a licence renewal use "Raise renewal invoice" on the licence instead: paying it renews the licence automatically.</span>
+        <button class="btn gold" style="margin-top:10px">Raise invoice</button></form></div></details></form>
+  <div class="box"><table id="inv-t" class="sortable"><tr><th>Number</th><th>Client</th><th>For</th><th>Total</th><th>Status</th><th>Issued</th><th>Paid</th><th></th></tr>
+  <?php foreach ($invs as $i): [$sl, $sc] = AmetecsBilling::STATUSES[$i['status']] ?? [$i['status'], 'grey']; ?><tr>
+    <td><b><?= ag_h($i['number']) ?></b></td><td><?= ag_h($names[$i['tenant_id']] ?? '#' . $i['tenant_id']) ?></td>
+    <td><?= ag_h(AmetecsBilling::PURPOSES[$i['purpose']] ?? $i['purpose']) ?><div class="muted" style="font-size:12px"><?= ag_h($i['description']) ?></div></td>
+    <td style="white-space:nowrap"><?= ag_h($i['currency']) ?> <?= number_format((float) $i['total'], 2) ?></td><td><span class="pill <?= $sc ?>"><?= $sl ?></span></td>
+    <td><?= $d($i['issued_on']) ?></td><td><?= $i['paid_at'] ? $d(substr((string) $i['paid_at'], 0, 10)) : '—' ?></td>
+    <td class="right"><a class="btn ghost" href="?p=invoice&id=<?= (int) $i['id'] ?>">Open</a></td></tr>
+  <?php endforeach; ?><?php if ($invs === []): ?><tr><td colspan="8"><div class="empty"><i class="fas fa-file-invoice"></i>No invoices yet.</div></td></tr><?php endif; ?></table></div>
+  <?php endif; ?>
+
+<?php elseif ($page === 'invoice' && ($iv = AmetecsBilling::byId((string) ($_GET['id'] ?? ''))) !== null):
+    [$sl, $sc] = AmetecsBilling::STATUSES[$iv['status']] ?? [$iv['status'], 'grey']; $it = $tenant((string) $iv['tenant_id']); $ivid = (int) $iv['id'];
+    $ipays = AmetecsBilling::payments((string) $ivid); ?>
+  <div class="row" style="margin-bottom:6px"><a href="?p=billing" class="muted">← Payments &amp; invoices</a></div>
+  <div class="row"><h1>Invoice <?= ag_h($iv['number']) ?></h1><span class="pill <?= $sc ?>"><?= $sl ?></span><a class="btn ghost" href="?p=invoice-print&id=<?= $ivid ?>" target="_blank" style="margin-left:auto"><i class="fas fa-print"></i>Print / PDF</a></div>
+  <p class="sub"><?= ag_h($it['name'] ?? '#' . $iv['tenant_id']) ?> · <?= ag_h(AmetecsBilling::PURPOSES[$iv['purpose']] ?? '') ?> · issued <?= $d($iv['issued_on']) ?><?= $iv['status'] === 'pending' ? ' · due ' . $d($iv['due_on']) : '' ?></p>
+  <div class="box"><table><tr><th>Description</th><th class="right">Amount</th></tr>
+    <tr><td><?= ag_h($iv['description']) ?><?= $iv['release_id'] ? ' · <a href="?p=release&id=' . (int) $iv['release_id'] . '">release</a>' : '' ?><?= $iv['licence_id'] ? ' · <a href="?p=licence&id=' . (int) $iv['licence_id'] . '">licence</a>' : '' ?></td><td class="right"><?= ag_h($iv['currency']) ?> <?= number_format((float) $iv['amount'], 2) ?></td></tr>
+    <?php if ((float) $iv['tax'] > 0): ?><tr><td>GST <?= ag_h(rtrim(rtrim((string) $iv['tax_percent'], '0'), '.')) ?>%</td><td class="right"><?= ag_h($iv['currency']) ?> <?= number_format((float) $iv['tax'], 2) ?></td></tr><?php endif; ?>
+    <tr><td><b>Total</b></td><td class="right"><b><?= ag_h($iv['currency']) ?> <?= number_format((float) $iv['total'], 2) ?></b></td></tr></table></div>
+  <?php if ($iv['status'] === 'pending'): ?>
+  <div class="box"><div class="hd"><h2>Collect</h2><span class="muted">Razorpay order: <?= $iv['gateway_order_id'] ? '<code>' . ag_h($iv['gateway_order_id']) . '</code>' : 'not started yet' ?></span></div><div class="bd row">
+    <form method="post" class="inline"><?= $csrf() ?><input type="hidden" name="do" value="invoice-reconcile"><input type="hidden" name="id" value="<?= $ivid ?>"><button class="btn navy"<?= $iv['gateway_order_id'] ? '' : ' disabled' ?>><i class="fas fa-magnifying-glass-dollar"></i>Check with Razorpay</button></form>
+    <span class="muted">If the client paid but closed the page before it finished, this asks Razorpay and applies the payment.</span></div>
+    <form method="post" class="ft row" style="justify-content:flex-start"><?= $csrf() ?><input type="hidden" name="do" value="invoice-paid"><input type="hidden" name="id" value="<?= $ivid ?>">
+      <b>Paid offline:</b><select name="method"><option>bank transfer</option><option>cheque</option><option>cash</option><option>UPI</option></select><input name="reference" placeholder="UTR / cheque no. / reference" required style="flex:1;min-width:220px">
+      <button class="btn gold" onclick="return confirm('Record the full amount as received? This unlocks what the invoice is for.')">Mark paid</button></form>
+    <form method="post" class="ft row" style="justify-content:flex-start"><?= $csrf() ?><input type="hidden" name="do" value="invoice-cancel"><input type="hidden" name="id" value="<?= $ivid ?>">
+      <b>Cancel:</b><input name="why" placeholder="reason" style="flex:1;min-width:220px"><button class="btn danger">Cancel invoice</button></form></div>
+  <?php endif; ?>
+  <div class="box"><div class="hd"><h2>Payments</h2></div><table><tr><th>When</th><th>Via</th><th>Reference</th><th>Amount</th><th>Status</th><th>Detail</th><th class="right"></th></tr>
+  <?php foreach ($ipays as $py): ?><tr><td style="white-space:nowrap"><?= ag_h($py['created_at']) ?></td><td><?= ag_h(ucfirst((string) $py['gateway'])) ?><?= $py['method'] ? ' · ' . ag_h($py['method']) : '' ?></td><td><code><?= ag_h((string) $py['gateway_payment_id']) ?></code></td>
+    <td><?= ag_h($py['currency']) ?> <?= number_format((float) $py['amount'], 2) ?></td><td><?= $py['status'] === 'refunded' ? '<span class="pill red">Refunded</span>' : '<span class="pill green">Received</span>' ?></td>
+    <td class="muted" style="font-size:12px;white-space:pre-wrap"><?= ag_h((string) $py['detail']) ?></td>
+    <td class="right"><?php if ($py['status'] === 'succeeded'): ?><details class="act"><summary class="btn ghost">Refund ▾</summary><div class="menu"><form method="post"><?= $csrf() ?><input type="hidden" name="do" value="payment-refund"><input type="hidden" name="id" value="<?= (int) $py['id'] ?>">
+      <b>Refund the full amount</b><span class="muted"><?= $py['gateway'] === 'razorpay' ? 'sent back through Razorpay' : 'recorded as an offline refund (send the money yourself)' ?>; what it paid for is taken back</span>
+      <div class="row"><input name="why" placeholder="reason" required><button class="btn danger" onclick="return confirm('Refund this payment?')">Refund</button></div></form></div></details><?php endif; ?></td></tr>
+  <?php endforeach; ?><?php if ($ipays === []): ?><tr><td colspan="7" class="muted">No payment yet.</td></tr><?php endif; ?></table></div>
+
+<?php elseif ($page === 'gateway'): $gr = AmetecsBilling::gatewayRow() ?? []; $bs = AmetecsBilling::settings(); ?>
+  <h1>Payment settings</h1><p class="sub">Razorpay keys for online payment, and the details printed on every invoice. The same Razorpay keys are used by SmartPRS 3's console.</p>
+  <div class="msg <?= AmetecsBilling::gateway() !== null ? 'ok' : 'bad' ?>"><?= AmetecsBilling::gateway() !== null ? 'Online payment is ON (' . ag_h(ucfirst((string) ($gr['mode'] ?? 'test'))) . ' mode).' : 'Online payment is OFF: clients are told to contact Ametecs.' ?></div>
+  <form method="post" class="box" style="max-width:820px"><?= $csrf() ?><input type="hidden" name="do" value="gateway-save">
+    <div class="hd"><h2><i class="fas fa-credit-card"></i>Razorpay</h2><span class="muted">dashboard.razorpay.com → Account &amp; Settings → API Keys</span></div><div class="bd grid2">
+      <div class="full"><label class="sw" style="text-transform:none;font-size:14px;color:var(--ink)"><input type="checkbox" name="enabled"<?= in_array(strtolower((string) ($gr['status'] ?? '')), ['configured', 'live', 'active'], true) ? ' checked' : '' ?>> Accept online payments</label></div>
+      <div><label>Mode</label><select name="mode"><option value="test"<?= ($gr['mode'] ?? '') !== 'live' ? ' selected' : '' ?>>Test (rzp_test_ keys, no real money)</option><option value="live"<?= ($gr['mode'] ?? '') === 'live' ? ' selected' : '' ?>>Live</option></select></div>
+      <div><label>Key ID</label><input name="key_id" value="<?= ag_h((string) ($gr['key_id'] ?? '')) ?>" placeholder="rzp_test_…" autocomplete="off"></div>
+      <div><label>Key Secret</label><input type="password" name="secret" placeholder="<?= trim((string) ($gr['secret'] ?? '')) !== '' ? 'saved - leave empty to keep' : '' ?>" autocomplete="new-password"></div>
+    </div>
+    <div class="hd"><h2><i class="fas fa-file-invoice"></i>On every invoice</h2></div><div class="bd grid2">
+      <div><label>Seller name</label><input name="seller" value="<?= ag_h((string) $bs['seller']) ?>"></div>
+      <div><label>GSTIN</label><input name="gstin" value="<?= ag_h((string) $bs['gstin']) ?>" maxlength="15" placeholder="36XXXXX0000X1Z5"></div>
+      <div class="full"><label>Address</label><textarea name="address" rows="2"><?= ag_h((string) $bs['address']) ?></textarea></div>
+      <div><label>Billing email</label><input type="email" name="email" value="<?= ag_h((string) $bs['email']) ?>"></div>
+      <div><label>GST % (INR invoices)</label><input name="gst_percent" value="<?= ag_h((string) $bs['gst_percent']) ?>" inputmode="decimal"></div>
+      <div><label>Payment due in (days)</label><input type="number" min="0" name="due_days" value="<?= (int) $bs['due_days'] ?>"></div>
+    </div><div class="ft"><button class="btn navy">Save</button></div></form>
+  <p class="muted" style="font-size:12px">The Key Secret is stored encrypted and never shown again. Payments are confirmed on the server with Razorpay's signature (or by asking Razorpay directly), never by the browser alone.</p>
 
 <?php elseif ($page === 'apps'): ?>
   <h1>Apps</h1><p class="sub">The apps every client sees. This list is shared: a change here reaches every PC through GitHub within minutes. An app with an "Opens at" link is <b>Live</b> and opens from the client's front door; without one it can already be licensed and shows as coming. Retired apps disappear for clients but their licences and data are kept.</p>

@@ -153,7 +153,7 @@ if ($user !== null) {
 $activeCount = count($groups['live']) + count($groups['soon']);
 // UPDATES (Phase 2, 18 Nov 2026): what each licensed app is offered. Cloud = the version Ametecs' server runs; on-premise = what
 // the client's server last reported. Only administrators see this; only apps this client holds.
-$view = $user !== null && $isAdmin && ($_GET['v'] ?? '') === 'updates' ? 'updates' : 'home';
+$view = $user !== null && $isAdmin && in_array($_GET['v'] ?? '', ['updates', 'billing', 'invoice'], true) ? (string) $_GET['v'] : 'home';
 $upd = [];
 if ($user !== null && $isAdmin && AmetecsReleases::ready()) {
     foreach (AmetecsAccess::plugins() as $code => $p) {
@@ -193,6 +193,69 @@ if ($user !== null && $isAdmin && AmetecsReleases::ready()) {
 }
 $updCount = array_sum(array_map(static fn ($u) => count($u['offer']['updates']), $upd));
 $updMandatory = in_array(true, array_map(static fn ($u) => $u['offer']['mandatory'], $upd), true);
+
+// PAYMENTS (Phase 3, 18 Nov 2026): the client's administrator pays upgrade and renewal invoices with Razorpay. The browser
+// only starts the payment; the server checks Razorpay's signature before anything is unlocked (core/billing.php).
+$billOn = $user !== null && $isAdmin && AmetecsBilling::ready();
+$payOnline = $billOn && AmetecsBilling::gateway() !== null;
+if ($billOn && ($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && str_starts_with((string) ($_POST['do'] ?? ''), 'pay-')) {
+    $pdo2 = (string) $_POST['do'];
+    $isJson = in_array($pdo2, ['pay-order', 'pay-complete'], true);
+    $out = static function (bool $ok, string $msg, array $more = [], string $to = '?v=billing') use ($isJson): never {
+        if ($isJson) {
+            header('Content-Type: application/json');
+            echo json_encode(['ok' => $ok, ($ok ? 'message' : 'error') => $msg] + $more);
+            exit;
+        }
+        $_SESSION[$ok ? 'flash_notice' : 'flash_problem'] = $msg;
+        header('Location: ' . $to);
+        exit;
+    };
+    if (!$session->verify((string) ($_POST['csrf'] ?? ''))) {
+        $out(false, 'This page had expired. Reload it and try again.');
+    }
+    AmetecsLicences::$actor = (string) ($user['email'] ?? 'client');
+    try {
+        if ($pdo2 === 'pay-upgrade') {
+            $pr = AmetecsReleases::byId((string) ($_POST['release'] ?? ''));
+            $offered = $pr !== null && in_array((string) $pr['id'], array_map(static fn ($x) => (string) $x['id'], array_merge(...array_values(array_map(static fn ($u) => array_merge($u['offer']['updates'], $u['offer']['plugins']), $upd)) ?: [[]])), true);
+            if (!$offered || AmetecsReleases::payment($pr, $tenant) !== 'required') {
+                $out(false, 'That upgrade does not need a payment from your company.', [], '?v=updates');
+            }
+            $inv = AmetecsBilling::forUpgrade($pr, $tenant);
+            $out(true, 'Invoice ' . $inv['number'] . ' is ready. Pay it below to unlock the upgrade.', [], '?v=billing&pay=' . (int) $inv['id']);
+        }
+        if ($pdo2 === 'pay-renew') {
+            $pl = AmetecsLicences::byId((string) ($_POST['licence'] ?? ''));
+            if ($pl === null || (string) $pl['tenant_id'] !== $tenant || (float) ($pl['price'] ?? 0) <= 0 || $pl['plan'] === 'perpetual' || $pl['status'] === 'cancelled') {
+                $out(false, 'That licence cannot be renewed online. Contact Ametecs.', [], './');
+            }
+            $inv = AmetecsBilling::forRenewal($pl);
+            $out(true, 'Invoice ' . $inv['number'] . ' is ready. Pay it below to renew.', [], '?v=billing&pay=' . (int) $inv['id']);
+        }
+        $pi = AmetecsBilling::byId((string) ($_POST['invoice'] ?? ''));
+        if ($pi === null || (string) $pi['tenant_id'] !== $tenant) {
+            $out(false, 'Unknown invoice.');
+        }
+        if ($pdo2 === 'pay-order') {
+            $o = AmetecsBilling::order($pi);
+            $o['ok'] ? $out(true, 'ok', $o + ['description' => $pi['number'] . ' - ' . $pi['description'], 'email' => (string) ($user['email'] ?? '')]) : $out(false, $o['why']);
+        }
+        if ($pdo2 === 'pay-complete') {
+            $r = AmetecsBilling::completeSigned($pi, (string) ($_POST['razorpay_order_id'] ?? ''), (string) ($_POST['razorpay_payment_id'] ?? ''), (string) ($_POST['razorpay_signature'] ?? ''));
+            $out($r['ok'], $r['why']);
+        }
+    } catch (\Throwable $x) {
+        $out(false, $x->getMessage());
+    }
+    $out(false, 'Nothing to do.');
+}
+if ($view === 'invoice' && $billOn && ($pv = AmetecsBilling::byId((string) ($_GET['id'] ?? ''))) !== null && (string) $pv['tenant_id'] === $tenant) {
+    echo AmetecsBilling::printHtml($pv);
+    exit;
+}
+$notice ??= isset($_SESSION['flash_notice']) ? (string) $_SESSION['flash_notice'] : null;
+unset($_SESSION['flash_notice']);
 $daysLeft = $nextRenewal === null ? null : (int) $now->setTime(0, 0)->diff(new DateTimeImmutable($nextRenewal, new DateTimeZone('Asia/Kolkata')))->format('%r%a');
 $fmtDate = static fn (string $d): string => $d === '' ? 'No end date' : date('d M Y', strtotime($d));
 // APP LOGOS (owner, 17 Nov 2026): the real logos, full colour on white cards. Super Admin -> Apps can set any app's
@@ -546,6 +609,7 @@ a{color:inherit}
 .lic-t{background:#fff;border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--sh);overflow-x:auto}
 .lic-t table{width:100%;border-collapse:collapse;font-size:13.5px}.lic-t th{text-align:left;font-size:11.5px;color:var(--mute);font-weight:600;padding:10px 14px;border-bottom:1px solid var(--line);white-space:nowrap}
 .lic-t td{padding:10px 14px;border-bottom:1px solid #f1f4f8;white-space:nowrap}.lic-t tr:last-child td{border-bottom:0}.lic-t td i{color:var(--mute);margin-right:4px}
+.lic-t .btn2{width:auto;display:inline-flex;align-items:center;gap:6px;padding:6px 12px;font-size:12.5px;vertical-align:middle}.lic-t td.r form{display:inline}
 .ucnt{margin-left:auto;font-style:normal;font-size:11px;background:var(--gold);color:#fff;padding:1px 8px;border-radius:99px}.lic-t td.r,.lic-t th.r{text-align:right}
 .lp{display:inline-block;padding:2px 10px;border-radius:99px;font-size:12px;font-weight:600}.lp-green{background:var(--ok-bg);color:var(--ok)}.lp-amber{background:#fffbeb;color:#b45309}.lp-red{background:var(--bad-bg);color:var(--bad)}.lp-grey{background:#f1f5f9;color:var(--mute)}
 </style></head><body>
@@ -628,6 +692,8 @@ a{color:inherit}
     <a class="nv" href="org.php?s=ag-apps"><i class="fas fa-puzzle-piece"></i><span>App access</span></a>
     <div class="nav-l">Software</div>
     <a class="nv<?= $view === 'updates' ? ' on' : '' ?>" href="?v=updates"><i class="fas fa-cloud-arrow-down"></i><span>Updates</span><?= $updCount > 0 ? '<em class="ucnt">' . $updCount . '</em>' : '' ?></a>
+    <?php $pendCount = $billOn ? count(AmetecsBilling::invoices($tenant, 'pending')) : 0; ?>
+    <a class="nv<?= $view === 'billing' ? ' on' : '' ?>" href="?v=billing"><i class="fas fa-file-invoice"></i><span>Payments &amp; invoices</span><?= $pendCount > 0 ? '<em class="ucnt">' . $pendCount . '</em>' : '' ?></a>
     <?php endif; ?>
   </nav>
   <div class="side-foot"><span class="dotlive"></span><span>All systems normal</span></div>
@@ -656,7 +722,8 @@ a{color:inherit}
       <td><?= ag_h(AmetecsReleases::KINDS[$r['kind']] ?? '') ?></td>
       <td><?= ['free' => 'Free', 'granted' => '<span class="lp lp-green">Free for you</span>', 'paid' => '<span class="lp lp-green">Paid</span>', 'required' => ag_h($r['currency']) . ' ' . number_format((float) $r['price'], 2)][$pay] ?></td>
       <td class="r"><?php if (!$onprem): ?><span class="muted2">Ametecs installs this on the cloud for you</span>
-        <?php elseif ($pay === 'required'): ?><span class="lp lp-amber">Payment needed first</span> <span class="muted2">online payment opens soon &mdash; contact Ametecs</span>
+        <?php elseif ($pay === 'required'): ?><?php if ($payOnline && $r['currency'] === 'INR'): ?><form method="post" style="display:inline"><input type="hidden" name="csrf" value="<?= ag_h($session->token()) ?>"><input type="hidden" name="do" value="pay-upgrade"><input type="hidden" name="release" value="<?= (int) $r['id'] ?>"><button class="btn2 primary"><i class="fas fa-lock-open"></i>Pay &amp; upgrade</button></form>
+          <?php else: ?><span class="lp lp-amber">Payment needed first</span> <span class="muted2">contact Ametecs to pay</span><?php endif; ?>
         <?php else: ?><span class="muted2">Install from your server's Updates screen</span><?= $r['downloadable'] ? ' &nbsp;<a class="btn2 ghost" href="?v=updates&amp;dl=' . (int) $r['id'] . '"><i class="fas fa-download"></i>Download</a>' : '' ?><?php endif; ?></td></tr>
     <?php endforeach; ?><?php if ($u['offer']['updates'] === [] && $u['offer']['plugins'] === []): ?><tr><td colspan="5" class="muted2"><i class="fas fa-circle-check" style="color:var(--ok)"></i> Up to date.</td></tr><?php endif; ?></table></div>
   <?php endforeach; ?>
@@ -665,6 +732,48 @@ a{color:inherit}
     <?php $h = AmetecsReleases::events(['tenant_id' => $tenant], 50); foreach ($h as $e): ?><tr><td><?= ag_h((string) $e['created_at']) ?></td><td><?= ag_h((string) (AmetecsAccess::plugins()[$e['app']]['name'] ?? $e['app'])) ?></td>
       <td><?= ag_h(ucfirst(str_replace('_', ' ', (string) $e['action']))) ?></td><td><?= ag_h(trim(($e['from_version'] ?? '') . ' → ' . ($e['to_version'] ?? ''), ' →')) ?></td><td class="muted2"><?= ag_h((string) $e['by_who']) ?></td></tr><?php endforeach; ?>
     <?php if ($h === []): ?><tr><td colspan="5" class="muted2">Nothing yet.</td></tr><?php endif; ?></table></div>
+  <?php endif; ?>
+<?php elseif ($view === 'billing'):
+    $myInv = AmetecsBilling::invoices($tenant); $payId = (int) ($_GET['pay'] ?? 0); ?>
+  <div class="ph"><div><h1>Payments &amp; invoices</h1><p>Invoices from Ametecs for <?= ag_h($company ?: 'your company') ?>: upgrades, licence renewals and services. Pay online with Razorpay (cards, UPI, net banking).</p></div></div>
+  <?php if ($notice !== null): ?><div class="msg" style="background:var(--ok-bg);border-color:#bbf7d0;color:var(--ok)"><i class="fas fa-circle-check"></i><span><?= ag_h($notice) ?></span></div><?php endif; ?>
+  <?php if ($problem !== null): ?><div class="msg"><i class="fas fa-circle-exclamation"></i><span><?= ag_h($problem) ?></span></div><?php endif; ?>
+  <div id="paymsg" class="msg" hidden></div>
+  <div class="lic-t"><table><tr><th>Invoice</th><th>For</th><th>Total</th><th>Status</th><th>Issued</th><th class="r"></th></tr>
+  <?php foreach ($myInv as $i): [$sl, $sc] = AmetecsBilling::STATUSES[$i['status']] ?? [$i['status'], 'grey']; ?><tr<?= $payId === (int) $i['id'] ? ' style="background:#fffbeb"' : '' ?>>
+    <td><b><?= ag_h($i['number']) ?></b></td><td style="white-space:normal"><?= ag_h($i['description']) ?></td><td><?= ag_h($i['currency']) ?> <?= number_format((float) $i['total'], 2) ?><?= (float) $i['tax'] > 0 ? '<br><small class="muted2">incl. GST ' . ag_h($i['currency']) . ' ' . number_format((float) $i['tax'], 2) . '</small>' : '' ?></td>
+    <td><span class="lp lp-<?= $sc ?>"><?= ag_h($sl) ?></span><?= $i['status'] === 'pending' ? '<br><small class="muted2">due ' . ag_h(date('d M Y', (int) strtotime((string) $i['due_on']))) . '</small>' : '' ?></td>
+    <td><?= ag_h(date('d M Y', (int) strtotime((string) $i['issued_on']))) ?></td>
+    <td class="r"><?php if ($i['status'] === 'pending' && $payOnline && $i['currency'] === 'INR'): ?><button class="btn2 primary paybtn" data-inv="<?= (int) $i['id'] ?>"><i class="fas fa-credit-card"></i>Pay now</button> <?php elseif ($i['status'] === 'pending'): ?><span class="muted2">contact Ametecs to pay</span> <?php endif; ?>
+      <a class="btn2 ghost" href="?v=invoice&amp;id=<?= (int) $i['id'] ?>" target="_blank"><i class="fas fa-print"></i>Invoice</a></td></tr>
+  <?php endforeach; ?><?php if ($myInv === []): ?><tr><td colspan="6" class="muted2">No invoices yet.</td></tr><?php endif; ?></table></div>
+  <?php if ($payOnline): ?>
+  <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+  <script>
+  (function () {
+    var csrf = <?= json_encode($session->token()) ?>, box = document.getElementById('paymsg');
+    function say(ok, t) { box.hidden = false; box.textContent = t; box.style.background = ok ? '#ecfdf3' : ''; box.style.color = ok ? '#15803d' : ''; }
+    function post(d) { return fetch('?v=billing', {method: 'POST', body: new URLSearchParams(Object.assign({csrf: csrf}, d))}).then(function (r) { return r.json(); }); }
+    document.querySelectorAll('.paybtn').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        btn.disabled = true;
+        post({do: 'pay-order', invoice: btn.dataset.inv}).then(function (o) {
+          if (!o.ok) { say(false, o.error); btn.disabled = false; return; }
+          if (typeof Razorpay === 'undefined') { say(false, 'The Razorpay window could not load - check the internet connection.'); btn.disabled = false; return; }
+          new Razorpay({key: o.keyId, amount: o.amountPaise, currency: 'INR', order_id: o.orderId, name: 'Ametecs India', description: o.description,
+            prefill: {email: o.email}, theme: {color: '#1F3A5F'},
+            handler: function (r) {
+              say(true, 'Confirming the payment…');
+              post({do: 'pay-complete', invoice: btn.dataset.inv, razorpay_order_id: r.razorpay_order_id, razorpay_payment_id: r.razorpay_payment_id, razorpay_signature: r.razorpay_signature})
+                .then(function (c) { say(c.ok, c.ok ? c.message : c.error); if (c.ok) { setTimeout(function () { location.href = '?v=billing'; }, 1800); } else { btn.disabled = false; } });
+            },
+            modal: {ondismiss: function () { btn.disabled = false; }}}).open();
+        }).catch(function () { say(false, 'Could not reach the server. Check the connection and try again.'); btn.disabled = false; });
+      });
+    });
+    <?= $payId > 0 ? "var auto = document.querySelector('.paybtn[data-inv=\"" . $payId . "\"]'); auto && auto.click();" : '' ?>
+  })();
+  </script>
   <?php endif; ?>
 <?php else: ?>
   <?php $prsSeats = (int) (AmetecsAccess::get($tenant, 'smartprs3', $all)['seats'] ?? 0); $pct = $prsSeats > 0 ? min(100, (int) round($used * 100 / $prsSeats)) : 0; ?>
@@ -692,7 +801,7 @@ a{color:inherit}
   <div class="noapps" id="noapps" hidden><i class="fas fa-magnifying-glass"></i>No apps match.</div>
   <?php if ($isAdmin): $mine = array_filter(array_merge($groups['live'], $groups['soon'], $groups['other']), static fn ($r) => isset($r['a']['deployment']) && ($r['a']['status'] ?? '') !== 'cancelled'); ?>
   <div class="sh" style="margin-top:26px"><div><h2>Licences &amp; subscriptions</h2><span class="legend"><em>What your company holds, as set by Ametecs. To add an app, renew or change seats, contact Ametecs.</em></span></div></div>
-  <div class="lic-t"><table><tr><th>Application</th><th>Deployment</th><th>Plan</th><th>Status</th><th>Seats</th><th>Valid till</th><th>Installed version</th></tr>
+  <div class="lic-t"><table><tr><th>Application</th><th>Deployment</th><th>Plan</th><th>Status</th><th>Seats</th><th>Valid till</th><th>Installed version</th><th class="r"></th></tr>
   <?php foreach ($mine as $r): $a = $r['a']; [$sl, $sc] = AmetecsLicences::STATES[$r['st']] ?? ['', 'grey']; ?><tr>
     <td><b><?= ag_h((string) $r['p']['name']) ?></b></td>
     <td><?= $a['deployment'] === 'onprem' ? '<i class="fas fa-server"></i> On-premise' : '<i class="fas fa-cloud"></i> Cloud' ?></td>
@@ -700,8 +809,9 @@ a{color:inherit}
     <td><span class="lp lp-<?= $sc ?>"><?= ag_h($sl) ?></span></td>
     <td><?= (int) $a['seats'] ?> <?= ag_h((string) $r['p']['unit']) ?></td>
     <td><?= ag_h($fmtDate((string) ($a['valid_until'] ?? ''))) ?></td>
-    <td class="muted2"><?= $a['deployment'] === 'onprem' ? ag_h((string) (($a['app_version'] ?? '') ?: 'not reported yet')) : 'Kept current by Ametecs' ?></td></tr>
-  <?php endforeach; ?><?php if ($mine === []): ?><tr><td colspan="7" class="muted2">No licences yet.</td></tr><?php endif; ?></table></div>
+    <td class="muted2"><?= $a['deployment'] === 'onprem' ? ag_h((string) (($a['app_version'] ?? '') ?: 'not reported yet')) : 'Kept current by Ametecs' ?></td>
+    <td class="r"><?php if ($payOnline && (float) ($a['price'] ?? 0) > 0 && ($a['currency'] ?? 'INR') === 'INR' && in_array($a['plan'], ['monthly', 'yearly'], true)): ?><form method="post" style="display:inline"><input type="hidden" name="csrf" value="<?= ag_h($session->token()) ?>"><input type="hidden" name="do" value="pay-renew"><input type="hidden" name="licence" value="<?= (int) $a['id'] ?>"><button class="btn2 ghost" title="<?= ag_h($a['currency'] . ' ' . number_format((float) $a['price'], 2)) ?> + GST"><i class="fas fa-rotate"></i>Renew online</button></form><?php endif; ?></td></tr>
+  <?php endforeach; ?><?php if ($mine === []): ?><tr><td colspan="8" class="muted2">No licences yet.</td></tr><?php endif; ?></table></div>
   <?php endif; ?>
 <?php endif; ?>
 </main>
