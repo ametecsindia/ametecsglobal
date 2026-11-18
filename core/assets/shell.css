@@ -250,3 +250,5 @@ img,video,canvas{max-width:100%}
 .pform form>.btn2{margin-top:12px}
 @media (max-width:1000px){.lstrip{grid-template-columns:1fr 1fr}}
 @media (max-width:520px){.lstrip{grid-template-columns:1fr}}
+.pf-row.one{grid-template-columns:1fr}
+.pf-sum span{gap:12px}.pf-sum b{white-space:nowrap}

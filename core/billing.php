@@ -18,7 +18,7 @@ declare(strict_types=1);
 final class AmetecsBilling
 {
     public const STATUSES = ['pending' => ['Pending', 'amber'], 'paid' => ['Paid', 'green'], 'cancelled' => ['Cancelled', 'grey'], 'refunded' => ['Refunded', 'red']];
-    public const PURPOSES = ['upgrade' => 'Upgrade', 'renewal' => 'Licence renewal', 'plan' => 'Plan change', 'other' => 'Other'];
+    public const PURPOSES = ['upgrade' => 'Upgrade', 'renewal' => 'Licence renewal', 'plan' => 'Plan change', 'seats' => 'Extra seats', 'other' => 'Other'];
     private const API = 'https://api.razorpay.com/v1';
 
     /** Test hook: replaces the HTTPS call to Razorpay. fn(string $method, string $path, array $body): array{code: int, json: ?array} */
@@ -182,7 +182,7 @@ final class AmetecsBilling
         if ($amount <= 0) {
             throw new \InvalidArgumentException('An invoice needs an amount above zero.');
         }
-        if ($purpose !== 'other' && $purpose !== 'plan') {
+        if (!in_array($purpose, ['other', 'plan', 'seats'], true)) {
             $q = self::pdo()->prepare("SELECT * FROM ag_invoices WHERE tenant_id = ? AND purpose = ? AND status = 'pending' AND COALESCE(licence_id, 0) = ? AND COALESCE(release_id, 0) = ? ORDER BY id DESC LIMIT 1");
             $q->execute([$tenant, $purpose, (int) $licenceId, (int) $releaseId]);
             if (($ex = $q->fetch(\PDO::FETCH_ASSOC)) !== false) {
@@ -287,6 +287,53 @@ final class AmetecsBilling
         }
         $left = (strtotime((string) $l['valid_until']) - strtotime($today)) / 86400;
         return round((float) $l['price'] * min(1, $left / ($l['plan'] === 'yearly' ? 365 : 30)), 2);   // ponytail: a month counted as 30 days
+    }
+
+    /**
+     * EXTRA SEATS ON THE CURRENT PLAN (owner, 18 Nov 2026: "self buy extra user and pay"): the per-seat rate (Super
+     * Admin's price list, else the licence's own price / seats), charged only for the days left of the current period;
+     * the end date stays. @return array{rate: float, factor: float, amount: float, licence: array}|null  null = not sold online
+     */
+    public static function seatOffer(string $tenant, string $app): ?array
+    {
+        $l = AmetecsLicences::row($tenant, $app);
+        $today = AmetecsAccess::today();
+        if ($l === null || AmetecsLicences::stateOf($l) !== 'on' || !in_array($l['plan'], ['monthly', 'yearly'], true) || (string) ($l['valid_until'] ?? '') <= $today
+            || ($l['currency'] !== 'INR' && (float) ($l['price'] ?? 0) > 0)) {
+            return null;
+        }
+        $rate = (float) (self::prices()[$app][$l['plan']] ?? 0);
+        if ($rate <= 0 && (float) ($l['price'] ?? 0) > 0 && (int) $l['seats'] > 0) {
+            $rate = round((float) $l['price'] / (int) $l['seats'], 2);
+        }
+        if ($rate <= 0) {
+            return null;
+        }
+        $len = $l['plan'] === 'yearly' ? 365 : 30;   // ponytail: a month counted as 30 days
+        $factor = min(1.0, max(0.0, (strtotime((string) $l['valid_until']) - strtotime($today)) / 86400 / $len));
+        return ['rate' => $rate, 'factor' => round($factor, 4), 'licence' => $l];
+    }
+
+    public static function forSeats(string $tenant, string $app, int $add): array
+    {
+        $o = self::seatOffer($tenant, $app);
+        if ($o === null || $add < 1 || $add > 100000) {
+            throw new \RuntimeException('Extra seats for this application are not sold online. Contact Ametecs.');
+        }
+        $amount = round($o['rate'] * $add * $o['factor'], 2);
+        if ($amount < 1) {
+            throw new \RuntimeException('Your plan ends in a few days: renew it first, then add seats.');
+        }
+        $l = $o['licence'];
+        foreach (self::invoices($tenant, 'pending') as $old) {   // one open seat invoice per app
+            if ($old['purpose'] === 'seats' && (json_decode((string) $old['notes'], true)['app'] ?? '') === $app) {
+                self::cancel($old, 'replaced by a new seat choice');
+            }
+        }
+        $name = AmetecsAccess::plugins(true)[$app]['name'] ?? $app;
+        return self::create($tenant, 'seats', 'Extra seats: ' . $name . ' +' . $add . ' (' . (int) $l['seats'] . ' to ' . ((int) $l['seats'] + $add) . ') till ' . date('d M Y', (int) strtotime((string) $l['valid_until']))
+            . ' - INR ' . number_format($o['rate'], 2) . ' per seat per ' . ($l['plan'] === 'yearly' ? 'year' : 'month') . ', for the time left', $amount, 'INR', (string) $l['id'], null,
+            (string) json_encode(['app' => $app, 'add' => $add, 'rate' => $o['rate']]));
     }
 
     /** An invoice for a new or changed plan; paying it applies the plan (apply()). */
@@ -403,7 +450,7 @@ final class AmetecsBilling
         }
         self::apply($cur, 'paid');
         AmetecsData::log(AmetecsLicences::$actor, 'Payment received for invoice ' . $cur['number'], (string) $cur['tenant_id'], $cur['currency'] . ' ' . number_format($amount, 2) . ' · ' . $gateway . ' ' . $reference);
-        return ['ok' => true, 'why' => 'Payment received for ' . $cur['number'] . '. ' . ($cur['purpose'] === 'upgrade' ? 'The upgrade is unlocked.' : ($cur['purpose'] === 'renewal' ? 'The licence is renewed.' : ($cur['purpose'] === 'plan' ? 'Your new plan is active.' : '')))];
+        return ['ok' => true, 'why' => 'Payment received for ' . $cur['number'] . '. ' . ($cur['purpose'] === 'upgrade' ? 'The upgrade is unlocked.' : ($cur['purpose'] === 'renewal' ? 'The licence is renewed.' : ($cur['purpose'] === 'plan' ? 'Your new plan is active.' : ($cur['purpose'] === 'seats' ? 'The extra seats are added.' : ''))))];
     }
 
     /** Full refund of one Razorpay payment (or record an offline refund). Takes back what was bought. @return array{ok: bool, why: string} */
@@ -481,6 +528,15 @@ table{width:100%;border-collapse:collapse;margin-bottom:18px}th{background:#1F3A
                 AmetecsLicences::put($tid, (string) $l['app'], ['valid_until' => $next, 'status' => $l['status'] === 'cancelled' ? 'active' : $l['status']], 'Renewed (paid ' . $inv['number'] . ')');
             } else {
                 AmetecsLicences::event($l, 'Renewal payment refunded', 'invoice ' . $inv['number'] . ' - adjust the valid-till date by hand if needed');
+            }
+        }
+        if ($inv['purpose'] === 'seats' && is_array($n = json_decode((string) $inv['notes'], true)) && isset($n['app'], $n['add']) && ($l = AmetecsLicences::row($tid, (string) $n['app'])) !== null) {
+            if ($what === 'paid') {
+                // the yearly / monthly price grows with the seats only where the licence has a price; "as agreed" stays as agreed
+                AmetecsLicences::put($tid, (string) $n['app'], ['seats' => (int) $l['seats'] + (int) $n['add']] + ((float) ($l['price'] ?? 0) > 0 ? ['price' => number_format((float) $l['price'] + (float) $n['rate'] * (int) $n['add'], 2, '.', '')] : []),
+                    'Seats bought online (' . $inv['number'] . ')');
+            } else {
+                AmetecsLicences::event($l, 'Seat payment refunded', 'invoice ' . $inv['number'] . ' - take the seats back by hand if needed');
             }
         }
         if ($inv['purpose'] === 'plan' && is_array($n = json_decode((string) $inv['notes'], true)) && isset($n['app'], $n['plan'], $n['seats'])) {

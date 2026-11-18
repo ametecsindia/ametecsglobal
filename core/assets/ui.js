@@ -99,3 +99,12 @@
   }
   document.querySelectorAll('form[data-plan]').forEach(function (f) { calc(f); f.addEventListener('input', function () { calc(f); }); });
 })();
+// extra seats: seats after, price for the days left, GST, total
+(function () {
+  function inr(v) { return 'INR ' + v.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+  function calc(f) {
+    var n = Math.max(0, +f.add.value || 0), base = Math.round(n * (+f.dataset.rate) * (+f.dataset.factor) * 100) / 100, gst = base * (+f.dataset.gst) / 100, a = f.querySelector('[data-o=after]');
+    a.textContent = (+a.dataset.now + n); f.querySelector('[data-o=base]').textContent = inr(base); f.querySelector('[data-o=gst]').textContent = inr(gst); f.querySelector('[data-o=tot]').textContent = inr(base + gst);
+  }
+  document.querySelectorAll('form[data-seats]').forEach(function (f) { calc(f); f.addEventListener('input', function () { calc(f); }); });
+})();

@@ -265,6 +265,14 @@ if ($billOn && ($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && str_starts_with(
             $inv = AmetecsBilling::forRenewal($pl);
             $out(true, 'Invoice ' . $inv['number'] . ' is ready. Pay it below to renew.', [], '?v=billing&pay=' . (int) $inv['id']);
         }
+        if ($pdo2 === 'pay-seats') {   // extra seats on the current plan, for the time left (owner, 18 Nov 2026)
+            try {
+                $inv = AmetecsBilling::forSeats($tenant, (string) ($_POST['app'] ?? ''), (int) ($_POST['add'] ?? 0));
+            } catch (\RuntimeException $x) {
+                $out(false, $x->getMessage(), [], '?v=licences');
+            }
+            $out(true, 'Invoice ' . $inv['number'] . ' is ready. Pay it below and the seats are added at once.', [], '?v=billing&pay=' . (int) $inv['id']);
+        }
         if ($pdo2 === 'pay-plan') {   // self-service: buy an application, or change plan / seats (owner, 18 Nov 2026)
             $papp = (string) ($_POST['app'] ?? '');
             $pl = AmetecsLicences::row($tenant, $papp);
@@ -694,7 +702,7 @@ a{color:inherit}
 .ucnt{margin-left:auto;font-style:normal;font-size:11px;background:var(--gold);color:#fff;padding:1px 8px;border-radius:99px}.lic-t td.r,.lic-t th.r{text-align:right}
 .lp{display:inline-block;padding:2px 10px;border-radius:99px;font-size:12px;font-weight:600}.lp-green{background:var(--ok-bg);color:var(--ok)}.lp-amber{background:#fffbeb;color:#b45309}.lp-red{background:var(--bad-bg);color:var(--bad)}.lp-grey{background:#f1f5f9;color:var(--mute)}
 </style>
-<link rel="stylesheet" href="assets/shell.css?v=14"><link rel="stylesheet" href="assets/theme-gold.css?v=2"></head><body>
+<link rel="stylesheet" href="assets/shell.css?v=15"><link rel="stylesheet" href="assets/theme-gold.css?v=2"></head><body>
 <?php if ($user === null): ?>
 <div class="auth">
   <aside class="auth-side">
@@ -957,6 +965,13 @@ a{color:inherit}
         <em class="lbar t"><i style="width:<?= $tpc ?>%;<?= $days !== null && $days <= 30 ? 'background:#d97706' : '' ?>"></i></em></div>
       <footer><?php if ($payOnline && (float) ($l['price'] ?? 0) > 0 && $l['currency'] === 'INR' && in_array($l['plan'], ['monthly', 'yearly'], true) && $st !== 'off'): ?>
         <form method="post"><input type="hidden" name="csrf" value="<?= ag_h($session->token()) ?>"><input type="hidden" name="do" value="pay-renew"><input type="hidden" name="licence" value="<?= (int) $l['id'] ?>"><button class="btn2 primary"><i class="fas fa-rotate"></i>Renew online</button></form><?php endif; ?>
+        <?php if ($billOn && ($so = AmetecsBilling::seatOffer($tenant, $code)) !== null): $unit1 = rtrim((string) $p['unit'], 's'); ?>
+        <details class="pform"><summary class="btn2 primary"><i class="fas fa-user-plus"></i>Add <?= ag_h((string) $p['unit']) ?></summary>
+          <form method="post" data-seats data-rate="<?= $so['rate'] ?>" data-factor="<?= $so['factor'] ?>" data-gst="<?= $gstP ?>"><input type="hidden" name="csrf" value="<?= ag_h($session->token()) ?>"><input type="hidden" name="do" value="pay-seats"><input type="hidden" name="app" value="<?= ag_h($code) ?>">
+            <div class="pf-row one"><label>How many more <?= ag_h((string) $p['unit']) ?>?<input type="number" name="add" min="1" value="10" required></label></div>
+            <div class="pf-sum"><span>Seats after <b data-o="after" data-now="<?= $seats ?>">-</b></span><span>INR <?= number_format($so['rate'], 2) ?> per <?= ag_h($unit1) ?> per <?= $l['plan'] === 'yearly' ? 'year' : 'month' ?> &times; <?= $days ?> days left <b data-o="base">-</b></span><span>GST <?= $gstP ?>% <b data-o="gst">-</b></span><span class="pf-tot">To pay now <b data-o="tot">-</b></span></div>
+            <button class="btn2 primary"><i class="fas fa-lock"></i>Continue to pay</button><p class="muted2" style="font-size:11.5px;margin:8px 0 0">Your end date stays <?= ag_h(date('d M Y', (int) strtotime($until))) ?>; you pay only for the days left. Seats are added the moment the payment goes through.</p></form></details>
+        <?php endif; ?>
         <?= $canBuy ? $planForm($code, $l, 'Change plan or seats') : ($st !== 'off' || $l['status'] === 'active' ? $reqForm($code, $l) : '<a class="btn2 ghost" href="?v=support">Contact Ametecs</a>') ?></footer>
     </article>
   <?php endforeach; ?></div>
@@ -1103,5 +1118,5 @@ document.addEventListener('click',function(e){document.querySelectorAll('details
 </script>
 <?php endif; ?>
 <?php if ($user !== null): ?><div class="foot">AmetecsGlobal by Ametecs India &middot; <a href="super.php">Super Admin</a></div><?php endif; ?>
-<script src="assets/ui.js?v=8"></script>
+<script src="assets/ui.js?v=9"></script>
 </body></html>
