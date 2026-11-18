@@ -369,6 +369,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && $pdo !== null) {
         }
         if ($do === 'licence-status') {
             $act = (string) ($_POST['to'] ?? '');
+            ($_POST['back'] ?? '') === 'licences' && $to = '?p=licences';   // quick action on the Licences list: stay there
             $set = match ($act) {
                 'active' => ['status' => 'active'],
                 'suspended' => ['status' => 'suspended'],
@@ -939,7 +940,7 @@ main{max-width:1560px;padding:16px 26px 20px}
 @media (max-width:1100px){.kstrip{grid-template-columns:repeat(3,1fr)}.dgrid2{grid-template-columns:1fr}}
 .cn b{white-space:nowrap}.mxt td:last-child,.mxt th:last-child{padding-right:16px;white-space:nowrap}.mxt th.ac{padding-left:4px;padding-right:4px}.mxt th:first-child{width:30%}
 </style>
-<link rel="stylesheet" href="assets/shell.css?v=6"><link rel="stylesheet" href="assets/super.css?v=1"></head><body>
+<link rel="stylesheet" href="assets/shell.css?v=6"><link rel="stylesheet" href="assets/super.css?v=2"></head><body>
 <?php
 $myName = trim((string) ($me['name'] ?? '')) ?: ucfirst((string) strtok($meEmail, '@'));
 $myIni = strtoupper(implode('', array_map(static fn (string $w): string => mb_substr($w, 0, 1), array_slice(preg_split('/[\s._-]+/', $myName) ?: ['S'], 0, 2))));
@@ -1216,39 +1217,114 @@ $myIni = strtoupper(implode('', array_map(static fn (string $w): string => mb_su
   <?php foreach (AmetecsData::activity($tid, 50) as $r): ?><tr><td><?= ag_h($r['at']) ?></td><td><?= ag_h($r['who']) ?></td><td><?= ag_h($r['what']) ?></td><td class="muted"><?= ag_h($r['detail']) ?></td></tr><?php endforeach; ?></table></div>
 
 <?php elseif ($page === 'licences'):
+    // PHASE 7 (owner, 18 Nov 2026: "redesign this page"): summary cards and status tabs that filter, a by-client view
+    // (one card per client, one row per app) or a flat list, validity shown as days left, quick renew / suspend.
     $names = array_column($tenants, 'name', 'id');
-    $fa = (string) ($_GET['app'] ?? ''); $fd = (string) ($_GET['dep'] ?? ''); $fs = (string) ($_GET['st'] ?? '');
+    $fa = (string) ($_GET['app'] ?? ''); $fd = (string) ($_GET['dep'] ?? ''); $fs = (string) ($_GET['st'] ?? ''); $view2 = ($_GET['view'] ?? '') === 'list' ? 'list' : 'client';
     $rowsAll = [];
     foreach (AmetecsLicences::rows() as $ltid => $lapps) { foreach ($lapps as $lr) { $rowsAll[] = $lr; } }
-    $list = array_filter($rowsAll, static fn ($r) => ($fa === '' || $r['app'] === $fa) && ($fd === '' || $r['deployment'] === $fd) && ($fs === '' || AmetecsLicences::stateOf($r) === $fs));
-    usort($list, static fn ($a, $b) => strcmp((string) ($names[$a['tenant_id']] ?? ''), (string) ($names[$b['tenant_id']] ?? '')) ?: strcmp((string) $a['app'], (string) $b['app'])); ?>
-  <h1>Licences</h1><p class="sub">Every licence of every app: cloud or on-premise, plan, status, seats and validity. Open one to renew, suspend, cancel, issue an on-premise key or a .lic file, and see its history.</p>
+    $stOf = static fn (array $r): string => $r['status'] === 'cancelled' ? 'off' : (AmetecsLicences::stateOf($r) === 'on' && ($r['valid_until'] ?? '') !== '' && $r['valid_until'] <= $soon ? 'expiring' : AmetecsLicences::stateOf($r));
+    $count = static fn (string $k) => count(array_filter($rowsAll, static fn ($r) => $k === '' ? $r['status'] !== 'cancelled' : ($k === 'on' ? in_array($stOf($r), ['on', 'expiring'], true) : $stOf($r) === $k)));
+    $list = array_filter($rowsAll, static fn ($r) => ($fa === '' || $r['app'] === $fa) && ($fd === '' || $r['deployment'] === $fd)
+        && ($fs === '' ? $r['status'] !== 'cancelled' : ($fs === 'on' ? in_array($stOf($r), ['on', 'expiring'], true) : $stOf($r) === $fs)));
+    usort($list, static fn ($a, $b) => strcmp((string) ($names[$a['tenant_id']] ?? ''), (string) ($names[$b['tenant_id']] ?? '')) ?: strcmp((string) $a['app'], (string) $b['app']));
+    $byClient = [];
+    foreach ($list as $r) { $byClient[(string) $r['tenant_id']][] = $r; }
+    $licIcons = ['smartprs3' => 'fa-people-group', 'smartept' => 'fa-chart-line', 'smartdcm' => 'fa-hand-holding-dollar', 'leadger' => 'fa-bullseye', 'rovexy' => 'fa-route', 'qronex' => 'fa-qrcode'];
+    $mark = static fn (string $c) => '<span class="lmk" style="--c:' . ag_h((string) ($plugins[$c]['color'] ?? '#64748B')) . '"><i class="fas ' . ($licIcons[$c] ?? 'fa-cube') . '"></i></span>';
+    $tabs = ['' => ['All', 'fa-layer-group'], 'on' => ['Active', 'fa-circle-check'], 'expiring' => ['Expiring in 30 days', 'fa-hourglass-half'], 'suspended' => ['Suspended', 'fa-pause'], 'expired' => ['Expired', 'fa-hourglass-end'], 'off' => ['Cancelled', 'fa-ban']];
+    $url = static fn (array $over): string => '?' . http_build_query(array_filter(array_merge(['p' => 'licences', 'app' => $fa, 'dep' => $fd, 'st' => $fs, 'view' => $view2 === 'list' ? 'list' : ''], $over), static fn ($v) => $v !== ''));
+    $validity = static function (array $r) use ($today, $d): string {
+        $u = (string) ($r['valid_until'] ?? '');
+        if ($u === '') { return '<div class="vl"><b>No end date</b><small>' . ($r['plan'] === 'perpetual' ? 'perpetual' : '') . '</small></div>'; }
+        $days = (int) floor((strtotime($u) - strtotime($today)) / 86400);
+        $total = max(1, (int) floor((strtotime($u) - strtotime((string) (($r['starts_on'] ?? '') ?: date('Y-m-d', (int) strtotime($u . ' -1 year'))))) / 86400));
+        $pct = max(0, min(100, (int) round(100 * $days / $total)));
+        $tone = $days < 0 ? 'red' : ($days <= 30 ? 'amber' : 'green');
+        return '<div class="vl"><b>' . $d($u) . '</b><small class="t-' . $tone . '">' . ($days < 0 ? 'ended ' . -$days . ' days ago' : ($days === 0 ? 'ends today' : $days . ' days left')) . '</small><span class="vbar"><i class="t-' . $tone . '" style="width:' . ($days < 0 ? 100 : $pct) . '%"></i></span></div>';
+    };
+    $quick = static function (array $r) use ($csrf): string {
+        $f = static fn (string $to, string $label, string $ic, string $ask = '') => '<form method="post"' . ($ask !== '' ? ' onsubmit="return confirm(\'' . ag_h($ask) . '\')"' : '') . '>' . $csrf() . '<input type="hidden" name="do" value="licence-status"><input type="hidden" name="id" value="' . (int) $r['id'] . '"><input type="hidden" name="to" value="' . $to . '"><input type="hidden" name="back" value="licences"><button><i class="fas ' . $ic . '"></i>' . $label . '</button></form>';
+        return '<details class="qa"><summary title="Quick actions"><i class="fas fa-ellipsis"></i></summary><div class="qm">'
+            . '<a href="?p=licence&id=' . (int) $r['id'] . '"><i class="fas fa-up-right-from-square"></i>Open licence</a>'
+            . ($r['plan'] !== 'perpetual' && $r['status'] !== 'cancelled' ? $f('renew', 'Renew one period', 'fa-rotate', 'Extend this licence by one plan period?') : '')
+            . ($r['status'] === 'active' ? $f('suspended', 'Suspend', 'fa-pause', 'Suspend this licence? The app stops opening for this client; nothing is deleted.') : $f('active', 'Activate', 'fa-play'))
+            . '<a href="?p=client&id=' . (int) $r['tenant_id'] . '"><i class="fas fa-building"></i>Open client</a></div></details>';
+    };
+    $seatCell = static function (array $r) use ($used, $plugins): string {
+        $cap = (int) $r['seats'];
+        $u = $r['app'] === 'smartprs3' ? (int) ($used[(string) $r['tenant_id']] ?? 0) : null;
+        $pct = $u !== null && $cap > 0 ? min(100, (int) round(100 * $u / $cap)) : null;
+        return '<div class="vl"><b>' . ($u !== null ? $u . ' / ' : '') . ($cap > 0 ? $cap : '&infin;') . '</b><small>' . ag_h((string) ($plugins[$r['app']]['unit'] ?? 'users')) . ($u !== null ? ' in use' : '') . '</small>'
+            . ($pct !== null ? '<span class="vbar"><i class="t-' . ($pct >= 90 ? 'amber' : 'blue') . '" style="width:' . max(2, $pct) . '%"></i></span>' : '') . '</div>';
+    };
+    $server = static fn (array $r): string => $r['deployment'] === 'onprem'
+        ? (($r['fingerprint'] ?? '') !== '' ? '<span class="srv srv-ok"><i class="fas fa-server"></i>' . ag_h((string) ($r['server_name'] ?: 'bound')) . ' · v' . ag_h((string) ($r['app_version'] ?: '?')) . '</span>'
+            : '<span class="srv srv-warn"><i class="fas fa-key"></i>' . (($r['key_hash'] ?? '') !== '' ? 'Key issued, not activated' : 'No key yet') . '</span>')
+        : '<span class="srv"><i class="fas fa-cloud"></i>Ametecs cloud</span>'; ?>
+  <div class="lph"><div><h1>Licences</h1><p class="sub">Every licence of every app, per client: deployment, plan, seats and how long it has left. Open one for keys, .lic files, plugins and history.</p></div>
+    <button type="button" class="btn gold" onclick="document.getElementById('newlic').showModal()"><i class="fas fa-plus"></i>New licence</button></div>
   <?php if (!AmetecsLicences::ready()): ?><div class="msg bad"><i class="fas fa-circle-exclamation"></i><span>The licence tables are not on this PC yet. They arrive with the next sync; until then licences work as before.</span></div><?php else: ?>
-  <form class="toolbar"><input type="hidden" name="p" value="licences"><span class="si"><i class="fas fa-magnifying-glass"></i><input data-live="#lic-t" placeholder="Search client, app, server…" autocomplete="off"></span>
+  <section class="lsum">
+    <?php foreach (['on' => ['Active', 'fa-circle-check', 'green'], 'expiring' => ['Expiring in 30 days', 'fa-hourglass-half', 'amber'], 'suspended' => ['Suspended', 'fa-pause', 'amber'], 'expired' => ['Expired', 'fa-hourglass-end', 'red']] as $k => [$lab, $ic, $tone]): $n = $count($k); ?>
+      <a class="ls <?= $n === 0 ? 'zero' : $tone ?><?= $fs === $k ? ' sel' : '' ?>" href="<?= ag_h($url(['st' => $fs === $k ? '' : $k])) ?>"><span class="li"><i class="fas <?= $ic ?>"></i></span><span><b><?= $n ?></b><small><?= $lab ?></small></span></a>
+    <?php endforeach; ?>
+    <div class="ls split"><span class="li"><i class="fas fa-cloud"></i></span><span><b><?= count(array_filter($rowsAll, static fn ($r) => $r['status'] !== 'cancelled' && $r['deployment'] === 'cloud')) ?> <em>/</em> <?= count(array_filter($rowsAll, static fn ($r) => $r['status'] !== 'cancelled' && $r['deployment'] === 'onprem')) ?></b><small>Cloud / on-premise</small></span></div>
+  </section>
+  <div class="ltabs"><?php foreach ($tabs as $k => [$lab, $ic]): ?><a class="<?= $fs === $k ? 'on' : '' ?>" href="<?= ag_h($url(['st' => $k])) ?>"><i class="fas <?= $ic ?>"></i><?= $lab ?><em><?= $count($k) ?></em></a><?php endforeach; ?></div>
+  <form class="ltool" onchange="this.submit()"><input type="hidden" name="p" value="licences"><input type="hidden" name="st" value="<?= ag_h($fs) ?>"><?= $view2 === 'list' ? '<input type="hidden" name="view" value="list">' : '' ?>
+    <span class="si"><i class="fas fa-magnifying-glass"></i><input data-lfind placeholder="Search client, app or server…" autocomplete="off" onchange="event.stopPropagation()"></span>
     <select name="app"><option value="">All apps</option><?php foreach ($plugins as $c => $p): ?><option value="<?= ag_h($c) ?>"<?= $fa === $c ? ' selected' : '' ?>><?= ag_h($p['name']) ?></option><?php endforeach; ?></select>
     <select name="dep"><option value="">Cloud &amp; on-premise</option><?php foreach (AmetecsLicences::DEPLOYMENTS as $k => $v): ?><option value="<?= $k ?>"<?= $fd === $k ? ' selected' : '' ?>><?= $v ?></option><?php endforeach; ?></select>
-    <select name="st"><option value="">Any status</option><?php foreach (AmetecsLicences::STATES as $k => [$v]): ?><option value="<?= $k ?>"<?= $fs === $k ? ' selected' : '' ?>><?= $k === 'off' ? 'Cancelled' : $v ?></option><?php endforeach; ?></select>
-    <button class="btn ghost"><i class="fas fa-filter"></i>Filter</button>
-    <details class="act" style="margin-left:auto"><summary class="btn gold"><i class="fas fa-plus"></i>New licence</summary><div class="menu" style="right:0;min-width:340px">
-      <form method="post" class="stack"><?= $csrf() ?><input type="hidden" name="do" value="licence-new">
-        <label>Client</label><select name="tenant" required><option value="">Choose…</option><?php foreach ($tenants as $t): ?><option value="<?= (int) $t['id'] ?>"><?= ag_h($t['name']) ?></option><?php endforeach; ?></select>
-        <label>App</label><select name="app" required><?php foreach ($plugins as $c => $p): ?><option value="<?= ag_h($c) ?>"><?= ag_h($p['name']) ?></option><?php endforeach; ?></select>
-        <label>Deployment</label><select name="deployment"><?php foreach (AmetecsLicences::DEPLOYMENTS as $k => $v): ?><option value="<?= $k ?>"><?= $v ?></option><?php endforeach; ?></select>
-        <label>Plan</label><select name="plan"><?php foreach (AmetecsLicences::PLANS as $k => $v): ?><option value="<?= $k ?>"<?= $k === 'yearly' ? ' selected' : '' ?>><?= $v ?></option><?php endforeach; ?></select>
-        <label>Seats</label><input type="number" name="seats" min="1" value="25">
-        <label>Valid till (empty = one plan period)</label><input type="date" name="valid_until">
-        <button class="btn gold" style="margin-top:10px">Create licence</button></form></div></details></form>
-  <div class="box"><table id="lic-t" class="sortable"><tr><th>Client</th><th>App</th><th>Deployment</th><th>Plan</th><th>Status</th><th>Seats</th><th>Valid till</th><th>Server</th><th></th></tr>
-  <?php foreach ($list as $r): [$sl, $sc] = AmetecsLicences::STATES[AmetecsLicences::stateOf($r)]; ?><tr>
-    <td><a href="?p=client&id=<?= (int) $r['tenant_id'] ?>"><b><?= ag_h($names[$r['tenant_id']] ?? '#' . $r['tenant_id']) ?></b></a></td>
-    <td><?= ag_h($plugins[$r['app']]['name'] ?? $r['app']) ?></td>
-    <td><?= $r['deployment'] === 'onprem' ? '<i class="fas fa-server muted"></i> On-premise' : '<i class="fas fa-cloud muted"></i> Cloud' ?></td>
-    <td><?= ag_h(AmetecsLicences::PLANS[$r['plan']] ?? $r['plan']) ?></td>
-    <td><span class="pill <?= $sc ?>"><?= $r['status'] === 'cancelled' ? 'Cancelled' : $sl ?></span></td>
-    <td><?= (int) $r['seats'] ?></td><td><?= $d($r['valid_until'] ?? null) ?></td>
-    <td class="muted" style="font-size:12px"><?= $r['deployment'] === 'onprem' ? (($r['fingerprint'] ?? '') !== '' ? ag_h((string) ($r['server_name'] ?: 'bound')) . ' · v' . ag_h((string) ($r['app_version'] ?: '?')) : (($r['key_hash'] ?? '') !== '' ? 'key issued, not activated' : 'no key yet')) : '' ?></td>
-    <td class="right"><a class="btn ghost" href="?p=licence&id=<?= (int) $r['id'] ?>">Open</a></td></tr>
-  <?php endforeach; ?><?php if ($list === []): ?><tr><td colspan="9"><div class="empty"><i class="fas fa-key"></i>No licences match.</div></td></tr><?php endif; ?></table></div>
+    <span class="vsw"><a class="<?= $view2 === 'client' ? 'on' : '' ?>" href="<?= ag_h($url(['view' => ''])) ?>" title="Grouped by client"><i class="fas fa-building"></i>By client</a><a class="<?= $view2 === 'list' ? 'on' : '' ?>" href="<?= ag_h($url(['view' => 'list'])) ?>" title="One list"><i class="fas fa-list"></i>List</a></span></form>
+
+  <?php if ($list === []): ?><div class="box"><div class="empty"><i class="fas fa-key"></i>No licences match these filters. <a href="?p=licences">Show all</a></div></div>
+  <?php elseif ($view2 === 'client'): ?>
+  <div class="lgrp"><?php foreach ($byClient as $tid => $rs): $tn = (string) ($names[$tid] ?? '#' . $tid); $next = min(array_map(static fn ($r) => (string) (($r['valid_until'] ?? '') ?: '9999-12-31'), $rs)); ?>
+    <section class="lcl" data-lf="<?= ag_h(strtolower($tn . ' ' . implode(' ', array_map(static fn ($r) => ($plugins[$r['app']]['name'] ?? $r['app']) . ' ' . ($r['server_name'] ?? ''), $rs)))) ?>">
+      <header><span class="cav"><?= ag_h(mb_strtoupper(mb_substr($tn, 0, 1))) ?></span><div><a href="?p=client&id=<?= (int) $tid ?>"><b><?= ag_h($tn) ?></b></a><small><?= count($rs) ?> licence<?= count($rs) === 1 ? '' : 's' ?><?= $next !== '9999-12-31' ? ' &middot; next renewal ' . $d($next) : '' ?></small></div>
+        <a class="btn ghost" href="?p=client&id=<?= (int) $tid ?>#apps">Client</a></header>
+      <div class="lrows"><?php foreach ($rs as $r): $st = $stOf($r); [$sl, $sc] = $st === 'expiring' ? ['Expiring', 'amber'] : AmetecsLicences::STATES[$st === 'off' ? 'off' : $st]; ?>
+        <div class="lr" data-lf="<?= ag_h(strtolower($tn . ' ' . ($plugins[$r['app']]['name'] ?? $r['app']) . ' ' . ($r['server_name'] ?? ''))) ?>">
+          <div class="lapp"><?= $mark((string) $r['app']) ?><div><b><?= ag_h($plugins[$r['app']]['name'] ?? $r['app']) ?></b><small><?= ag_h(AmetecsLicences::PLANS[$r['plan']] ?? $r['plan']) ?><?= (float) ($r['price'] ?? 0) > 0 ? ' &middot; ' . ag_h($r['currency'] . ' ' . number_format((float) $r['price'])) : '' ?></small></div></div>
+          <div><span class="pill <?= $sc ?>"><?= $r['status'] === 'cancelled' ? 'Cancelled' : ag_h($sl) ?></span></div>
+          <div><?= $server($r) ?></div>
+          <?= $seatCell($r) ?>
+          <?= $validity($r) ?>
+          <div class="lact"><a class="btn ghost" href="?p=licence&id=<?= (int) $r['id'] ?>">Open</a><?= $quick($r) ?></div></div>
+      <?php endforeach; ?></div>
+    </section>
+  <?php endforeach; ?></div>
+  <?php else: ?>
+  <div class="box"><table id="lic-t" class="sortable"><tr><th>Client</th><th>App</th><th>Status</th><th>Where</th><th>Seats</th><th>Valid till</th><th></th></tr>
+  <?php foreach ($list as $r): $st = $stOf($r); [$sl, $sc] = $st === 'expiring' ? ['Expiring', 'amber'] : AmetecsLicences::STATES[$st]; $tn = (string) ($names[$r['tenant_id']] ?? '#' . $r['tenant_id']); ?>
+    <tr data-lf="<?= ag_h(strtolower($tn . ' ' . ($plugins[$r['app']]['name'] ?? $r['app']) . ' ' . ($r['server_name'] ?? ''))) ?>">
+    <td><a href="?p=client&id=<?= (int) $r['tenant_id'] ?>"><b><?= ag_h($tn) ?></b></a></td>
+    <td><div class="lapp"><?= $mark((string) $r['app']) ?><div><b><?= ag_h($plugins[$r['app']]['name'] ?? $r['app']) ?></b><small><?= ag_h(AmetecsLicences::PLANS[$r['plan']] ?? $r['plan']) ?></small></div></div></td>
+    <td><span class="pill <?= $sc ?>"><?= $r['status'] === 'cancelled' ? 'Cancelled' : ag_h($sl) ?></span></td>
+    <td><?= $server($r) ?></td><td><?= $seatCell($r) ?></td><td><?= $validity($r) ?></td>
+    <td class="right"><div class="lact"><a class="btn ghost" href="?p=licence&id=<?= (int) $r['id'] ?>">Open</a><?= $quick($r) ?></div></td></tr>
+  <?php endforeach; ?></table></div>
+  <?php endif; ?>
+  <dialog id="newlic" class="ldlg"><form method="post"><?= $csrf() ?><input type="hidden" name="do" value="licence-new">
+    <header><h2><i class="fas fa-key"></i>New licence</h2><button type="button" class="x" onclick="this.closest('dialog').close()">&times;</button></header>
+    <div class="grid2">
+      <div class="full"><label>Client</label><select name="tenant" required><option value="">Choose a client…</option><?php foreach ($tenants as $t): ?><option value="<?= (int) $t['id'] ?>"><?= ag_h($t['name']) ?></option><?php endforeach; ?></select></div>
+      <div><label>App</label><select name="app" required><?php foreach ($plugins as $c => $p): ?><option value="<?= ag_h($c) ?>"><?= ag_h($p['name']) ?></option><?php endforeach; ?></select></div>
+      <div><label>Deployment</label><select name="deployment"><?php foreach (AmetecsLicences::DEPLOYMENTS as $k => $v): ?><option value="<?= $k ?>"><?= $v ?></option><?php endforeach; ?></select></div>
+      <div><label>Plan</label><select name="plan"><?php foreach (AmetecsLicences::PLANS as $k => $v): ?><option value="<?= $k ?>"<?= $k === 'yearly' ? ' selected' : '' ?>><?= $v ?></option><?php endforeach; ?></select></div>
+      <div><label>Seats</label><input type="number" name="seats" min="1" value="25"></div>
+      <div class="full"><label>Valid till <span class="muted">(empty = one plan period from today)</span></label><input type="date" name="valid_until"></div>
+    </div>
+    <footer><button type="button" class="btn ghost" onclick="this.closest('dialog').close()">Cancel</button><button class="btn gold"><i class="fas fa-check"></i>Create licence</button></footer></form></dialog>
+  <script>
+  (function () {   // live search across the client cards / list rows
+    var inp = document.querySelector('[data-lfind]'); if (!inp) return;
+    inp.addEventListener('input', function () { var t = inp.value.toLowerCase().trim();
+      document.querySelectorAll('.lr[data-lf], tr[data-lf]').forEach(function (r) { r.hidden = t !== '' && r.dataset.lf.indexOf(t) < 0; });
+      document.querySelectorAll('.lcl').forEach(function (c) { c.hidden = t !== '' && !c.querySelector('.lr:not([hidden])'); }); });
+  })();
+  </script>
   <?php endif; ?>
 
 <?php elseif ($page === 'licence' && ($lc = AmetecsLicences::byId((string) ($_GET['id'] ?? ''))) !== null):
