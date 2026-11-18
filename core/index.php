@@ -659,7 +659,7 @@ a{color:inherit}
 .ucnt{margin-left:auto;font-style:normal;font-size:11px;background:var(--gold);color:#fff;padding:1px 8px;border-radius:99px}.lic-t td.r,.lic-t th.r{text-align:right}
 .lp{display:inline-block;padding:2px 10px;border-radius:99px;font-size:12px;font-weight:600}.lp-green{background:var(--ok-bg);color:var(--ok)}.lp-amber{background:#fffbeb;color:#b45309}.lp-red{background:var(--bad-bg);color:var(--bad)}.lp-grey{background:#f1f5f9;color:var(--mute)}
 </style>
-<link rel="stylesheet" href="assets/shell.css?v=9"><link rel="stylesheet" href="assets/theme-gold.css?v=3"></head><body>
+<link rel="stylesheet" href="assets/shell.css?v=8"><link rel="stylesheet" href="assets/theme-gold.css?v=2"></head><body>
 <?php if ($user === null): ?>
 <div class="auth">
   <aside class="auth-side">
@@ -990,7 +990,6 @@ a{color:inherit}
   <?php endif; ?>
 <?php endif; ?>
 </main>
-<footer class="foot">&copy; <?= $now->format('Y') ?> Ametecs India Private Limited &middot; AmetecsGlobal</footer>
 </div></div>
 <div class="pal" id="pal" onclick="if(event.target===this)pal(false)"><div class="pb"><input id="palq" placeholder="Search apps and settings…" autocomplete="off"><ul id="pall"></ul></div></div>
 <script>
@@ -1017,5 +1016,6 @@ document.addEventListener('click',function(e){document.querySelectorAll('details
 })();
 </script>
 <?php endif; ?>
+<?php if ($user !== null): ?><div class="foot">AmetecsGlobal by Ametecs India &middot; <a href="super.php">Super Admin</a></div><?php endif; ?>
 <script src="assets/ui.js?v=7"></script>
 </body></html>

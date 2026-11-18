@@ -81,5 +81,3 @@
 
 /* the theme switch in the user menus */
 [data-theme-toggle]{cursor:pointer}
-.t-gold .side{scrollbar-color:rgba(232,201,119,.25) transparent}.t-gold .side::-webkit-scrollbar-thumb{background:rgba(232,201,119,.25)}
-.t-gold .foot{color:#a8977a}
