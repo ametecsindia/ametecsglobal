@@ -293,3 +293,9 @@ th.ac,td.ac{text-align:center}
 @media (max-width:1100px){.lsum.five{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media (max-width:700px){.lsum.five{grid-template-columns:1fr 1fr}}
 .rn b{white-space:nowrap}.rn .pill{font-size:10.5px;padding:1px 7px;margin:2px 4px 0 0}#rel-t td{white-space:nowrap}#rel-t td:first-child{white-space:normal}.rn .am{width:30px;height:30px;font-weight:800;flex:none}
+/* Activity log (18 Nov 2026) */
+.akpis.seven{grid-template-columns:repeat(7,minmax(0,1fr))}
+.tlc{font-weight:600;font-size:12px;color:#9a7228;text-decoration:none;background:#fbf3e2;border-radius:20px;padding:1px 9px;margin-left:6px;white-space:nowrap}
+.afilt select{max-width:220px}
+@media (max-width:1250px){.akpis.seven{grid-template-columns:repeat(4,minmax(0,1fr))}}
+@media (max-width:560px){.akpis.seven{grid-template-columns:1fr 1fr}}

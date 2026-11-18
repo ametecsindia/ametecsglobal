@@ -982,7 +982,7 @@ main{max-width:1560px;padding:16px 26px 20px}
 @media (max-width:1100px){.kstrip{grid-template-columns:repeat(3,1fr)}.dgrid2{grid-template-columns:1fr}}
 .cn b{white-space:nowrap}.mxt td:last-child,.mxt th:last-child{padding-right:16px;white-space:nowrap}.mxt th.ac{padding-left:4px;padding-right:4px}.mxt th:first-child{width:30%}
 </style>
-<link rel="stylesheet" href="assets/shell.css?v=17"><link rel="stylesheet" href="assets/super.css?v=12"><link rel="stylesheet" href="assets/theme-gold.css?v=3"><link rel="stylesheet" href="assets/theme-sa-light.css?v=1"></head><body>
+<link rel="stylesheet" href="assets/shell.css?v=17"><link rel="stylesheet" href="assets/super.css?v=13"><link rel="stylesheet" href="assets/theme-gold.css?v=3"><link rel="stylesheet" href="assets/theme-sa-light.css?v=1"></head><body>
 <?php
 $myName = trim((string) ($me['name'] ?? '')) ?: ucfirst((string) strtok($meEmail, '@'));
 $myIni = strtoupper(implode('', array_map(static fn (string $w): string => mb_substr($w, 0, 1), array_slice(preg_split('/[\s._-]+/', $myName) ?: ['S'], 0, 2))));
@@ -1912,20 +1912,57 @@ $myIni = strtoupper(implode('', array_map(static fn (string $w): string => mb_su
     <footer><button type="button" class="btn ghost" onclick="this.closest('dialog').close()">Cancel</button><button class="btn gold"><i class="fas fa-plus"></i>Add app</button></footer></form></dialog>
 
 <?php elseif ($page === 'activity'):
-    // Phase 7 audit (18 Nov 2026): sign-ins drowned the real changes, so the log opens on Changes; Sign-ins and Everything are one click away.
-    $names = array_column($tenants, 'name', 'id'); $allAct = AmetecsData::activity();
-    $kind = in_array($_GET['k'] ?? '', ['signins', 'all'], true) ? (string) $_GET['k'] : 'changes';
-    $isSign = static fn (array $r): bool => in_array($r['what'], ['Signed in', 'Signed out'], true);
-    $rowsA = array_values(array_filter($allAct, static fn ($r) => $kind === 'all' || ($kind === 'signins') === $isSign($r)));
-    $nSign = count(array_filter($allAct, $isSign)); ?>
-  <div class="lph"><div><h1>Activity log</h1><p class="sub">Every change made in this console, newest first. Entries are never edited or removed.</p></div></div>
-  <div class="ltabs"><?php foreach (['changes' => ['Changes', 'fa-pen-to-square', count($allAct) - $nSign], 'signins' => ['Sign-ins', 'fa-right-to-bracket', $nSign], 'all' => ['Everything', 'fa-layer-group', count($allAct)]] as $k => [$lab, $ic, $n]): ?>
-    <a class="<?= $kind === $k ? 'on' : '' ?>" href="?p=activity<?= $k === 'changes' ? '' : '&amp;k=' . $k ?>"><i class="fas <?= $ic ?>"></i><?= $lab ?><em><?= $n ?></em></a><?php endforeach; ?></div>
-  <div class="toolbar"><span class="si"><i class="fas fa-magnifying-glass"></i><input data-live="#act-t" placeholder="Filter by who, client or what…" autocomplete="off"></span></div>
-  <div class="box"><table id="act-t" class="sortable paged"><tr><th>When</th><th>Who</th><th>Client</th><th>What</th><th>Detail</th></tr>
-  <?php foreach ($rowsA as $r): ?><tr><td style="white-space:nowrap"><?= ag_h(date('d M Y, h:i A', (int) strtotime((string) $r['at']))) ?></td><td><?= ag_h($r['who']) ?></td>
-    <td><?= $r['tenant'] !== '' ? '<a href="?p=client&id=' . (int) $r['tenant'] . '">' . ag_h($names[$r['tenant']] ?? '#' . $r['tenant']) . '</a>' : '<span class="muted">-</span>' ?></td><td><?= ag_h($r['what']) ?></td><td class="muted"><?= ag_h($r['detail']) ?></td></tr>
-  <?php endforeach; ?><?php if ($rowsA === []): ?><tr><td colspan="5"><div class="empty">Nothing here yet.</div></td></tr><?php endif; ?></table></div>
+    // PHASE 7 (owner, 18 Nov 2026: "re design this page"): the same timeline as the client panel - kinds as clickable
+    // totals, period / person / client filters, day groups, search and a CSV of what is shown. Sign-ins are a kind.
+    $names = array_column($tenants, 'name', 'id');
+    $kindOf = static function (string $what): string {
+        $w = strtolower($what);
+        return match (true) {
+            in_array($what, ['Signed in', 'Signed out'], true) => 'signin',
+            str_contains($w, 'invoice') || str_contains($w, 'payment') || str_contains($w, 'refund') || str_contains($w, 'price') => 'billing',
+            str_contains($w, 'release') || str_contains($w, 'update') || str_contains($w, 'install') || str_contains($w, 'roll') || str_contains($w, 'plugin') || str_contains($w, ' app ') || str_starts_with($w, 'added app') || str_starts_with($w, 'changed app ') => 'update',
+            str_contains($w, 'licen') || str_contains($w, 'plan') || str_contains($w, 'seat') || str_contains($w, 'apps &') => 'licence',
+            str_contains($w, 'client') || str_contains($w, 'administrator') || str_contains($w, 'login') || str_contains($w, 'tenant') => 'client',
+            default => 'settings' };
+    };
+    $kinds = ['client' => ['Clients & logins', 'fa-building'], 'licence' => ['Licences & plans', 'fa-key'], 'billing' => ['Billing', 'fa-indian-rupee-sign'],
+        'update' => ['Apps & releases', 'fa-cloud-arrow-up'], 'settings' => ['Settings & staff', 'fa-sliders'], 'signin' => ['Sign-ins', 'fa-right-to-bracket']];
+    $feedA = array_map(static fn ($r) => $r + ['k' => $kindOf((string) $r['what'])], AmetecsData::activity('', 3000));
+    $fk = isset($kinds[$_GET['k'] ?? '']) ? (string) $_GET['k'] : '';
+    $periods = ['today' => 'Today', '7d' => 'Last 7 days', '30d' => 'Last 30 days', '90d' => 'Last 90 days', '' => 'All time'];
+    $fp = isset($periods[$_GET['pd'] ?? '']) ? (string) ($_GET['pd'] ?? '') : '';
+    $since = ['today' => $today, '7d' => date('Y-m-d', strtotime('-6 days')), '30d' => date('Y-m-d', strtotime('-29 days')), '90d' => date('Y-m-d', strtotime('-89 days'))][$fp] ?? '';
+    $whoL = array_values(array_unique(array_filter(array_map(static fn ($r) => (string) $r['who'], $feedA)))); sort($whoL);
+    $fw = in_array($_GET['who'] ?? '', $whoL, true) ? (string) $_GET['who'] : '';
+    $fc = isset($names[$_GET['c'] ?? '']) ? (string) $_GET['c'] : '';
+    $inP = array_values(array_filter($feedA, static fn ($r) => $since === '' || substr((string) $r['at'], 0, 10) >= $since));
+    $byK = array_count_values(array_column($inP, 'k'));
+    $rowsA = array_values(array_filter($inP, static fn ($r) => ($fk === '' ? $r['k'] !== 'signin' : $r['k'] === $fk) && ($fw === '' || $r['who'] === $fw) && ($fc === '' || (string) $r['tenant'] === $fc)));
+    $lim = min(count($rowsA), max(150, (int) ($_GET['n'] ?? 150)));
+    $aq = static fn (array $o) => '?' . http_build_query(array_filter($o + ['p' => 'activity', 'k' => $fk, 'pd' => $fp, 'who' => $fw, 'c' => $fc], static fn ($v) => $v !== ''));
+    $dayName = static fn (string $d) => $d === $today ? 'Today' : ($d === date('Y-m-d', strtotime('-1 day')) ? 'Yesterday' : date('l, d M Y', (int) strtotime($d)));
+    $kcol = ['client' => 'k-access', 'licence' => 'k-licence', 'billing' => 'k-billing', 'update' => 'k-update', 'settings' => 'k-settings', 'signin' => 'k-settings']; ?>
+  <div class="lph"><div><h1>Activity log</h1><p class="sub">Every change made in AmetecsGlobal, by Ametecs staff and by clients, newest first. Entries are never edited or removed.</p></div>
+    <button type="button" class="btn ghost" data-csv="#satl" data-name="ametecsglobal-activity-<?= ag_h($today) ?>.csv"><i class="fas fa-file-arrow-down"></i>Download CSV</button></div>
+  <section class="akpis seven">
+    <a class="<?= $fk === '' ? 'on' : '' ?>" href="<?= ag_h($aq(['k' => ''])) ?>"><i class="fas fa-layer-group"></i><b><?= count($inP) - (int) ($byK['signin'] ?? 0) ?></b><span>All changes</span></a>
+    <?php foreach ($kinds as $k => [$lab, $ic]): ?><a class="<?= $kcol[$k] ?><?= $fk === $k ? ' on' : '' ?>" href="<?= ag_h($aq(['k' => $k])) ?>"><i class="fas <?= $ic ?>"></i><b><?= (int) ($byK[$k] ?? 0) ?></b><span><?= ag_h($lab) ?></span></a><?php endforeach; ?>
+  </section>
+  <form class="afilt" method="get"><input type="hidden" name="p" value="activity"><?php if ($fk !== ''): ?><input type="hidden" name="k" value="<?= ag_h($fk) ?>"><?php endif; ?>
+    <label class="fsearch"><i class="fas fa-magnifying-glass"></i><input data-live-tl="#satl" placeholder="Search what, who, client or detail…" autocomplete="off"></label>
+    <select name="pd" onchange="this.form.submit()"><?php foreach ($periods as $k => $v2): ?><option value="<?= $k ?>"<?= $fp === $k ? ' selected' : '' ?>><?= $v2 ?></option><?php endforeach; ?></select>
+    <select name="c" onchange="this.form.submit()"><option value="">All clients</option><?php foreach ($names as $cid => $cn): ?><option value="<?= (int) $cid ?>"<?= $fc === (string) $cid ? ' selected' : '' ?>><?= ag_h((string) $cn) ?></option><?php endforeach; ?></select>
+    <select name="who" onchange="this.form.submit()"><option value="">Everyone</option><?php foreach ($whoL as $w2): ?><option<?= $fw === $w2 ? ' selected' : '' ?>><?= ag_h($w2) ?></option><?php endforeach; ?></select>
+    <?php if ($fk !== '' || $fp !== '' || $fw !== '' || $fc !== ''): ?><a class="btn ghost" href="?p=activity"><i class="fas fa-xmark"></i>Clear</a><?php endif; ?>
+    <span class="acnt"><?= count($rowsA) ?> <?= count($rowsA) === 1 ? 'entry' : 'entries' ?></span></form>
+  <div class="tl" id="satl"><?php $lastDay = ''; foreach (array_slice($rowsA, 0, $lim) as $r): $day = substr((string) $r['at'], 0, 10); $k = $r['k']; $cn = $r['tenant'] !== '' ? ($names[$r['tenant']] ?? '#' . $r['tenant']) : '';
+      if ($day !== $lastDay): $lastDay = $day; ?><div class="tlday"><?= ag_h($dayName($day)) ?></div><?php endif; ?>
+    <div class="tli <?= $kcol[$k] ?>" data-csv-row="<?= ag_h((string) json_encode([date('Y-m-d H:i', (int) strtotime((string) $r['at'])), $kinds[$k][0], $r['what'], $r['who'], $cn, (string) $r['detail']])) ?>"><span class="tlic"><i class="fas <?= $kinds[$k][1] ?>"></i></span>
+      <div class="tlb"><div class="tlh"><b><?= ag_h((string) $r['what']) ?><?= $cn !== '' ? ' <a class="tlc" href="?p=client&id=' . (int) $r['tenant'] . '">' . ag_h($cn) . '</a>' : '' ?></b><time><?= ag_h(date('h:i A', (int) strtotime((string) $r['at']))) ?></time></div>
+        <?= trim((string) $r['detail']) !== '' ? '<p>' . ag_h((string) $r['detail']) . '</p>' : '' ?><small><span class="av"><?= ag_h(mb_strtoupper(mb_substr((string) $r['who'] ?: '?', 0, 1))) ?></span><?= ag_h((string) $r['who'] ?: 'system') ?> &middot; <?= ag_h($kinds[$k][0]) ?></small></div></div>
+  <?php endforeach; ?>
+  <?php if ($rowsA === []): ?><div class="box"><div class="empty"><i class="fas fa-wind"></i>Nothing matches these filters.</div></div><?php endif; ?></div>
+  <?php if ($lim < count($rowsA)): ?><div style="text-align:center;margin:14px 0"><a class="btn ghost" href="<?= ag_h($aq(['n' => $lim + 150])) ?>">Show more (<?= count($rowsA) - $lim ?> older)</a></div><?php endif; ?>
 
 <?php elseif ($page === 'staff'):
     // PHASE 7 (owner, 18 Nov 2026: "redesign this page"): member cards, figures, add in a pop-up, reset a password.
@@ -2051,6 +2088,6 @@ document.addEventListener('keydown',function(e){if((e.ctrlKey||e.metaKey)&&e.key
 document.addEventListener('click',function(e){document.querySelectorAll('details.me[open],details.act[open]').forEach(function(d){if(!d.contains(e.target))d.removeAttribute('open')})});
 })();
 </script>
-<script src="assets/ui.js?v=7"></script>
+<script src="assets/ui.js?v=10"></script>
 <?php endif; ?>
 </body></html>
