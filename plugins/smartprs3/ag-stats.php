@@ -58,7 +58,7 @@ return static function (\PDO $pdo, string $tenant): array {
             $d['absent']++;
         }
     }
-    $off = $d['counted'] === 0;   // a holiday / weekly off for everyone: "-" rather than a misleading 0
+    $off = $people !== [] && $d['counted'] === 0;   // a holiday / weekly off for everyone: "-" rather than a misleading 0
 
     $pendingLeave = 0;
     foreach ($store->all('leaves') as $l) {
