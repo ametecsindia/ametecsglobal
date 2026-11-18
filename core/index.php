@@ -313,6 +313,12 @@ $okMsg = null;
 // change from Licences & plans; it lands in Ametecs' activity log (Super Admin dashboard) and, if email is set up, their inbox.
 if ($user !== null && $isAdmin && $session !== null && ($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['do'] ?? '') === 'plan-request') {
     $ra = (string) ($_POST['app'] ?? ''); $rp = (string) ($_POST['plan'] ?? ''); $rs = (int) ($_POST['seats'] ?? 0);
+    if (isset($_POST['add'])) {   // "Add users" where no online price is set yet: current seats + the extra
+        $rl = AmetecsLicences::row($tenant, $ra);
+        $rp = in_array($rl['plan'] ?? '', ['monthly', 'yearly'], true) ? (string) $rl['plan'] : 'yearly';
+        $rs = (int) ($rl['seats'] ?? 0) + max(0, (int) $_POST['add']);
+        $_POST['note'] = trim('Add ' . (int) $_POST['add'] . ' users ' . trim((string) ($_POST['note'] ?? '')));
+    }
     $rName = AmetecsAccess::plugins(true)[$ra]['name'] ?? null;
     if (!$session->verify((string) ($_POST['csrf'] ?? '')) || $rName === null || !in_array($rp, ['monthly', 'yearly'], true) || $rs < 1) {
         $_SESSION['flash_problem'] = 'Choose a plan and the number of seats.';
@@ -322,7 +328,7 @@ if ($user !== null && $isAdmin && $session !== null && ($_SERVER['REQUEST_METHOD
         AmetecsData::log((string) ($user['email'] ?? ''), 'Requested a plan change', $tenant, $what);
         $to = (string) (AmetecsBilling::settings()['support_email'] ?? '') ?: (string) AmetecsBilling::settings()['email'];
         $to !== '' && AmetecsMail::box($pdo)->ready() && AmetecsMail::send($pdo, $to, '[AmetecsGlobal] Plan change request: ' . $company, "From: " . ($user['email'] ?? '') . " (" . $company . ", client #" . $tenant . ")\n\n" . $what);
-        $_SESSION['flash_notice'] = 'Request sent to Ametecs: ' . $what . '. They confirm the price and update your plan.';
+        $_SESSION['flash_notice'] = 'Request sent to Ametecs: ' . rtrim($what, '.') . '. They confirm the price and update your plan.';
     }
     header('Location: ?v=licences');
     exit;
@@ -971,6 +977,13 @@ a{color:inherit}
             <div class="pf-row one"><label>How many more <?= ag_h((string) $p['unit']) ?>?<input type="number" name="add" min="1" value="10" required></label></div>
             <div class="pf-sum"><span>Seats after <b data-o="after" data-now="<?= $seats ?>">-</b></span><span>INR <?= number_format($so['rate'], 2) ?> per <?= ag_h($unit1) ?> per <?= $l['plan'] === 'yearly' ? 'year' : 'month' ?> &times; <?= $days ?> days left <b data-o="base">-</b></span><span>GST <?= $gstP ?>% <b data-o="gst">-</b></span><span class="pf-tot">To pay now <b data-o="tot">-</b></span></div>
             <button class="btn2 primary"><i class="fas fa-lock"></i>Continue to pay</button><p class="muted2" style="font-size:11.5px;margin:8px 0 0">Your end date stays <?= ag_h(date('d M Y', (int) strtotime($until))) ?>; you pay only for the days left. Seats are added the moment the payment goes through.</p></form></details>
+        <?php elseif (in_array($l['status'], ['active'], true) && $st === 'on'): ?>
+        <details class="pform"><summary class="btn2 primary"><i class="fas fa-user-plus"></i>Add <?= ag_h((string) $p['unit']) ?></summary>
+          <form method="post"><input type="hidden" name="csrf" value="<?= ag_h($session->token()) ?>"><input type="hidden" name="do" value="plan-request"><input type="hidden" name="app" value="<?= ag_h($code) ?>">
+            <div class="pf-row one"><label>How many more <?= ag_h((string) $p['unit']) ?>?<input type="number" name="add" min="1" value="10" required></label></div>
+            <label class="pf-note">Note (optional)<textarea name="note" rows="2" placeholder="e.g. from 1 December"></textarea></label>
+            <button class="btn2 primary"><i class="fas fa-paper-plane"></i>Request <?= ag_h((string) $p['unit']) ?></button>
+            <p class="muted2" style="font-size:11.5px;margin:8px 0 0">Online payment for extra <?= ag_h((string) $p['unit']) ?> opens here once Ametecs sets the price. Until then this request goes to Ametecs, who add the seats and send the invoice.</p></form></details>
         <?php endif; ?>
         <?= $canBuy ? $planForm($code, $l, 'Change plan or seats') : ($st !== 'off' || $l['status'] === 'active' ? $reqForm($code, $l) : '<a class="btn2 ghost" href="?v=support">Contact Ametecs</a>') ?></footer>
     </article>
