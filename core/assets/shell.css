@@ -193,3 +193,8 @@ img,video,canvas{max-width:100%}
 .top-in .crumb i{font-size:9px;color:#b6c0ce}
 .top-in .crumb+.bell{margin-left:auto}
 @media (max-width:860px){.top-in .crumb{display:none}}
+/* the sidebar's own scrollbar: thin and dark, not the browser's grey one (18 Nov 2026) */
+.side{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.18) transparent}
+.side::-webkit-scrollbar{width:6px}.side::-webkit-scrollbar-thumb{background:rgba(255,255,255,.18);border-radius:6px}.side::-webkit-scrollbar-track{background:transparent}
+.mainc{display:flex;flex-direction:column;min-height:100vh}.mainc>main{flex:1}
+.foot{text-align:center;color:#94a3b8;font-size:12px;padding:14px 0 22px}
