@@ -387,6 +387,25 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && $pdo !== null) {
                 'cancelled' => 'Licence cancelled. Its history and the client\'s data are kept; Activate brings it back.', 'renew' => 'Renewed till ' . date('d M Y', (int) strtotime((string) ($set['valid_until'] ?? ''))) . '.',
                 'unbind' => 'The licence is free to activate on a new server.'][$act]);
         }
+        // PLUGINS FOR THIS CLIENT (Phase 6): give free / take back, block, allow or stop downloads.
+        if ($do === 'licence-plugin') {
+            $pp = AmetecsPlugins::ready() ? (AmetecsPlugins::catalogue($app)[(string) ($_POST['plugin'] ?? '')] ?? null) : null;
+            $set = match ((string) ($_POST['act'] ?? '')) {
+                'grant' => [['granted' => 1, 'enabled' => 1], 'plugin given free', 'given free: the client can use it without paying'],
+                'ungrant' => [['granted' => 0], 'plugin free grant removed', 'free grant taken back (a purchase, if any, still counts)'],
+                'block' => [['blocked' => 1], 'plugin blocked', 'disabled for this client'],
+                'unblock' => [['blocked' => 0], 'plugin unblocked', 'enabled again for this client'],
+                'dl-off' => [['download' => 0], 'plugin downloads off', 'downloads turned off for this client'],
+                'dl-on' => [['download' => 1], 'plugin downloads on', 'downloads allowed for this client'],
+                default => null,
+            };
+            if ($pp === null || $set === null) {
+                $back($to . '#plugins', null, 'Unknown plugin or action.');
+            }
+            AmetecsPlugins::put($tid, $pp['latest'], $set[0], $set[1]);
+            AmetecsData::log($meEmail, $an . ' plugin ' . $pp['title'] . ': ' . $set[2], $tid);
+            $back($to . '#plugins', $pp['title'] . ': ' . $set[2] . '.');
+        }
         if ($do === 'licence-key') {
             $key = AmetecsLicences::issueKey($tid, $app);
             AmetecsData::log($meEmail, 'Issued a new ' . $an . ' licence key', $tid);
@@ -920,7 +939,7 @@ main{max-width:1560px;padding:16px 26px 20px}
 @media (max-width:1100px){.kstrip{grid-template-columns:repeat(3,1fr)}.dgrid2{grid-template-columns:1fr}}
 .cn b{white-space:nowrap}.mxt td:last-child,.mxt th:last-child{padding-right:16px;white-space:nowrap}.mxt th.ac{padding-left:4px;padding-right:4px}.mxt th:first-child{width:30%}
 </style>
-<link rel="stylesheet" href="assets/shell.css?v=4"></head><body>
+<link rel="stylesheet" href="assets/shell.css?v=5"></head><body>
 <?php
 $myName = trim((string) ($me['name'] ?? '')) ?: ucfirst((string) strtok($meEmail, '@'));
 $myIni = strtoupper(implode('', array_map(static fn (string $w): string => mb_substr($w, 0, 1), array_slice(preg_split('/[\s._-]+/', $myName) ?: ['S'], 0, 2))));
@@ -1272,6 +1291,22 @@ $myIni = strtoupper(implode('', array_map(static fn (string $w): string => mb_su
   </div></div>
   <?php endif; ?>
 
+  <?php $lpl = AmetecsPlugins::ready() ? AmetecsPlugins::catalogue((string) $lc['app']) : []; if ($lpl !== []): $ltid = (string) $lc['tenant_id'];
+      $pbtn = static fn (string $code, string $act, string $label, string $cls = 'ghost') => '<form method="post" class="inline">' . $csrf() . '<input type="hidden" name="do" value="licence-plugin"><input type="hidden" name="id" value="' . $lid . '"><input type="hidden" name="plugin" value="' . ag_h($code) . '"><input type="hidden" name="act" value="' . $act . '"><button class="btn ' . $cls . '" style="padding:4px 10px;font-size:12.5px">' . $label . '</button></form>'; ?>
+  <div class="box" id="plugins"><div class="hd"><h2><i class="fas fa-puzzle-piece"></i>Plugins for this client</h2><span class="muted">Give free = no payment needed &middot; Block = switched off for this client whatever they paid &middot; the price is set on the plugin's release</span></div>
+    <table><tr><th>Plugin</th><th>Latest</th><th>Price</th><th>For this client</th><th>Client switch</th><th>Version on their server</th><th class="right"></th></tr>
+    <?php foreach ($lpl as $pc => $pp): $prow = AmetecsPlugins::row($ltid, (string) $lc['app'], $pc); $pst = AmetecsPlugins::state($ltid, $pp['latest']); [$psl, $psc] = AmetecsPlugins::STATES[$pst]; $dlOn = (bool) ($prow['download'] ?? true); ?>
+      <tr><td><b><?= ag_h($pp['title']) ?></b><br><span class="muted" style="font-size:12px"><?= ag_h($pc) ?></span></td><td><a href="?p=release&id=<?= (int) $pp['latest']['id'] ?>"><?= ag_h((string) $pp['latest']['version']) ?></a></td>
+        <td><?= (float) ($pp['latest']['price'] ?? 0) > 0 ? ag_h($pp['latest']['currency'] . ' ' . number_format((float) $pp['latest']['price'], 2)) : 'Free' ?></td>
+        <td><span class="pill <?= $psc ?>"><?= ag_h($psl) ?></span><?= !$dlOn ? ' <span class="pill grey">no downloads</span>' : '' ?></td>
+        <td><?= AmetecsPlugins::authorised($pst) ? (($prow['enabled'] ?? 1) ? 'On' : 'Off') : '<span class="muted">-</span>' ?></td>
+        <td><?= ag_h((string) (($prow['installed_version'] ?? '') ?: (($prow['downloaded_version'] ?? '') !== '' && $prow['downloaded_version'] !== null ? 'downloaded ' . $prow['downloaded_version'] : '-'))) ?></td>
+        <td class="right" style="white-space:nowrap"><?= (float) ($pp['latest']['price'] ?? 0) > 0 ? (!empty($prow['granted']) ? $pbtn($pc, 'ungrant', 'Take back free') : $pbtn($pc, 'grant', 'Give free', 'gold')) : '' ?>
+          <?= !empty($prow['blocked']) ? $pbtn($pc, 'unblock', 'Unblock', 'navy') : $pbtn($pc, 'block', 'Block', 'danger') ?>
+          <?= $lc['deployment'] === 'onprem' ? ($dlOn ? $pbtn($pc, 'dl-off', 'Stop downloads') : $pbtn($pc, 'dl-on', 'Allow downloads')) : '' ?></td></tr>
+    <?php endforeach; ?></table></div>
+  <?php endif; ?>
+
   <div class="box"><div class="hd"><h2><i class="fas fa-clock-rotate-left"></i>Licence history</h2></div><table><tr><th>When</th><th>Who</th><th>What</th><th>Detail</th></tr>
   <?php foreach (AmetecsLicences::events((string) $lid) as $e): ?><tr><td style="white-space:nowrap"><?= ag_h($e['created_at']) ?></td><td><?= ag_h($e['by_who']) ?></td><td><?= ag_h($e['action']) ?></td><td class="muted" style="font-size:12.5px"><?= ag_h($e['detail']) ?></td></tr><?php endforeach; ?></table></div>
 
@@ -1302,6 +1337,7 @@ $myIni = strtoupper(implode('', array_map(static fn (string $w): string => mb_su
       <div><label>Package (.zip) <span class="req">*</span></label><input type="file" name="package" accept=".zip" required></div>
       <div><label>Version <span class="muted">(empty = from release.json)</span></label><input name="version" placeholder="2.4.0"></div>
       <div><label>Title</label><input name="title" placeholder="e.g. GST return filing"></div>
+      <div><label>Plugin code <span class="muted">(plugins only: the same code for every version, e.g. gst-returns; empty = from the title)</span></label><input name="plugin" placeholder="gst-returns" pattern="[A-Za-z0-9 _-]*"></div>
       <div><label>Requires version <span class="muted">(installed version must be at least)</span></label><input name="requires_version" placeholder="2.3.0"></div>
       <div class="full"><label>Release notes <span class="muted">(shown to clients; empty = from release.json)</span></label><textarea name="notes" rows="3"></textarea></div>
       <div><label>Upgrade price <span class="muted">(empty = free)</span></label><input name="price" inputmode="decimal" placeholder="0.00"></div>
@@ -1657,6 +1693,6 @@ document.addEventListener('keydown',function(e){if((e.ctrlKey||e.metaKey)&&e.key
 document.addEventListener('click',function(e){document.querySelectorAll('details.me[open],details.act[open]').forEach(function(d){if(!d.contains(e.target))d.removeAttribute('open')})});
 })();
 </script>
-<script src="assets/ui.js?v=4"></script>
+<script src="assets/ui.js?v=5"></script>
 <?php endif; ?>
 </body></html>

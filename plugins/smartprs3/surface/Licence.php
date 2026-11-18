@@ -370,7 +370,7 @@ PEM;
         }
 
         $j = $this->post('/update/heartbeat', ['key' => $key, 'fingerprint' => $this->fingerprint(),
-            'server_name' => gethostname() ?: 'unknown'], 6);
+            'server_name' => gethostname() ?: 'unknown'] + $this->dashboardFigures(), 6);
 
         if ($j === null) {
             return;
@@ -409,6 +409,23 @@ PEM;
         }
 
         $this->save($st);
+    }
+
+    /**
+     * THIS INSTALL'S DASHBOARD FIGURES for the client's AmetecsGlobal panel (owner, 18 Nov 2026): ag-stats.php, run for the
+     * install's company and sent with the hourly check-in. Best effort - a failure here never touches the licence.
+     *
+     * @return array<string, string>
+     */
+    private function dashboardFigures(): array
+    {
+        try {
+            $pdo = is_file($this->root . '/ag-stats.php') ? Database::connect($this->root . '/.env') : null;
+            $tid = $pdo === null ? null : $pdo->query('SELECT MIN(id) FROM tenants')->fetchColumn();
+            return $tid ? ['stats' => (string) json_encode((require $this->root . '/ag-stats.php')($pdo, (string) $tid))] : [];
+        } catch (\Throwable) {
+            return [];
+        }
     }
 
     /** The password reset Ametecs sent, taken once (boot-hooks applies it). @return array{id: string, email: string, hash: string}|null */

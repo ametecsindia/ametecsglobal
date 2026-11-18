@@ -95,6 +95,21 @@ Clients and their logins live in the database set in `plugins\smartprs3\.env` (S
   (Upgrade history / Installations). A copied install on another machine is refused and stops.
 - Apps written fresh can use the JSON door instead: `core/licence-api.php` (actions activate, check, updates, download, report).
 
+## Dashboard, My applications, Modules & plugins (Phase 6, 18 Nov 2026)
+- Client menu is shorter: Dashboard, My applications, Modules & plugins, Licences & plans, Payments & invoices, the
+  Organization pages, Activity history, Support. Updates open from an app's card; notifications are the bell; account
+  settings are under the user menu. Old links (?v=plans, installs, upgrades) land on the page that now holds them.
+- Dashboard: one block per application the company uses, with that app's own figures (SmartPRS3: employees, present,
+  absent, on leave, late, early logouts, leave requests, payroll - from the same muster SmartPRS3 itself shows).
+- Any app can supply figures: put `plugins/<app>/ag-stats.php` returning `function (PDO $pdo, string $tenantId): array`
+  with `['tiles' => [['label', 'value', 'sub', 'tone' => green|amber|red|blue]], 'list' => [...]]`. On-premise installs
+  send the same array (SmartPRS3 does it with its hourly check-in; others: licence-api action "stats").
+- My applications: only what the company holds - version, cloud/on-premise, licence, seats, modules, update status.
+- Plugins: upload with Type "Plugin / module" and a Plugin code (same code for every version, e.g. gst-returns). No price
+  = free for every client holding the app. Clients Buy (Razorpay), then switch it on/off and, on-premise, Download /
+  Update. A purchase covers later versions. Super Admin -> Licences -> the client's licence -> Plugins for this client:
+  Give free, Take back free, Block, Stop/Allow downloads. Apps ask `AmetecsPlugins::on($tenant, $app, $code)`.
+
 ## Every day
 - **Once per PC:** double-click `INSTALL-AUTOSYNC.bat`. AUTO-SYNC then runs hidden and starts by itself at every Windows sign-in (no window to keep open). Without it, `AUTO-SYNC.bat` must be left running (minimised). About a minute after you stop saving, your changes go to GitHub; others' changes arrive within 5 minutes. Only the AmetecsGlobal folder is watched.
 - `SYNC.bat` does the same once, on click.

@@ -38,6 +38,7 @@ if ($n > 60) {
 $path = (string) ($_SERVER['PATH_INFO'] ?? parse_url((string) ($_SERVER['REQUEST_URI'] ?? ''), PHP_URL_PATH));
 $op = ($p = strpos($path, '/update/')) !== false ? trim(substr($path, $p + 8), '/') : trim($path, '/');
 $in = array_map(static fn ($v): string => is_scalar($v) ? trim((string) $v) : '', $_POST);
+$plugin = trim($in['plugin'] ?? '') !== '' && AmetecsPlugins::ready() ? AmetecsPlugins::slug($in['plugin']) : '';
 $key = $in['key'] ?? '';
 $fp = mb_substr($in['fingerprint'] ?? '', 0, 190);
 $lic = AmetecsLicences::byKey($key);
@@ -65,6 +66,8 @@ if ($op === 'heartbeat') {
     if ($reason !== null) {
         $out(200, ['ok' => false, 'reason' => $reason, 'status' => $r['status']]);
     }
+    $stats = json_decode($in['stats'] ?? '', true);   // the dashboard figures, sent by installs that have them (Phase 6)
+    is_array($stats) && AmetecsShell::saveStats($lic, $stats);
     if ($r['status'] === 'expired' && ($expires === null || $expires >= date('Y-m-d'))) {
         $expires = date('Y-m-d', strtotime('-1 day'));   // marked expired by hand: make the client see a past date
     }
@@ -85,11 +88,11 @@ if ($op === 'check') {
 }
 if ($op === 'report') {
     // 'download' is SmartPRS' "I fetched it" ping - nothing to record until it says applied or failed.
-    ($in['action'] ?? '') === 'download' || AmetecsReleases::apiReport($lic, mb_substr($in['version'] ?? '', 0, 39), $in['action'] ?? '', $in['detail'] ?? '', $current);
+    ($in['action'] ?? '') === 'download' || AmetecsReleases::apiReport($lic, mb_substr($in['version'] ?? '', 0, 39), $in['action'] ?? '', $in['detail'] ?? '', $current, $plugin);
     $out(200, ['ok' => true]);
 }
 if ($op === 'download') {
-    $d = AmetecsReleases::apiDownload($lic, $in['version'] ?? '', $current);
+    $d = AmetecsReleases::apiDownload($lic, $in['version'] ?? '', $current, $plugin);
     $d['ok'] || $out(403, ['ok' => false, 'error' => $d['why']]);
     header('Content-Type: application/zip');
     header('Content-Length: ' . filesize($d['path']));

@@ -121,6 +121,9 @@ final class AmetecsReleases
     /** free | granted | paid | required */
     public static function payment(array $r, string $tenant): string
     {
+        if ($r['kind'] === 'plugin' && AmetecsPlugins::ready()) {   // a plugin bought once covers its later versions
+            return ['free' => 'free', 'granted' => 'granted', 'purchased' => 'paid', 'locked' => 'required', 'blocked' => 'required'][AmetecsPlugins::state($tenant, $r)];
+        }
         if ((float) ($r['price'] ?? 0) <= 0) {
             return 'free';
         }
@@ -271,13 +274,15 @@ final class AmetecsReleases
         if ($err !== null) {
             return ['ok' => false, 'why' => $err];
         }
-        $dup = self::pdo()->prepare('SELECT COUNT(*) FROM ag_releases WHERE app = ? AND version = ? AND kind = ?');
-        $dup->execute([$app, $version, $kind]);
+        // A plugin's code: typed, else release.json "plugin", else made from its title (Phase 6).
+        $plugin = $kind !== 'plugin' ? '' : AmetecsPlugins::slug(trim((string) ($meta['plugin'] ?? '')) ?: (trim((string) ($m['plugin'] ?? '')) ?: (trim((string) ($meta['title'] ?? '')) ?: trim((string) ($m['title'] ?? 'module')))));
+        $dup = self::pdo()->prepare('SELECT COUNT(*) FROM ag_releases WHERE app = ? AND version = ? AND kind = ?' . ($kind === 'plugin' ? ' AND plugin = ?' : ''));
+        $dup->execute(array_merge([$app, $version, $kind], $kind === 'plugin' ? [$plugin] : []));
         if ((int) $dup->fetchColumn() > 0) {
-            return ['ok' => false, 'why' => $app . ' ' . $version . ' (' . strtolower(self::KINDS[$kind]) . ') is already uploaded. Use a new version number.'];
+            return ['ok' => false, 'why' => $app . ' ' . ($plugin !== '' ? $plugin . ' ' : '') . $version . ' (' . strtolower(self::KINDS[$kind]) . ') is already uploaded. Use a new version number.'];
         }
         $sha = (string) hash_file('sha256', $file);
-        $name = $app . '-' . $version . ($kind === 'full' ? '' : '-' . $kind) . '.zip';
+        $name = $app . ($plugin !== '' ? '-' . $plugin : '') . '-' . $version . ($kind === 'full' ? '' : '-' . $kind) . '.zip';
         $dest = self::dir($app) . '/' . $name;
         $moved = is_uploaded_file($file) ? move_uploaded_file($file, $dest) : @copy($file, $dest);
         if (!$moved || hash_file('sha256', $dest) !== $sha) {
@@ -291,9 +296,9 @@ final class AmetecsReleases
         }
         $price = trim((string) ($meta['price'] ?? ''));
         $now = self::now();
-        self::pdo()->prepare('INSERT INTO ag_releases (app, version, kind, title, notes, requires_version, min_php, file_name, size, sha256, signature, status, mandatory, downloadable,
-            audience, price, currency, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, \'draft\', ?, 1, \'all\', ?, \'INR\', ?, ?, ?)')
-            ->execute([$app, $version, $kind, mb_substr(trim((string) ($meta['title'] ?? '')), 0, 190) ?: null, trim((string) ($meta['notes'] ?? '')) ?: (trim((string) ($m['notes'] ?? '')) ?: null),
+        self::pdo()->prepare('INSERT INTO ag_releases (app, version, kind, plugin, title, notes, requires_version, min_php, file_name, size, sha256, signature, status, mandatory, downloadable,
+            audience, price, currency, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, \'draft\', ?, 1, \'all\', ?, \'INR\', ?, ?, ?)')
+            ->execute([$app, $version, $kind, $plugin, mb_substr(trim((string) ($meta['title'] ?? '')), 0, 190) ?: null, trim((string) ($meta['notes'] ?? '')) ?: (trim((string) ($m['notes'] ?? '')) ?: null),
                 trim((string) ($meta['requires_version'] ?? '')) ?: null, trim((string) ($meta['min_php'] ?? '')) ?: null, $name, (int) filesize($dest), $sha, $sig,
                 !empty($meta['mandatory']) ? 1 : 0, is_numeric($price) && (float) $price > 0 ? number_format((float) $price, 2, '.', '') : null, AmetecsLicences::$actor, $now, $now]);
         $r = (array) self::byId((string) self::pdo()->lastInsertId());
@@ -422,7 +427,13 @@ final class AmetecsReleases
         $o = self::offerFor($tid, (string) $licence['app'], $current);
         $best = $o['updates'][0] ?? null;
         $base = ['ok' => true, 'current_version' => $current, 'mandatory' => $o['mandatory'],
-            'plugins' => array_map(static fn ($p) => ['version' => $p['version'], 'title' => $p['title'], 'notes' => $p['notes'], 'payment' => self::payment($p, $tid)], $o['plugins']),
+            // Phase 6: one entry per plugin (its newest version), with whether this client holds it and has it switched on.
+            'plugins' => array_values(array_map(static function ($p) use ($tid) {
+                $v = AmetecsPlugins::view($tid, $p, true);
+                return ['plugin' => $p['code'], 'version' => $p['latest']['version'], 'title' => $p['title'], 'notes' => $p['notes'], 'payment' => self::payment($p['latest'], $tid),
+                    'state' => $v['state'], 'enabled' => $v['enabled'], 'installed_version' => $v['installed'], 'downloadable' => $v['canDownload'],
+                    'package_hash' => $p['latest']['sha256'], 'signature' => $p['latest']['signature']];
+            }, AmetecsPlugins::ready() ? AmetecsPlugins::catalogue((string) $licence['app'], $tid) : [])),
             'rollback' => $o['rollback'] === null ? null : ['version' => $o['rollback']['version'], 'package_hash' => $o['rollback']['sha256'], 'signature' => $o['rollback']['signature']]];
         if ($best === null) {
             return $base + ['update_available' => false, 'reason' => 'up_to_date', 'message' => 'You are on the latest version.'];
@@ -435,12 +446,24 @@ final class AmetecsReleases
     }
 
     /** The zip for $version if this licence may have it, else an error. @return array{ok: bool, why: string, release?: array, path?: string} */
-    public static function apiDownload(array $licence, string $version, string $current = ''): array
+    public static function apiDownload(array $licence, string $version, string $current = '', string $plugin = ''): array
     {
         $tid = (string) $licence['tenant_id'];
         foreach (self::all((string) $licence['app']) as $r) {
-            if ((string) $r['version'] !== $version || $r['kind'] === 'plugin' || !self::visibleTo($r, $tid)) {
+            if ((string) $r['version'] !== $version || ($r['kind'] === 'plugin') !== ($plugin !== '') || !self::visibleTo($r, $tid)) {
                 continue;
+            }
+            if ($plugin !== '') {   // a plugin: its own code, held by this client, downloads allowed (Phase 6)
+                if (AmetecsPlugins::codeOf($r) !== $plugin) {
+                    continue;
+                }
+                $pv = AmetecsPlugins::view($tid, AmetecsPlugins::catalogue((string) $r['app'], $tid)[$plugin] ?? ['latest' => $r, 'app' => $r['app'], 'code' => $plugin], true);
+                if (!AmetecsPlugins::authorised($pv['state'])) {
+                    return ['ok' => false, 'why' => $pv['state'] === 'blocked' ? 'This plugin has been disabled for your company by Ametecs.' : 'Buy this plugin in your AmetecsGlobal panel first.'];
+                }
+                if (AmetecsPlugins::row($tid, (string) $r['app'], $plugin) !== null && empty(AmetecsPlugins::row($tid, (string) $r['app'], $plugin)['download'])) {
+                    return ['ok' => false, 'why' => 'Downloading this plugin is turned off for your company. Contact Ametecs.'];
+                }
             }
             if (self::payment($r, $tid) === 'required') {
                 return ['ok' => false, 'why' => 'Payment for this upgrade is pending. Pay in your AmetecsGlobal panel, then try again.'];
@@ -448,18 +471,24 @@ final class AmetecsReleases
             if (!is_file(self::path($r))) {
                 return ['ok' => false, 'why' => 'The package is not on the update server. Contact Ametecs.'];
             }
-            self::event($r, (string) $r['app'], $tid, 'downloaded', $current, $version, 'by the installed server', (string) $licence['id']);
+            self::event($r, (string) $r['app'], $tid, 'downloaded', $current, $version, 'by the installed server' . ($plugin !== '' ? ', plugin ' . $plugin : ''), (string) $licence['id']);
             return ['ok' => true, 'why' => '', 'release' => $r, 'path' => self::path($r)];
         }
         return ['ok' => false, 'why' => 'That version is not available to this licence.'];
     }
 
-    public static function apiReport(array $licence, string $version, string $action, string $detail, string $from = ''): void
+    public static function apiReport(array $licence, string $version, string $action, string $detail, string $from = '', string $plugin = ''): void
     {
         $act = in_array($action, ['applied', 'installed'], true) ? 'installed' : ($action === 'rolled_back' ? 'rolled_back' : 'failed');
-        $rq = self::pdo()->prepare("SELECT * FROM ag_releases WHERE app = ? AND version = ? AND kind <> 'plugin' LIMIT 1");
-        $rq->execute([$licence['app'], $version]);
-        self::event($rq->fetch(\PDO::FETCH_ASSOC) ?: null, (string) $licence['app'], (string) $licence['tenant_id'], $act, $from, $version, mb_substr($detail, 0, 2000), (string) $licence['id']);
+        $rq = self::pdo()->prepare('SELECT * FROM ag_releases WHERE app = ? AND version = ? AND ' . ($plugin !== '' ? "kind = 'plugin' AND plugin = ?" : "kind <> 'plugin'") . ' LIMIT 1');
+        $rq->execute(array_merge([$licence['app'], $version], $plugin !== '' ? [$plugin] : []));
+        $rel = $rq->fetch(\PDO::FETCH_ASSOC) ?: null;
+        if ($plugin !== '') {   // a plugin's install moves only that plugin's installed version, never the app's
+            $act === 'installed' && $rel !== null && AmetecsPlugins::put((string) $licence['tenant_id'], $rel, ['installed_version' => mb_substr($version, 0, 39)], 'plugin installed');
+            $act !== 'installed' && self::event($rel, (string) $licence['app'], (string) $licence['tenant_id'], $act, $from, $version, 'plugin ' . $plugin . ': ' . mb_substr($detail, 0, 2000), (string) $licence['id']);
+            return;
+        }
+        self::event($rel, (string) $licence['app'], (string) $licence['tenant_id'], $act, $from, $version, mb_substr($detail, 0, 2000), (string) $licence['id']);
         $act === 'installed' && AmetecsLicences::put((string) $licence['tenant_id'], (string) $licence['app'], ['app_version' => mb_substr($version, 0, 39)], 'Reported a new version');
     }
 }

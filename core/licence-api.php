@@ -16,6 +16,8 @@
  *        "package_hash", "signature", "mandatory", "payment", "downloadable", "plugins", "rollback"}  (SmartPRS3's field names)
  *   {"action": "download", "version": "2.2.0"}          -> the zip (application/zip), or JSON {"ok": false, "error"}
  *   {"action": "report", "version": "2.2.0", "result": "applied|failed|rolled_back", "detail": "...", "from_version": "2.1.0"}
+ *   download / report take "plugin": "<code>" for a plugin package (Phase 6); "updates" lists each plugin with its state.
+ *   {"action": "stats", "stats": {"tiles": [{"label", "value", "sub", "tone"}], "list": {...}}}  -> the dashboard figures (Phase 6)
  * Unknown keys get one neutral answer (no hint whether a key exists). Every call is in the licence history.
  */
 declare(strict_types=1);
@@ -30,12 +32,12 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
     echo json_encode(['ok' => false, 'message' => 'POST only.']);
     exit;
 }
-$in = json_decode((string) file_get_contents('php://input', false, null, 0, 16384), true);
+$in = json_decode((string) file_get_contents('php://input', false, null, 0, 65536), true);
 $in = is_array($in) ? $in : $_POST;
 $action = (string) ($in['action'] ?? '');
-if (!in_array($action, ['activate', 'check', 'updates', 'download', 'report'], true)) {
+if (!in_array($action, ['activate', 'check', 'updates', 'download', 'report', 'stats'], true)) {
     http_response_code(400);
-    echo json_encode(['ok' => false, 'message' => 'action must be activate, check, updates, download or report.']);
+    echo json_encode(['ok' => false, 'message' => 'action must be activate, check, updates, download, report or stats.']);
     exit;
 }
 
@@ -68,12 +70,18 @@ if ($action === 'updates') {
     echo json_encode(AmetecsReleases::apiCheck($lic, $current), JSON_UNESCAPED_SLASHES);
     exit;
 }
-if ($action === 'report') {
-    AmetecsReleases::apiReport($lic, mb_substr(trim((string) ($in['version'] ?? '')), 0, 39), (string) ($in['result'] ?? $in['status'] ?? ''), (string) ($in['detail'] ?? ''), $current);
+$plugin = AmetecsPlugins::ready() && trim((string) ($in['plugin'] ?? '')) !== '' ? AmetecsPlugins::slug((string) $in['plugin']) : '';
+if ($action === 'stats') {
+    AmetecsShell::saveStats($lic, is_array($in['stats'] ?? null) ? $in['stats'] : []);
     echo json_encode(['ok' => true]);
     exit;
 }
-$d = AmetecsReleases::apiDownload($lic, trim((string) ($in['version'] ?? '')), $current);
+if ($action === 'report') {
+    AmetecsReleases::apiReport($lic, mb_substr(trim((string) ($in['version'] ?? '')), 0, 39), (string) ($in['result'] ?? $in['status'] ?? ''), (string) ($in['detail'] ?? ''), $current, $plugin);
+    echo json_encode(['ok' => true]);
+    exit;
+}
+$d = AmetecsReleases::apiDownload($lic, trim((string) ($in['version'] ?? '')), $current, $plugin);
 if (!$d['ok']) {
     http_response_code(403);
     echo json_encode(['ok' => false, 'error' => $d['why']]);
