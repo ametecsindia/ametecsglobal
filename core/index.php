@@ -301,6 +301,24 @@ if ($billOn && ($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && str_starts_with(
 }
 // ACCOUNT SETTINGS + SUPPORT (Phase 4): change own password; send a message to Ametecs.
 $okMsg = null;
+// PLAN-CHANGE REQUEST (18 Nov 2026): where Ametecs has set no online price, the administrator asks for a plan or seats
+// change from Licences & plans; it lands in Ametecs' activity log (Super Admin dashboard) and, if email is set up, their inbox.
+if ($user !== null && $isAdmin && $session !== null && ($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['do'] ?? '') === 'plan-request') {
+    $ra = (string) ($_POST['app'] ?? ''); $rp = (string) ($_POST['plan'] ?? ''); $rs = (int) ($_POST['seats'] ?? 0);
+    $rName = AmetecsAccess::plugins(true)[$ra]['name'] ?? null;
+    if (!$session->verify((string) ($_POST['csrf'] ?? '')) || $rName === null || !in_array($rp, ['monthly', 'yearly'], true) || $rs < 1) {
+        $_SESSION['flash_problem'] = 'Choose a plan and the number of seats.';
+    } else {
+        $rn = mb_substr(trim((string) ($_POST['note'] ?? '')), 0, 500);
+        $what = $rName . ': ' . ucfirst($rp) . ', ' . $rs . ' seats' . ($rn !== '' ? ' - ' . $rn : '');
+        AmetecsData::log((string) ($user['email'] ?? ''), 'Requested a plan change', $tenant, $what);
+        $to = (string) (AmetecsBilling::settings()['support_email'] ?? '') ?: (string) AmetecsBilling::settings()['email'];
+        $to !== '' && AmetecsMail::box($pdo)->ready() && AmetecsMail::send($pdo, $to, '[AmetecsGlobal] Plan change request: ' . $company, "From: " . ($user['email'] ?? '') . " (" . $company . ", client #" . $tenant . ")\n\n" . $what);
+        $_SESSION['flash_notice'] = 'Request sent to Ametecs: ' . $what . '. They confirm the price and update your plan.';
+    }
+    header('Location: ?v=licences');
+    exit;
+}
 if ($user !== null && $session !== null && ($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && in_array($_POST['do'] ?? '', ['account-password', 'support-send'], true)) {
     if (!$session->verify((string) ($_POST['csrf'] ?? ''))) {
         $problem = 'This page had expired. Please try again.';
@@ -676,7 +694,7 @@ a{color:inherit}
 .ucnt{margin-left:auto;font-style:normal;font-size:11px;background:var(--gold);color:#fff;padding:1px 8px;border-radius:99px}.lic-t td.r,.lic-t th.r{text-align:right}
 .lp{display:inline-block;padding:2px 10px;border-radius:99px;font-size:12px;font-weight:600}.lp-green{background:var(--ok-bg);color:var(--ok)}.lp-amber{background:#fffbeb;color:#b45309}.lp-red{background:var(--bad-bg);color:var(--bad)}.lp-grey{background:#f1f5f9;color:var(--mute)}
 </style>
-<link rel="stylesheet" href="assets/shell.css?v=13"><link rel="stylesheet" href="assets/theme-gold.css?v=2"></head><body>
+<link rel="stylesheet" href="assets/shell.css?v=14"><link rel="stylesheet" href="assets/theme-gold.css?v=2"></head><body>
 <?php if ($user === null): ?>
 <div class="auth">
   <aside class="auth-side">
@@ -902,29 +920,56 @@ a{color:inherit}
         return $h;
     };
     uasort($lics, static fn ($a, $b) => strcmp((string) ($a['valid_until'] ?: '9999'), (string) ($b['valid_until'] ?: '9999'))); ?>
-  <div class="pgh"><div><h1>Licences &amp; plans</h1><p>Your plan for each application: seats, price and validity. Renew online, or ask Ametecs to change a plan or add seats.</p></div></div>
+  <?php // PHASE 7 (owner, 18 Nov 2026: "still pending this page"): summary, a card per app with seat use and time left,
+    // buy / change online where Ametecs has set a price, else a plan-change request that reaches Ametecs straight away.
+    $todayL = AmetecsAccess::today();
+    $nextR = null; foreach ($lics as $c => $l) { $u = (string) ($l['valid_until'] ?? ''); if ($u !== '' && $u >= $todayL && ($nextR === null || $u < $nextR[1])) { $nextR = [$c, $u]; } }
+    $yearly = 0.0; foreach ($lics as $l) { if ($l['currency'] === 'INR' && (float) ($l['price'] ?? 0) > 0) { $yearly += (float) $l['price'] * (['monthly' => 12, 'yearly' => 1][$l['plan']] ?? 0); } }
+    $reqForm = static function (string $code, array $l) use ($apps, $session, $used): string {
+        $min = $code === 'smartprs3' ? max(1, $used) : 1;
+        return '<details class="pform"><summary class="btn2 ghost"><i class="fas fa-sliders"></i>Change plan or seats</summary><form method="post"><input type="hidden" name="csrf" value="' . ag_h($session->token()) . '"><input type="hidden" name="do" value="plan-request"><input type="hidden" name="app" value="' . ag_h($code) . '">'
+            . '<div class="pf-row"><label>Plan<select name="plan"><option value="monthly"' . ($l['plan'] === 'monthly' ? ' selected' : '') . '>Monthly</option><option value="yearly"' . ($l['plan'] !== 'monthly' ? ' selected' : '') . '>Yearly</option></select></label>'
+            . '<label>' . ag_h(ucfirst((string) ($apps[$code]['unit'] ?? 'users'))) . '<input type="number" name="seats" min="' . $min . '" value="' . max($min, (int) $l['seats']) . '" required></label></div>'
+            . '<label class="pf-note">Anything else (optional)<textarea name="note" rows="2" placeholder="e.g. add 20 seats from next month"></textarea></label>'
+            . '<button class="btn2 primary"><i class="fas fa-paper-plane"></i>Send request</button><p class="muted2" style="font-size:11.5px;margin:8px 0 0">Ametecs confirms the price and updates your plan; you see it here and under Payments.</p></form></details>';
+    }; ?>
+  <div class="pgh"><div><h1>Licences &amp; plans</h1><p>Your plan for each application: seats, validity and price. Renew, change plan or seats, or add an application.</p></div></div>
   <?php if ($notice !== null): ?><div class="okmsg"><i class="fas fa-circle-check"></i><?= ag_h($notice) ?></div><?php endif; ?>
-  <div class="grid2c"><?php foreach ($lics as $code => $l): $st = AmetecsLicences::stateOf($l); [$sl, $sc] = AmetecsLicences::STATES[$st]; $until = (string) ($l['valid_until'] ?? '');
-      $days = $until === '' ? null : (int) floor((strtotime($until) - strtotime(AmetecsAccess::today())) / 86400); ?>
-    <div class="ibox"><h3><i class="fas fa-key" style="color:var(--gold)"></i><?= ag_h((string) ($apps[$code]['name'] ?? $code)) ?><span class="lp lp-<?= $sc ?>" style="margin-left:auto"><?= ag_h($sl) ?></span></h3>
-      <dl><dt>Plan</dt><dd><?= ag_h(AmetecsLicences::PLANS[$l['plan']] ?? $l['plan']) ?> &middot; <?= $l['deployment'] === 'onprem' ? 'On-premise' : 'Cloud' ?></dd>
-        <dt>Seats</dt><dd><?= (int) $l['seats'] > 0 ? (int) $l['seats'] : 'Unlimited' ?> <?= ag_h((string) ($apps[$code]['unit'] ?? 'users')) ?><?= $code === 'smartprs3' ? ' <small class="muted2">(' . $used . ' in use)</small>' : '' ?></dd>
-        <dt>Price</dt><dd><?= (float) ($l['price'] ?? 0) > 0 ? ag_h($l['currency'] . ' ' . number_format((float) $l['price'], 2)) . ' <small class="muted2">per ' . (['monthly' => 'month', 'yearly' => 'year'][$l['plan']] ?? 'period') . ' + GST</small>' : '<span class="muted2">as agreed with Ametecs</span>' ?></dd>
-        <dt>Valid till</dt><dd><?= $until === '' ? 'No end date' : ag_h(date('d M Y', (int) strtotime($until))) . ($days !== null ? ' <small style="' . ($days < 0 ? 'color:#b91c1c' : ($days <= 30 ? 'color:#b45309' : 'color:#94a3b8')) . '">' . ($days < 0 ? 'ended ' . -$days . ' days ago' : $days . ' days left') . '</small>' : '') ?></dd></dl>
-      <div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap"><?php if ($payOnline && (float) ($l['price'] ?? 0) > 0 && $l['currency'] === 'INR' && in_array($l['plan'], ['monthly', 'yearly'], true) && $st !== 'off'): ?>
-        <form method="post" style="display:inline"><input type="hidden" name="csrf" value="<?= ag_h($session->token()) ?>"><input type="hidden" name="do" value="pay-renew"><input type="hidden" name="licence" value="<?= (int) $l['id'] ?>"><button class="btn2 primary"><i class="fas fa-rotate"></i>Renew online</button></form><?php endif; ?>
-        <?php if ($billOn && ($prices[$code] ?? []) !== [] && !in_array($l['status'], ['suspended', 'cancelled'], true) && $l['plan'] !== 'perpetual'): ?></div><?= $planForm($code, $l, 'Change plan or seats') ?><div>
-        <?php else: ?><a class="btn2 ghost" href="?v=support&amp;subject=<?= rawurlencode('Change plan / seats: ' . ($apps[$code]['name'] ?? $code)) ?>"><i class="fas fa-sliders"></i>Change plan or seats</a><?php endif; ?></div></div>
+  <section class="lstrip">
+    <div><i class="fas fa-layer-group"></i><b><?= count($lics) ?></b><span>Applications licensed</span></div>
+    <div><i class="fas fa-users"></i><b><?= array_sum(array_map(static fn ($l) => (int) $l['seats'], $lics)) ?></b><span>Seats in total</span></div>
+    <div><i class="fas fa-calendar-check"></i><b><?= $nextR !== null ? ag_h(date('d M Y', (int) strtotime($nextR[1]))) : '—' ?></b><span><?= $nextR !== null ? 'Next renewal &middot; ' . ag_h((string) ($apps[$nextR[0]]['name'] ?? $nextR[0])) : 'No renewal due' ?></span></div>
+    <div><i class="fas fa-indian-rupee-sign"></i><b><?= $yearly > 0 ? 'INR ' . number_format($yearly) : '—' ?></b><span><?= $yearly > 0 ? 'a year, before GST' : 'Price as agreed with Ametecs' ?></span></div>
+  </section>
+  <div class="lgrid"><?php foreach ($lics as $code => $l): $st = AmetecsLicences::stateOf($l); [$sl, $sc] = AmetecsLicences::STATES[$st]; $until = (string) ($l['valid_until'] ?? ''); $p = $apps[$code] ?? ['name' => $code, 'unit' => 'users', 'color' => '#B8893B', 'what' => ''];
+      $days = $until === '' ? null : (int) floor((strtotime($until) - strtotime($todayL)) / 86400);
+      $len = ['monthly' => 30, 'yearly' => 365, 'trial' => 14][$l['plan']] ?? 365;
+      $tpc = $days === null ? 100 : max(0, min(100, (int) round(100 * $days / $len)));
+      $seats = (int) $l['seats']; $usedN = $code === 'smartprs3' ? $used : null; $upc = $usedN !== null && $seats > 0 ? min(100, (int) round(100 * $usedN / $seats)) : null;
+      $canBuy = $billOn && ($prices[$code] ?? []) !== [] && !in_array($l['status'], ['suspended', 'cancelled'], true) && $l['plan'] !== 'perpetual'; ?>
+    <article class="lcard" style="--c:<?= ag_h((string) ($p['color'] ?? '#B8893B')) ?>">
+      <header><div class="logo"><?= $logoOf($code, $p) ?></div><span class="lp lp-<?= $sc ?>"><?= ag_h($sl) ?></span></header>
+      <div class="lchips"><span><i class="fas fa-<?= $l['deployment'] === 'onprem' ? 'server' : 'cloud' ?>"></i><?= $l['deployment'] === 'onprem' ? 'On-premise' : 'Cloud' ?></span><span><i class="fas fa-repeat"></i><?= ag_h(AmetecsLicences::PLANS[$l['plan']] ?? $l['plan']) ?></span>
+        <span><i class="fas fa-tag"></i><?= (float) ($l['price'] ?? 0) > 0 ? ag_h($l['currency'] . ' ' . number_format((float) $l['price'])) . ' / ' . (['monthly' => 'month', 'yearly' => 'year'][$l['plan']] ?? 'period') : 'Price as agreed' ?></span></div>
+      <div class="lmeter"><div class="lmh"><span>Seats</span><b><?= $usedN !== null ? $usedN . ' / ' : '' ?><?= $seats > 0 ? $seats : '&infin;' ?> <small><?= ag_h((string) $p['unit']) ?><?= $usedN !== null ? ' in use' : '' ?></small></b></div>
+        <em class="lbar"><i style="width:<?= $upc ?? 100 ?>%;<?= $upc === null ? 'opacity:.25' : ($upc >= 90 ? 'background:#dc2626' : ($upc >= 75 ? 'background:#d97706' : '')) ?>"></i></em></div>
+      <div class="lmeter"><div class="lmh"><span>Valid till</span><b><?= $until === '' ? 'No end date' : ag_h(date('d M Y', (int) strtotime($until))) ?> <small class="<?= $days !== null && $days < 0 ? 'tred' : ($days !== null && $days <= 30 ? 'tamb' : '') ?>"><?= $days === null ? '' : ($days < 0 ? 'ended ' . -$days . ' days ago' : $days . ' days left') ?></small></b></div>
+        <em class="lbar t"><i style="width:<?= $tpc ?>%;<?= $days !== null && $days <= 30 ? 'background:#d97706' : '' ?>"></i></em></div>
+      <footer><?php if ($payOnline && (float) ($l['price'] ?? 0) > 0 && $l['currency'] === 'INR' && in_array($l['plan'], ['monthly', 'yearly'], true) && $st !== 'off'): ?>
+        <form method="post"><input type="hidden" name="csrf" value="<?= ag_h($session->token()) ?>"><input type="hidden" name="do" value="pay-renew"><input type="hidden" name="licence" value="<?= (int) $l['id'] ?>"><button class="btn2 primary"><i class="fas fa-rotate"></i>Renew online</button></form><?php endif; ?>
+        <?= $canBuy ? $planForm($code, $l, 'Change plan or seats') : ($st !== 'off' || $l['status'] === 'active' ? $reqForm($code, $l) : '<a class="btn2 ghost" href="?v=support">Contact Ametecs</a>') ?></footer>
+    </article>
   <?php endforeach; ?></div>
+  <?php if ($lics === []): ?><div class="lic-t"><div class="empty2" style="padding:30px">No licences yet.</div></div><?php endif; ?>
   <?php $buyable = $billOn ? array_filter($apps, static fn ($p, $c) => !isset($lics[$c]) && ($prices[$c] ?? []) !== [] && array_filter((array) $prices[$c]) !== [], ARRAY_FILTER_USE_BOTH) : [];
   if ($buyable !== []): ?>
   <h2 class="dsec"><i class="fas fa-cart-shopping"></i>Add an application<span>pay online, start at once</span></h2>
-  <div class="grid2c"><?php foreach ($buyable as $code => $p): $r = $prices[$code]; ?>
-    <div class="ibox"><h3><span class="logo" style="height:28px"><?= $logoOf($code, $p) ?></span><span class="muted2" style="margin-left:auto;font-size:12px;font-weight:500"><?= ag_h((string) $p['what']) ?></span></h3>
-      <p class="muted2" style="font-size:13px;margin:4px 0 12px">From <b style="color:#0f172a">INR <?= number_format(min(array_filter([(float) ($r['monthly'] ?? 0), (float) ($r['yearly'] ?? 0) / 12])), 2) ?></b> per <?= ag_h(rtrim((string) $p['unit'], 's')) ?> a month + GST</p>
-      <?= $planForm($code, null, 'Buy ' . $p['name']) ?></div>
+  <div class="lgrid"><?php foreach ($buyable as $code => $p): $r = $prices[$code]; ?>
+    <article class="lcard" style="--c:<?= ag_h((string) $p['color']) ?>"><header><div class="logo"><?= $logoOf($code, $p) ?></div><span class="lp lp-grey">Not in your plan</span></header>
+      <p class="muted2" style="font-size:13px;margin:0"><?= ag_h((string) $p['what']) ?></p>
+      <p style="font-size:13px;margin:0">From <b>INR <?= number_format(min(array_filter([(float) ($r['monthly'] ?? 0), (float) ($r['yearly'] ?? 0) / 12])), 2) ?></b> per <?= ag_h(rtrim((string) $p['unit'], 's')) ?> a month + GST</p>
+      <footer><?= $planForm($code, null, 'Buy ' . $p['name']) ?></footer></article>
   <?php endforeach; ?></div><?php endif; ?>
-  <?php if ($lics === []): ?><div class="lic-t"><div class="empty2" style="padding:30px">No licences yet.</div></div><?php endif; ?>
 
 <?php elseif ($view === 'notifications'): ?>
   <div class="pgh"><div><h1>Notifications</h1><p>Updates, invoices, renewals and installation alerts for <?= ag_h($company ?: 'your company') ?>, most urgent first. They clear by themselves once handled.</p></div></div>

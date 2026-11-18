@@ -233,3 +233,20 @@ img,video,canvas{max-width:100%}
 .pf-sum{display:grid;gap:6px;margin:12px 0;font-size:13px;color:#64748b}.pf-sum span{display:flex;justify-content:space-between}.pf-sum b{color:#0f172a}
 .pf-tot{border-top:1px dashed #e5dccb;padding-top:8px;font-weight:700;color:#0f172a!important}.pf-tot b{font-size:16px;color:#9a7228!important}
 @media (max-width:560px){.pf-row{grid-template-columns:1fr}}
+/* Licences & plans (18 Nov 2026) */
+.lstrip{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:16px}
+.lstrip>div{background:#fff;border:1px solid #efe6d4;border-radius:14px;padding:14px 16px;display:grid;grid-template-columns:38px 1fr;column-gap:12px;align-items:center;box-shadow:0 1px 2px rgba(60,40,10,.04)}
+.lstrip i{grid-row:span 2;width:38px;height:38px;border-radius:11px;display:grid;place-items:center;background:#fbf3e2;color:#9a7228}
+.lstrip b{font-size:18px;line-height:1.2}.lstrip span{font-size:12px;color:#7a6e5b}
+.lgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px;align-items:start}
+.lcard{position:relative;background:#fff;border:1px solid #efe6d4;border-radius:16px;padding:18px;display:grid;gap:14px;box-shadow:0 1px 2px rgba(60,40,10,.04),0 12px 30px -22px rgba(60,40,10,.25);overflow:hidden}
+.lcard:before{content:"";position:absolute;inset:0 0 auto;height:4px;background:var(--c)}
+.lcard header{display:flex;align-items:center;justify-content:space-between;gap:10px}.lcard .logo{height:34px;display:flex;align-items:center}.lcard .logo img{max-height:32px;max-width:160px}
+.lchips{display:flex;flex-wrap:wrap;gap:6px}.lchips span{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:#4a3f2e;background:#fbf8f2;border:1px solid #f1e8d6;border-radius:20px;padding:4px 10px}.lchips i{color:#b8893b;font-size:11px}
+.lmeter{display:grid;gap:6px}.lmh{display:flex;justify-content:space-between;align-items:baseline;font-size:12px;color:#7a6e5b}.lmh b{font-size:13.5px;color:#17130c}.lmh small{font-weight:500;color:#94a3b8;font-size:11.5px}
+.lbar{display:block;height:7px;border-radius:9px;background:#f1ece2;overflow:hidden}.lbar i{display:block;height:100%;border-radius:9px;background:linear-gradient(90deg,#16a34a,#22c55e)}.lbar.t i{background:linear-gradient(90deg,#d4a65a,#b8893b)}
+.lcard footer{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-start;border-top:1px solid #f3eee4;padding-top:12px}.lcard footer .pform{margin:0;flex:0 0 auto}.lcard footer .pform[open]{flex-basis:100%}.lcard .lp{white-space:nowrap}.lcard footer form:not([data-plan]):not(.pform form){display:inline}
+.pf-note{display:grid;gap:5px;font-size:11.5px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.3px;margin-top:10px}.pf-note textarea{border:1px solid #e5dccb;border-radius:9px;padding:8px 10px;font:inherit;font-size:13px;text-transform:none;letter-spacing:0;resize:vertical}
+.pform form>.btn2{margin-top:12px}
+@media (max-width:1000px){.lstrip{grid-template-columns:1fr 1fr}}
+@media (max-width:520px){.lstrip{grid-template-columns:1fr}}
