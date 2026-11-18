@@ -940,7 +940,7 @@ main{max-width:1560px;padding:16px 26px 20px}
 @media (max-width:1100px){.kstrip{grid-template-columns:repeat(3,1fr)}.dgrid2{grid-template-columns:1fr}}
 .cn b{white-space:nowrap}.mxt td:last-child,.mxt th:last-child{padding-right:16px;white-space:nowrap}.mxt th.ac{padding-left:4px;padding-right:4px}.mxt th:first-child{width:30%}
 </style>
-<link rel="stylesheet" href="assets/shell.css?v=6"><link rel="stylesheet" href="assets/super.css?v=3"></head><body>
+<link rel="stylesheet" href="assets/shell.css?v=6"><link rel="stylesheet" href="assets/super.css?v=5"></head><body>
 <?php
 $myName = trim((string) ($me['name'] ?? '')) ?: ucfirst((string) strtok($meEmail, '@'));
 $myIni = strtoupper(implode('', array_map(static fn (string $w): string => mb_substr($w, 0, 1), array_slice(preg_split('/[\s._-]+/', $myName) ?: ['S'], 0, 2))));
@@ -1001,7 +1001,7 @@ $myIni = strtoupper(implode('', array_map(static fn (string $w): string => mb_su
         <form method="post"><?= $csrf() ?><button name="do" value="signout"><i class="fas fa-arrow-right-from-bracket"></i>Sign out</button></form></div></details>
   </div>
 </header>
-<main>
+<main class="pg-<?= ag_h($page) ?>">
 <div class="toasts" id="toasts">
 <?php if ($problem !== null): ?><div class="toast bad"><i class="fas fa-circle-exclamation"></i><span><?= ag_h($problem) ?></span><button type="button" onclick="this.parentNode.remove()">&times;</button></div><?php endif; ?>
 <?php if ($notice !== null): ?><div class="toast" data-auto><i class="fas fa-circle-check"></i><span><?= ag_h($notice) ?></span><button type="button" onclick="this.parentNode.remove()">&times;</button></div><?php endif; ?>
@@ -1130,7 +1130,7 @@ $myIni = strtoupper(implode('', array_map(static fn (string $w): string => mb_su
 <?php elseif ($page === 'client-new'): ?>
   <h1>New client</h1><p class="sub">Creates the company, its first administrator login and its app licences in one step. The administrator signs in at the AmetecsGlobal front door.</p>
   <form method="post"><?= $csrf() ?><input type="hidden" name="do" value="client-create">
-  <div class="box"><div class="hd"><h2>1 · Company</h2></div><div class="bd grid2">
+  <div class="box"><div class="hd"><h2><span class="stepn">1</span>Company</h2></div><div class="bd grid2">
     <div><label>Company name <span class="req">*</span></label><input name="name" required value="<?= $f('name') ?>" placeholder="ABC Collections Pvt Ltd"></div>
     <div><label>Client code <span class="req">*</span></label><input name="code" required value="<?= $f('code') ?>" placeholder="ABC" maxlength="20"></div>
     <div><label>Legal name (for payslips &amp; letters)</label><input name="legal_name" value="<?= $f('legal_name') ?>"></div>
@@ -1138,17 +1138,17 @@ $myIni = strtoupper(implode('', array_map(static fn (string $w): string => mb_su
     <div><label>Time zone</label><select name="timezone"><?php foreach ($timezones as $z): ?><option<?= ($form['timezone'] ?? 'Asia/Kolkata') === $z ? ' selected' : '' ?>><?= $z ?></option><?php endforeach; ?></select></div>
     <div><label>State</label><input name="state" value="<?= $f('state') ?>" placeholder="Telangana"></div>
   </div></div>
-  <div class="box"><div class="hd"><h2>2 · Contact person</h2></div><div class="bd grid2">
+  <div class="box"><div class="hd"><h2><span class="stepn">2</span>Contact person</h2></div><div class="bd grid2">
     <div><label>Name</label><input name="contact_name" value="<?= $f('contact_name') ?>"></div>
     <div><label>Phone</label><input name="contact_phone" value="<?= $f('contact_phone') ?>"></div>
     <div><label>Email</label><input type="email" name="contact_email" value="<?= $f('contact_email') ?>"></div>
     <div><label>Notes</label><input name="notes" value="<?= $f('notes') ?>"></div>
   </div></div>
-  <div class="box"><div class="hd"><h2>3 · Client administrator login</h2></div><div class="bd grid2">
+  <div class="box"><div class="hd"><h2><span class="stepn">3</span>Client administrator login</h2></div><div class="bd grid2">
     <div><label>Administrator email <span class="req">*</span></label><input type="email" name="admin_email" required value="<?= $f('admin_email') ?>"></div>
     <div><label>Password</label><input name="admin_password" minlength="<?= Session::PASSWORD_FLOOR ?>" placeholder="leave empty to generate one"></div>
   </div></div>
-  <div class="box"><div class="hd"><h2>4 · Apps &amp; licences</h2><span class="muted">all apps start ticked - untick what this client does not take; valid till left empty = one year</span></div>
+  <div class="box"><div class="hd"><h2><span class="stepn">4</span>Apps &amp; licences</h2><span class="muted">all apps start ticked - untick what this client does not take; valid till left empty = one year</span></div>
     <?= $licenceRows('', isset($form['p']) ? array_map(static fn ($r) => ['on' => isset($r['on']), 'seats' => (int) ($r['seats'] ?? 0), 'until' => (string) ($r['until'] ?? '')], (array) $form['p']) + array_fill_keys(array_keys($plugins), ['on' => false, 'seats' => 0, 'until' => ''])
         : array_fill_keys(array_keys($plugins), ['on' => true, 'seats' => 25, 'until' => ''])) ?>
     <div class="ft"><a class="btn ghost" href="?p=clients">Cancel</a> <button class="btn gold">Create client</button></div></div>
@@ -1158,29 +1158,15 @@ $myIni = strtoupper(implode('', array_map(static fn (string $w): string => mb_su
     $tid = (string) $t['id'];
     $m = $meta[$tid] ?? [];
     $logins = $admins($tid); ?>
-  <div class="row" style="margin-bottom:6px"><a href="?p=clients" class="muted">← Clients</a></div>
+  <div class="phero"><div class="row" style="margin-bottom:6px"><a href="?p=clients" class="muted">← Clients</a></div>
   <div class="row"><h1><?= ag_h($t['name']) ?></h1><?= $statusPill((string) $t['status_code']) ?><?= !empty($m['house']) ? '<span class="pill amber">Ametecs - house client for testing</span>' : '' ?></div>
-  <p class="sub">Code <?= ag_h($t['code']) ?> · client #<?= (int) $tid ?> · since <?= $d($t['onboarded_on'] ?? $t['created_at']) ?> · <?= (int) ($used[$tid] ?? 0) ?> active employees</p>
-  <div class="box"><div class="bd row"><b>Sign-in link</b>
-    <?php if (($t['subdomain'] ?? '') !== ''): $cl = AmetecsMail::clientLink((string) $t['subdomain']); ?>
-      <code id="cl"><?= ag_h($cl) ?></code><button type="button" class="btn ghost" onclick="navigator.clipboard.writeText(document.getElementById('cl').textContent);this.textContent='Copied'">Copy</button>
-      <a class="btn ghost" href="<?= ag_h($cl) ?>" target="_blank">Open ↗</a><span class="muted">Give this to the client: it shows their company name and only accepts their logins.</span>
-    <?php else: ?><span class="muted">No sign-in link name yet - set one under Details below.</span><?php endif; ?></div></div>
-
-  <div class="box"><div class="hd"><h2>Status</h2></div><div class="bd row">
-    <span>This client is <b><?= ag_h($statuses[$t['status_code']] ?? $t['status_code']) ?></b>.</span>
-    <?php foreach (['active' => ['Reactivate', 'navy'], 'suspended' => ['Suspend', 'danger'], 'closed' => ['Deactivate', 'danger']] as $to => [$label, $cls]): if ($to === $t['status_code']) continue; ?>
-      <form method="post" class="inline" onsubmit="return confirm('<?= $label ?> <?= ag_h(addslashes($t['name'])) ?>?')"><?= $csrf() ?><input type="hidden" name="do" value="client-status"><input type="hidden" name="id" value="<?= (int) $tid ?>"><input type="hidden" name="to" value="<?= $to ?>"><button class="btn <?= $cls ?>"><?= $label ?></button></form>
-    <?php endforeach; ?>
-    <span class="muted"><b>Suspend</b> = a temporary stop (e.g. unpaid). <b>Deactivate</b> = the client has left. Either way nobody at this client can sign in to any app, and no data is deleted; Reactivate undoes both.</span>
-  </div></div>
-
-  <form method="post" id="apps"><?= $csrf() ?><input type="hidden" name="do" value="licences-save"><input type="hidden" name="id" value="<?= (int) $tid ?>">
-  <div class="box"><div class="hd"><h2>Apps &amp; licences</h2><span class="muted">what this client can open, how many seats, until when</span></div>
+  <p class="sub">Code <?= ag_h($t['code']) ?> · client #<?= (int) $tid ?> · since <?= $d($t['onboarded_on'] ?? $t['created_at']) ?> · <?= (int) ($used[$tid] ?? 0) ?> active employees</p></div>
+  <div class="pg2"><div class="pgm"><form method="post" id="apps"><?= $csrf() ?><input type="hidden" name="do" value="licences-save"><input type="hidden" name="id" value="<?= (int) $tid ?>">
+  <div class="box"><div class="hd"><h2><i class="fas fa-layer-group"></i>Apps &amp; licences</h2><span class="muted">what this client can open, how many seats, until when</span></div>
     <?= $licenceRows($tid, (string) ($form['lic_for'] ?? '') === $tid ? array_map(static fn ($r) => ['on' => isset($r['on']), 'seats' => (int) ($r['seats'] ?? 0), 'until' => (string) ($r['until'] ?? '')], (array) ($form['p'] ?? [])) + array_fill_keys(array_keys($plugins), ['on' => false, 'seats' => 0, 'until' => '']) : []) ?>
     <div class="ft"><span class="muted" style="float:left">Valid till left empty = one year from today.</span><button class="btn gold">Save apps &amp; licences</button></div></div></form>
 
-  <div class="box" id="logins"><div class="hd"><h2>Logins</h2><span class="muted">one login per person works for every app this client has</span></div>
+  <div class="box" id="logins"><div class="hd"><h2><i class="fas fa-user-lock"></i>Logins</h2><span class="muted">one login per person works for every app this client has</span></div>
   <table><tr><th>Email</th><th>Role</th><th>Status</th><th>Created</th><th class="right">Actions</th></tr>
   <?php foreach ($logins as $u): $off = trim((string) ($u['disabled_at'] ?? '')) !== ''; ?><tr>
     <td><?= ag_h($u['email']) ?></td><td><?= ag_h(ucfirst((string) $u['status'])) ?></td><td><?= $off ? '<span class="pill red">Deactivated</span>' : '<span class="pill green">Can sign in</span>' ?></td><td><?= $d($u['created_at']) ?></td>
@@ -1200,8 +1186,25 @@ $myIni = strtoupper(implode('', array_map(static fn (string $w): string => mb_su
     <span class="muted">Add an administrator:</span><input type="email" name="email" placeholder="email" required><input name="password" placeholder="password (or empty)"><button class="btn navy">Create administrator</button></form>
   <div class="bd muted" style="font-size:13px">The client's administrator adds their own employees' logins inside SmartPRS 3 (Users).</div></div>
 
+  <div class="box"><div class="hd"><h2><i class="fas fa-clock-rotate-left"></i>Activity for this client</h2></div><table><tr><th>When</th><th>Who</th><th>What</th><th>Detail</th></tr>
+  <?php foreach (AmetecsData::activity($tid, 50) as $r): ?><tr><td><?= ag_h($r['at']) ?></td><td><?= ag_h($r['who']) ?></td><td><?= ag_h($r['what']) ?></td><td class="muted"><?= ag_h($r['detail']) ?></td></tr><?php endforeach; ?></table></div>
+
+</div><aside class="pgs"><div class="box"><div class="bd row"><b>Sign-in link</b>
+    <?php if (($t['subdomain'] ?? '') !== ''): $cl = AmetecsMail::clientLink((string) $t['subdomain']); ?>
+      <code id="cl"><?= ag_h($cl) ?></code><button type="button" class="btn ghost" onclick="navigator.clipboard.writeText(document.getElementById('cl').textContent);this.textContent='Copied'">Copy</button>
+      <a class="btn ghost" href="<?= ag_h($cl) ?>" target="_blank">Open ↗</a><span class="muted">Give this to the client: it shows their company name and only accepts their logins.</span>
+    <?php else: ?><span class="muted">No sign-in link name yet - set one under Details below.</span><?php endif; ?></div></div>
+
+  <div class="box"><div class="hd"><h2><i class="fas fa-toggle-on"></i>Status</h2></div><div class="bd row">
+    <span>This client is <b><?= ag_h($statuses[$t['status_code']] ?? $t['status_code']) ?></b>.</span>
+    <?php foreach (['active' => ['Reactivate', 'navy'], 'suspended' => ['Suspend', 'danger'], 'closed' => ['Deactivate', 'danger']] as $to => [$label, $cls]): if ($to === $t['status_code']) continue; ?>
+      <form method="post" class="inline" onsubmit="return confirm('<?= $label ?> <?= ag_h(addslashes($t['name'])) ?>?')"><?= $csrf() ?><input type="hidden" name="do" value="client-status"><input type="hidden" name="id" value="<?= (int) $tid ?>"><input type="hidden" name="to" value="<?= $to ?>"><button class="btn <?= $cls ?>"><?= $label ?></button></form>
+    <?php endforeach; ?>
+    <span class="muted"><b>Suspend</b> = a temporary stop (e.g. unpaid). <b>Deactivate</b> = the client has left. Either way nobody at this client can sign in to any app, and no data is deleted; Reactivate undoes both.</span>
+  </div></div>
+
   <form method="post"><?= $csrf() ?><input type="hidden" name="do" value="client-save"><input type="hidden" name="id" value="<?= (int) $tid ?>">
-  <div class="box"><div class="hd"><h2>Details</h2></div><div class="bd grid2">
+  <div class="box"><div class="hd"><h2><i class="fas fa-pen-to-square"></i>Details</h2></div><div class="bd grid2">
     <div><label>Company name</label><input name="name" required value="<?= ag_h($t['name']) ?>"></div>
     <div><label>Client code</label><input name="code" required value="<?= ag_h($t['code']) ?>"></div>
     <div><label>Sign-in link name</label><input name="slug" value="<?= ag_h((string) ($t['subdomain'] ?? '')) ?>"></div>
@@ -1213,8 +1216,7 @@ $myIni = strtoupper(implode('', array_map(static fn (string $w): string => mb_su
     <div class="full"><label>Notes</label><textarea name="notes" rows="2"><?= ag_h($m['notes'] ?? '') ?></textarea></div>
   </div><div class="ft"><button class="btn navy">Save details</button></div></div></form>
 
-  <div class="box"><div class="hd"><h2>Activity for this client</h2></div><table><tr><th>When</th><th>Who</th><th>What</th><th>Detail</th></tr>
-  <?php foreach (AmetecsData::activity($tid, 50) as $r): ?><tr><td><?= ag_h($r['at']) ?></td><td><?= ag_h($r['who']) ?></td><td><?= ag_h($r['what']) ?></td><td class="muted"><?= ag_h($r['detail']) ?></td></tr><?php endforeach; ?></table></div>
+  </aside></div>
 
 <?php elseif ($page === 'licences'):
     // PHASE 7 (owner, 18 Nov 2026: "redesign this page"): summary cards and status tabs that filter, a by-client view
@@ -1383,21 +1385,13 @@ $myIni = strtoupper(implode('', array_map(static fn (string $w): string => mb_su
     $lid = (int) $lc['id'];
     $btn = static fn (string $to, string $label, string $cls, string $ask = '') => '<form method="post" class="inline"' . ($ask !== '' ? ' onsubmit="return confirm(\'' . ag_h($ask) . '\')"' : '') . '>' . $csrf()
         . '<input type="hidden" name="do" value="licence-status"><input type="hidden" name="id" value="' . $lid . '"><input type="hidden" name="to" value="' . $to . '"><button class="btn ' . $cls . '">' . $label . '</button></form>'; ?>
-  <div class="row" style="margin-bottom:6px"><a href="?p=licences" class="muted">← Licences</a><?php if ($lt !== null): ?><span class="muted">·</span><a href="?p=client&id=<?= (int) $lt['id'] ?>" class="muted"><?= ag_h($lt['name']) ?></a><?php endif; ?></div>
+  <div class="phero"><div class="row" style="margin-bottom:6px"><a href="?p=licences" class="muted">← Licences</a><?php if ($lt !== null): ?><span class="muted">·</span><a href="?p=client&id=<?= (int) $lt['id'] ?>" class="muted"><?= ag_h($lt['name']) ?></a><?php endif; ?></div>
   <div class="row"><h1><?= ag_h($lp['name']) ?> · <?= ag_h($lt['name'] ?? '#' . $lc['tenant_id']) ?></h1><span class="pill <?= $sc ?>"><?= $lc['status'] === 'cancelled' ? 'Cancelled' : $sl ?></span>
     <span class="pill grey"><?= $lc['deployment'] === 'onprem' ? '<i class="fas fa-server"></i> On-premise' : '<i class="fas fa-cloud"></i> Cloud' ?></span></div>
-  <p class="sub"><?= ag_h(AmetecsLicences::PLANS[$lc['plan']] ?? '') ?> plan · <?= (int) $lc['seats'] ?> <?= ag_h($lp['unit']) ?> · valid till <?= $d($lc['valid_until'] ?? null) ?><?= ($lc['price'] ?? null) !== null ? ' · ' . ag_h($lc['currency']) . ' ' . number_format((float) $lc['price'], 2) : '' ?></p>
+  <p class="sub"><?= ag_h(AmetecsLicences::PLANS[$lc['plan']] ?? '') ?> plan · <?= (int) $lc['seats'] ?> <?= ag_h($lp['unit']) ?> · valid till <?= $d($lc['valid_until'] ?? null) ?><?= ($lc['price'] ?? null) !== null ? ' · ' . ag_h($lc['currency']) . ' ' . number_format((float) $lc['price'], 2) : '' ?></p></div>
 
-  <div class="box"><div class="hd"><h2>Actions</h2></div><div class="bd row">
-    <?= $lc['status'] !== 'active' ? $btn('active', '<i class="fas fa-play"></i> Activate', 'navy') : '' ?>
-    <?= $lc['plan'] !== 'perpetual' ? $btn('renew', '<i class="fas fa-rotate"></i> Renew ' . ['monthly' => '1 month', 'yearly' => '1 year', 'trial' => '14 days'][$lc['plan']], 'gold', 'Extend this licence by one period?') : '' ?>
-    <?= $lc['status'] === 'active' ? $btn('suspended', '<i class="fas fa-pause"></i> Suspend', 'danger', 'Suspend this licence? The app stops opening for this client; nothing is deleted.') : '' ?>
-    <?= $lc['status'] !== 'cancelled' ? $btn('cancelled', '<i class="fas fa-ban"></i> Cancel', 'danger', 'Cancel this licence? The client loses the app; history and data are kept.') : '' ?>
-    <?php if ((float) ($lc['price'] ?? 0) > 0 && $lc['plan'] !== 'perpetual' && AmetecsBilling::ready()): ?><form method="post" class="inline"><?= $csrf() ?><input type="hidden" name="do" value="invoice-new"><input type="hidden" name="licence" value="<?= $lid ?>"><button class="btn ghost"><i class="fas fa-file-invoice"></i> Raise renewal invoice</button></form><?php endif; ?>
-    <span class="muted"><b>Suspend</b> = temporary stop (e.g. unpaid). <b>Cancel</b> = the client no longer takes this app. Neither deletes anything; Activate undoes both.</span></div></div>
-
-  <form method="post" class="box"><?= $csrf() ?><input type="hidden" name="do" value="licence-save"><input type="hidden" name="id" value="<?= $lid ?>">
-    <div class="hd"><h2>Licence terms</h2></div><div class="bd grid2">
+  <div class="pg2"><div class="pgm"><form method="post" class="box"><?= $csrf() ?><input type="hidden" name="do" value="licence-save"><input type="hidden" name="id" value="<?= $lid ?>">
+    <div class="hd"><h2><i class="fas fa-file-signature"></i>Licence terms</h2></div><div class="bd grid2">
     <div><label>Deployment</label><select name="deployment"><?php foreach (AmetecsLicences::DEPLOYMENTS as $k => $v): ?><option value="<?= $k ?>"<?= $lc['deployment'] === $k ? ' selected' : '' ?>><?= $v ?></option><?php endforeach; ?></select></div>
     <div><label>Plan</label><select name="plan"><?php foreach (AmetecsLicences::PLANS as $k => $v): ?><option value="<?= $k ?>"<?= $lc['plan'] === $k ? ' selected' : '' ?>><?= $v ?></option><?php endforeach; ?></select></div>
     <div><label>Seats (<?= ag_h($lp['unit']) ?>)</label><input type="number" name="seats" min="1" value="<?= (int) $lc['seats'] ?>"></div>
@@ -1407,6 +1401,33 @@ $myIni = strtoupper(implode('', array_map(static fn (string $w): string => mb_su
     <div><label class="sw" style="text-transform:none;font-size:14px;color:var(--ink)"><input type="checkbox" name="auto_renew"<?= !empty($lc['auto_renew']) ? ' checked' : '' ?>> Renews automatically (billing arrives with the payments phase)</label></div>
     <div class="full"><label>Notes</label><textarea name="notes" rows="2"><?= ag_h((string) ($lc['notes'] ?? '')) ?></textarea></div>
     </div><div class="ft"><button class="btn navy">Save terms</button></div></form>
+
+  <?php $lpl = AmetecsPlugins::ready() ? AmetecsPlugins::catalogue((string) $lc['app']) : []; if ($lpl !== []): $ltid = (string) $lc['tenant_id'];
+      $pbtn = static fn (string $code, string $act, string $label, string $cls = 'ghost') => '<form method="post" class="inline">' . $csrf() . '<input type="hidden" name="do" value="licence-plugin"><input type="hidden" name="id" value="' . $lid . '"><input type="hidden" name="plugin" value="' . ag_h($code) . '"><input type="hidden" name="act" value="' . $act . '"><button class="btn ' . $cls . '" style="padding:4px 10px;font-size:12.5px">' . $label . '</button></form>'; ?>
+  <div class="box" id="plugins"><div class="hd"><h2><i class="fas fa-puzzle-piece"></i>Plugins for this client</h2><span class="muted">Give free = no payment needed &middot; Block = switched off for this client whatever they paid &middot; the price is set on the plugin's release</span></div>
+    <table><tr><th>Plugin</th><th>Latest</th><th>Price</th><th>For this client</th><th>Client switch</th><th>Version on their server</th><th class="right"></th></tr>
+    <?php foreach ($lpl as $pc => $pp): $prow = AmetecsPlugins::row($ltid, (string) $lc['app'], $pc); $pst = AmetecsPlugins::state($ltid, $pp['latest']); [$psl, $psc] = AmetecsPlugins::STATES[$pst]; $dlOn = (bool) ($prow['download'] ?? true); ?>
+      <tr><td><b><?= ag_h($pp['title']) ?></b><br><span class="muted" style="font-size:12px"><?= ag_h($pc) ?></span></td><td><a href="?p=release&id=<?= (int) $pp['latest']['id'] ?>"><?= ag_h((string) $pp['latest']['version']) ?></a></td>
+        <td><?= (float) ($pp['latest']['price'] ?? 0) > 0 ? ag_h($pp['latest']['currency'] . ' ' . number_format((float) $pp['latest']['price'], 2)) : 'Free' ?></td>
+        <td><span class="pill <?= $psc ?>"><?= ag_h($psl) ?></span><?= !$dlOn ? ' <span class="pill grey">no downloads</span>' : '' ?></td>
+        <td><?= AmetecsPlugins::authorised($pst) ? (($prow['enabled'] ?? 1) ? 'On' : 'Off') : '<span class="muted">-</span>' ?></td>
+        <td><?= ag_h((string) (($prow['installed_version'] ?? '') ?: (($prow['downloaded_version'] ?? '') !== '' && $prow['downloaded_version'] !== null ? 'downloaded ' . $prow['downloaded_version'] : '-'))) ?></td>
+        <td class="right" style="white-space:nowrap"><?= (float) ($pp['latest']['price'] ?? 0) > 0 ? (!empty($prow['granted']) ? $pbtn($pc, 'ungrant', 'Take back free') : $pbtn($pc, 'grant', 'Give free', 'gold')) : '' ?>
+          <?= !empty($prow['blocked']) ? $pbtn($pc, 'unblock', 'Unblock', 'navy') : $pbtn($pc, 'block', 'Block', 'danger') ?>
+          <?= $lc['deployment'] === 'onprem' ? ($dlOn ? $pbtn($pc, 'dl-off', 'Stop downloads') : $pbtn($pc, 'dl-on', 'Allow downloads')) : '' ?></td></tr>
+    <?php endforeach; ?></table></div>
+  <?php endif; ?>
+
+  <div class="box"><div class="hd"><h2><i class="fas fa-clock-rotate-left"></i>Licence history</h2></div><table><tr><th>When</th><th>Who</th><th>What</th><th>Detail</th></tr>
+  <?php foreach (AmetecsLicences::events((string) $lid) as $e): ?><tr><td style="white-space:nowrap"><?= ag_h($e['created_at']) ?></td><td><?= ag_h($e['by_who']) ?></td><td><?= ag_h($e['action']) ?></td><td class="muted" style="font-size:12.5px"><?= ag_h($e['detail']) ?></td></tr><?php endforeach; ?></table></div>
+
+</div><aside class="pgs"><div class="box"><div class="hd"><h2><i class="fas fa-bolt"></i>Actions</h2></div><div class="bd row">
+    <?= $lc['status'] !== 'active' ? $btn('active', '<i class="fas fa-play"></i> Activate', 'navy') : '' ?>
+    <?= $lc['plan'] !== 'perpetual' ? $btn('renew', '<i class="fas fa-rotate"></i> Renew ' . ['monthly' => '1 month', 'yearly' => '1 year', 'trial' => '14 days'][$lc['plan']], 'gold', 'Extend this licence by one period?') : '' ?>
+    <?= $lc['status'] === 'active' ? $btn('suspended', '<i class="fas fa-pause"></i> Suspend', 'danger', 'Suspend this licence? The app stops opening for this client; nothing is deleted.') : '' ?>
+    <?= $lc['status'] !== 'cancelled' ? $btn('cancelled', '<i class="fas fa-ban"></i> Cancel', 'danger', 'Cancel this licence? The client loses the app; history and data are kept.') : '' ?>
+    <?php if ((float) ($lc['price'] ?? 0) > 0 && $lc['plan'] !== 'perpetual' && AmetecsBilling::ready()): ?><form method="post" class="inline"><?= $csrf() ?><input type="hidden" name="do" value="invoice-new"><input type="hidden" name="licence" value="<?= $lid ?>"><button class="btn ghost"><i class="fas fa-file-invoice"></i> Raise renewal invoice</button></form><?php endif; ?>
+    <span class="muted"><b>Suspend</b> = temporary stop (e.g. unpaid). <b>Cancel</b> = the client no longer takes this app. Neither deletes anything; Activate undoes both.</span></div></div>
 
   <?php if ($lc['deployment'] === 'onprem'): $haveKey = trim((string) ($lc['key_hash'] ?? '')) !== ''; ?>
   <div class="box"><div class="hd"><h2><i class="fas fa-server"></i>On-premise installation</h2></div><div class="bd">
@@ -1429,24 +1450,7 @@ $myIni = strtoupper(implode('', array_map(static fn (string $w): string => mb_su
   </div></div>
   <?php endif; ?>
 
-  <?php $lpl = AmetecsPlugins::ready() ? AmetecsPlugins::catalogue((string) $lc['app']) : []; if ($lpl !== []): $ltid = (string) $lc['tenant_id'];
-      $pbtn = static fn (string $code, string $act, string $label, string $cls = 'ghost') => '<form method="post" class="inline">' . $csrf() . '<input type="hidden" name="do" value="licence-plugin"><input type="hidden" name="id" value="' . $lid . '"><input type="hidden" name="plugin" value="' . ag_h($code) . '"><input type="hidden" name="act" value="' . $act . '"><button class="btn ' . $cls . '" style="padding:4px 10px;font-size:12.5px">' . $label . '</button></form>'; ?>
-  <div class="box" id="plugins"><div class="hd"><h2><i class="fas fa-puzzle-piece"></i>Plugins for this client</h2><span class="muted">Give free = no payment needed &middot; Block = switched off for this client whatever they paid &middot; the price is set on the plugin's release</span></div>
-    <table><tr><th>Plugin</th><th>Latest</th><th>Price</th><th>For this client</th><th>Client switch</th><th>Version on their server</th><th class="right"></th></tr>
-    <?php foreach ($lpl as $pc => $pp): $prow = AmetecsPlugins::row($ltid, (string) $lc['app'], $pc); $pst = AmetecsPlugins::state($ltid, $pp['latest']); [$psl, $psc] = AmetecsPlugins::STATES[$pst]; $dlOn = (bool) ($prow['download'] ?? true); ?>
-      <tr><td><b><?= ag_h($pp['title']) ?></b><br><span class="muted" style="font-size:12px"><?= ag_h($pc) ?></span></td><td><a href="?p=release&id=<?= (int) $pp['latest']['id'] ?>"><?= ag_h((string) $pp['latest']['version']) ?></a></td>
-        <td><?= (float) ($pp['latest']['price'] ?? 0) > 0 ? ag_h($pp['latest']['currency'] . ' ' . number_format((float) $pp['latest']['price'], 2)) : 'Free' ?></td>
-        <td><span class="pill <?= $psc ?>"><?= ag_h($psl) ?></span><?= !$dlOn ? ' <span class="pill grey">no downloads</span>' : '' ?></td>
-        <td><?= AmetecsPlugins::authorised($pst) ? (($prow['enabled'] ?? 1) ? 'On' : 'Off') : '<span class="muted">-</span>' ?></td>
-        <td><?= ag_h((string) (($prow['installed_version'] ?? '') ?: (($prow['downloaded_version'] ?? '') !== '' && $prow['downloaded_version'] !== null ? 'downloaded ' . $prow['downloaded_version'] : '-'))) ?></td>
-        <td class="right" style="white-space:nowrap"><?= (float) ($pp['latest']['price'] ?? 0) > 0 ? (!empty($prow['granted']) ? $pbtn($pc, 'ungrant', 'Take back free') : $pbtn($pc, 'grant', 'Give free', 'gold')) : '' ?>
-          <?= !empty($prow['blocked']) ? $pbtn($pc, 'unblock', 'Unblock', 'navy') : $pbtn($pc, 'block', 'Block', 'danger') ?>
-          <?= $lc['deployment'] === 'onprem' ? ($dlOn ? $pbtn($pc, 'dl-off', 'Stop downloads') : $pbtn($pc, 'dl-on', 'Allow downloads')) : '' ?></td></tr>
-    <?php endforeach; ?></table></div>
-  <?php endif; ?>
-
-  <div class="box"><div class="hd"><h2><i class="fas fa-clock-rotate-left"></i>Licence history</h2></div><table><tr><th>When</th><th>Who</th><th>What</th><th>Detail</th></tr>
-  <?php foreach (AmetecsLicences::events((string) $lid) as $e): ?><tr><td style="white-space:nowrap"><?= ag_h($e['created_at']) ?></td><td><?= ag_h($e['by_who']) ?></td><td><?= ag_h($e['action']) ?></td><td class="muted" style="font-size:12.5px"><?= ag_h($e['detail']) ?></td></tr><?php endforeach; ?></table></div>
+  </aside></div>
 
 <?php elseif ($page === 'releases'):
     $fa = (string) ($_GET['app'] ?? '');
@@ -1467,6 +1471,7 @@ $myIni = strtoupper(implode('', array_map(static fn (string $w): string => mb_su
         <td class="right"><?php if ($hasBackup): ?><form method="post" class="inline" onsubmit="return confirm('Roll back the last install of <?= ag_h($p['name']) ?> on the cloud server?')"><?= $csrf() ?><input type="hidden" name="do" value="release-rollback"><input type="hidden" name="app" value="<?= ag_h($c) ?>"><button class="btn ghost"><i class="fas fa-rotate-left"></i>Roll back last install</button></form><?php endif; ?></td></tr>
     <?php endforeach; ?></table></div>
 
+  <details class="xupl"><summary><span class="xi"><i class="fas fa-upload"></i></span><span><b>Upload a package</b><small>Full release, patch or plugin - checked, fingerprinted and signed on upload</small></span><i class="fas fa-chevron-down car"></i></summary>
   <form method="post" enctype="multipart/form-data" class="box"><?= $csrf() ?><input type="hidden" name="do" value="release-upload">
     <div class="hd"><h2><i class="fas fa-upload"></i>Upload a package</h2><span class="muted">a .zip from the app's release builder, with release.json at the top &middot; this server accepts up to <?= ag_h((string) ini_get('upload_max_filesize')) ?></span></div>
     <div class="bd grid2">
@@ -1490,6 +1495,7 @@ $myIni = strtoupper(implode('', array_map(static fn (string $w): string => mb_su
       <button class="btn navy">Check &amp; add</button></div></form>
   <?php endif; ?>
 
+  </details>
   <form class="toolbar"><input type="hidden" name="p" value="releases"><span class="si"><i class="fas fa-magnifying-glass"></i><input data-live="#rel-t" placeholder="Search version, title…" autocomplete="off"></span>
     <select name="app" onchange="this.form.submit()"><option value="">All apps</option><?php foreach ($plugins as $c => $p): ?><option value="<?= ag_h($c) ?>"<?= $fa === $c ? ' selected' : '' ?>><?= ag_h($p['name']) ?></option><?php endforeach; ?></select></form>
   <div class="box"><table id="rel-t" class="sortable"><tr><th>App</th><th>Version</th><th>Type</th><th>Status</th><th>Goes to</th><th>Price</th><th>Downloads</th><th>Installs</th><th>Failures</th><th></th></tr>
@@ -1511,33 +1517,12 @@ $myIni = strtoupper(implode('', array_map(static fn (string $w): string => mb_su
     $holders = array_filter($tenants, static fn ($t) => AmetecsLicences::row((string) $t['id'], (string) $rl['app']) !== null && AmetecsLicences::row((string) $t['id'], (string) $rl['app'])['status'] !== 'cancelled');
     $sbtn = static fn (string $to, string $label, string $cls, string $ask = '') => '<form method="post" class="inline"' . ($ask !== '' ? ' onsubmit="return confirm(\'' . ag_h($ask) . '\')"' : '') . '>' . $csrf()
         . '<input type="hidden" name="do" value="release-status"><input type="hidden" name="id" value="' . $rid . '"><input type="hidden" name="to" value="' . $to . '"><button class="btn ' . $cls . '">' . $label . '</button></form>'; ?>
-  <div class="row" style="margin-bottom:6px"><a href="?p=releases" class="muted">← Updates &amp; releases</a></div>
+  <div class="phero"><div class="row" style="margin-bottom:6px"><a href="?p=releases" class="muted">← Updates &amp; releases</a></div>
   <div class="row"><h1><?= ag_h($rp['name']) ?> <?= ag_h($rl['version']) ?></h1><span class="pill <?= $sc ?>"><?= $sl ?></span><span class="pill grey"><?= ag_h(AmetecsReleases::KINDS[$rl['kind']]) ?></span><?= $rl['mandatory'] ? '<span class="pill red">Mandatory</span>' : '' ?></div>
-  <p class="sub"><?= ag_h((string) ($rl['title'] ?? '')) ?> · <?= (int) $rl['size'] >= 1048576 ? round((int) $rl['size'] / 1048576, 1) . ' MB' : max(1, (int) round((int) $rl['size'] / 1024)) . ' KB' ?> · SHA-256 <code><?= ag_h(substr((string) $rl['sha256'], 0, 20)) ?>…</code> · <?= trim((string) $rl['signature']) !== '' ? '<span class="pill green"><i class="fas fa-shield-halved"></i> Signed by Ametecs</span>' : '<span class="pill grey">Unsigned (no signing key on this server) - test only</span>' ?></p>
+  <p class="sub"><?= ag_h((string) ($rl['title'] ?? '')) ?> · <?= (int) $rl['size'] >= 1048576 ? round((int) $rl['size'] / 1048576, 1) . ' MB' : max(1, (int) round((int) $rl['size'] / 1024)) . ' KB' ?> · SHA-256 <code><?= ag_h(substr((string) $rl['sha256'], 0, 20)) ?>…</code> · <?= trim((string) $rl['signature']) !== '' ? '<span class="pill green"><i class="fas fa-shield-halved"></i> Signed by Ametecs</span>' : '<span class="pill grey">Unsigned (no signing key on this server) - test only</span>' ?></p></div>
 
-  <div class="box"><div class="hd"><h2>Publishing</h2></div><div class="bd row">
-    <?php if ($rl['status'] !== 'withdrawn'): ?>
-      <?= $rst !== 'published' ? $sbtn('publish', '<i class="fas fa-rocket"></i> Publish now', 'gold', 'Publish ' . $rp['name'] . ' ' . $rl['version'] . ' to the clients it goes to?') : '' ?>
-      <form method="post" class="inline row" style="gap:6px"><?= $csrf() ?><input type="hidden" name="do" value="release-status"><input type="hidden" name="id" value="<?= $rid ?>"><input type="hidden" name="to" value="schedule">
-        <input type="datetime-local" name="publish_at" value="<?= ag_h($rst === 'scheduled' ? str_replace(' ', 'T', substr((string) $rl['publish_at'], 0, 16)) : '') ?>"><button class="btn ghost"><i class="far fa-calendar"></i> Schedule</button></form>
-      <?= in_array($rst, ['published', 'scheduled'], true) ? $sbtn('disable', '<i class="fas fa-pause"></i> Disable', 'ghost') : '' ?>
-      <?= $rst !== 'draft' ? $sbtn('draft', 'Back to draft', 'ghost') : '' ?>
-      <?= $sbtn('withdraw', '<i class="fas fa-ban"></i> Withdraw', 'danger', 'Withdraw this release for good? Clients running it will be offered the previous stable version.') ?>
-    <?php else: ?><span>Withdrawn: never offered again. Clients running it are offered the newest older full release.</span><?php endif; ?>
-    <form method="post" class="inline" style="margin-left:auto"><?= $csrf() ?><input type="hidden" name="do" value="release-file"><input type="hidden" name="id" value="<?= $rid ?>"><button class="btn ghost"><i class="fas fa-download"></i> Package</button></form>
-  </div></div>
-
-  <div class="box"><div class="hd"><h2><i class="fas fa-server"></i>Ametecs cloud server</h2><span class="muted">cloud clients run this copy of <?= ag_h($rp['name']) ?></span></div><div class="bd row">
-    <span>Running: <b><?= $pv !== '' ? ag_h($pv) : 'unknown' ?></b></span>
-    <?php if ($rl['kind'] !== 'plugin' && AmetecsReleases::pluginRoot((string) $rl['app']) !== null && ($pv === '' || version_compare((string) $rl['version'], $pv, '>'))): ?>
-      <form method="post" class="inline" onsubmit="return confirm('Install <?= ag_h($rp['name'] . ' ' . $rl['version']) ?> on the cloud server now? Every replaced file is backed up first.')"><?= $csrf() ?><input type="hidden" name="do" value="release-install"><input type="hidden" name="id" value="<?= $rid ?>"><button class="btn navy"><i class="fas fa-download"></i> Install on cloud server</button></form>
-      <span class="muted">Verifies the package, backs up every file it replaces, installs, runs database changes; on any failure everything is put back.</span>
-    <?php elseif (AmetecsReleases::pluginRoot((string) $rl['app']) === null): ?><span class="muted"><?= ag_h($rp['name']) ?> is not on this server yet.</span>
-    <?php else: ?><span class="muted">Nothing to install here: the server already runs this version or newer<?= $rl['kind'] === 'plugin' ? ' (plugins install on the client\'s own server)' : '' ?>.</span><?php endif; ?>
-  </div><?php if (is_string($ilog) && $ilog !== ''): ?><pre style="margin:0 16px 16px;max-height:260px;overflow:auto;background:#0f172a;color:#e2e8f0;padding:12px;border-radius:8px;font-size:12px"><?= ag_h($ilog) ?></pre><?php endif; ?></div>
-
-  <form method="post" class="box"><?= $csrf() ?><input type="hidden" name="do" value="release-save"><input type="hidden" name="id" value="<?= $rid ?>">
-    <div class="hd"><h2>Details</h2></div><div class="bd grid2">
+  <div class="pg2"><div class="pgm"><form method="post" class="box"><?= $csrf() ?><input type="hidden" name="do" value="release-save"><input type="hidden" name="id" value="<?= $rid ?>">
+    <div class="hd"><h2><i class="fas fa-pen-to-square"></i>Details</h2></div><div class="bd grid2">
     <div><label>Title</label><input name="title" value="<?= ag_h((string) ($rl['title'] ?? '')) ?>"></div>
     <div><label>Requires version (at least)</label><input name="requires_version" value="<?= ag_h((string) ($rl['requires_version'] ?? '')) ?>" placeholder="any"></div>
     <div class="full"><label>Release notes (clients read these)</label><textarea name="notes" rows="4"><?= ag_h((string) ($rl['notes'] ?? '')) ?></textarea></div>
@@ -1563,6 +1548,29 @@ $myIni = strtoupper(implode('', array_map(static fn (string $w): string => mb_su
   <?php $tn = array_column($tenants, 'name', 'id'); foreach (AmetecsReleases::events(['release_id' => $rid]) as $e): ?><tr><td style="white-space:nowrap"><?= ag_h($e['created_at']) ?></td><td><?= (int) $e['tenant_id'] === 0 ? 'Ametecs' : ag_h($tn[$e['tenant_id']] ?? '#' . $e['tenant_id']) ?></td>
     <td><?= ag_h(ucfirst(str_replace('_', ' ', (string) $e['action']))) ?></td><td><?= ag_h(trim(($e['from_version'] ?? '') . ' → ' . ($e['to_version'] ?? ''), ' →')) ?></td><td><?= ag_h($e['by_who']) ?></td>
     <td class="muted" style="font-size:12px;max-width:420px;white-space:pre-wrap"><?= ag_h(mb_substr((string) $e['detail'], 0, 400)) ?></td></tr><?php endforeach; ?></table></div>
+
+</div><aside class="pgs"><div class="box"><div class="hd"><h2><i class="fas fa-rocket"></i>Publishing</h2></div><div class="bd row">
+    <?php if ($rl['status'] !== 'withdrawn'): ?>
+      <?= $rst !== 'published' ? $sbtn('publish', '<i class="fas fa-rocket"></i> Publish now', 'gold', 'Publish ' . $rp['name'] . ' ' . $rl['version'] . ' to the clients it goes to?') : '' ?>
+      <form method="post" class="inline row" style="gap:6px"><?= $csrf() ?><input type="hidden" name="do" value="release-status"><input type="hidden" name="id" value="<?= $rid ?>"><input type="hidden" name="to" value="schedule">
+        <input type="datetime-local" name="publish_at" value="<?= ag_h($rst === 'scheduled' ? str_replace(' ', 'T', substr((string) $rl['publish_at'], 0, 16)) : '') ?>"><button class="btn ghost"><i class="far fa-calendar"></i> Schedule</button></form>
+      <?= in_array($rst, ['published', 'scheduled'], true) ? $sbtn('disable', '<i class="fas fa-pause"></i> Disable', 'ghost') : '' ?>
+      <?= $rst !== 'draft' ? $sbtn('draft', 'Back to draft', 'ghost') : '' ?>
+      <?= $sbtn('withdraw', '<i class="fas fa-ban"></i> Withdraw', 'danger', 'Withdraw this release for good? Clients running it will be offered the previous stable version.') ?>
+    <?php else: ?><span>Withdrawn: never offered again. Clients running it are offered the newest older full release.</span><?php endif; ?>
+    <form method="post" class="inline" style="margin-left:auto"><?= $csrf() ?><input type="hidden" name="do" value="release-file"><input type="hidden" name="id" value="<?= $rid ?>"><button class="btn ghost"><i class="fas fa-download"></i> Package</button></form>
+  </div></div>
+
+  <div class="box"><div class="hd"><h2><i class="fas fa-server"></i>Ametecs cloud server</h2><span class="muted">cloud clients run this copy of <?= ag_h($rp['name']) ?></span></div><div class="bd row">
+    <span>Running: <b><?= $pv !== '' ? ag_h($pv) : 'unknown' ?></b></span>
+    <?php if ($rl['kind'] !== 'plugin' && AmetecsReleases::pluginRoot((string) $rl['app']) !== null && ($pv === '' || version_compare((string) $rl['version'], $pv, '>'))): ?>
+      <form method="post" class="inline" onsubmit="return confirm('Install <?= ag_h($rp['name'] . ' ' . $rl['version']) ?> on the cloud server now? Every replaced file is backed up first.')"><?= $csrf() ?><input type="hidden" name="do" value="release-install"><input type="hidden" name="id" value="<?= $rid ?>"><button class="btn navy"><i class="fas fa-download"></i> Install on cloud server</button></form>
+      <span class="muted">Verifies the package, backs up every file it replaces, installs, runs database changes; on any failure everything is put back.</span>
+    <?php elseif (AmetecsReleases::pluginRoot((string) $rl['app']) === null): ?><span class="muted"><?= ag_h($rp['name']) ?> is not on this server yet.</span>
+    <?php else: ?><span class="muted">Nothing to install here: the server already runs this version or newer<?= $rl['kind'] === 'plugin' ? ' (plugins install on the client\'s own server)' : '' ?>.</span><?php endif; ?>
+  </div><?php if (is_string($ilog) && $ilog !== ''): ?><pre style="margin:0 16px 16px;max-height:260px;overflow:auto;background:#0f172a;color:#e2e8f0;padding:12px;border-radius:8px;font-size:12px"><?= ag_h($ilog) ?></pre><?php endif; ?></div>
+
+  </aside></div>
 
 <?php elseif ($page === 'billing'):
     $fs = (string) ($_GET['st'] ?? ''); $ft = (string) ($_GET['c'] ?? '');
@@ -1602,15 +1610,15 @@ $myIni = strtoupper(implode('', array_map(static fn (string $w): string => mb_su
 <?php elseif ($page === 'invoice' && ($iv = AmetecsBilling::byId((string) ($_GET['id'] ?? ''))) !== null):
     [$sl, $sc] = AmetecsBilling::STATUSES[$iv['status']] ?? [$iv['status'], 'grey']; $it = $tenant((string) $iv['tenant_id']); $ivid = (int) $iv['id'];
     $ipays = AmetecsBilling::payments((string) $ivid); ?>
-  <div class="row" style="margin-bottom:6px"><a href="?p=billing" class="muted">← Payments &amp; invoices</a></div>
+  <div class="phero"><div class="row" style="margin-bottom:6px"><a href="?p=billing" class="muted">← Payments &amp; invoices</a></div>
   <div class="row"><h1>Invoice <?= ag_h($iv['number']) ?></h1><span class="pill <?= $sc ?>"><?= $sl ?></span><a class="btn ghost" href="?p=invoice-print&id=<?= $ivid ?>" target="_blank" style="margin-left:auto"><i class="fas fa-print"></i>Print / PDF</a></div>
-  <p class="sub"><?= ag_h($it['name'] ?? '#' . $iv['tenant_id']) ?> · <?= ag_h(AmetecsBilling::PURPOSES[$iv['purpose']] ?? '') ?> · issued <?= $d($iv['issued_on']) ?><?= $iv['status'] === 'pending' ? ' · due ' . $d($iv['due_on']) : '' ?></p>
+  <p class="sub"><?= ag_h($it['name'] ?? '#' . $iv['tenant_id']) ?> · <?= ag_h(AmetecsBilling::PURPOSES[$iv['purpose']] ?? '') ?> · issued <?= $d($iv['issued_on']) ?><?= $iv['status'] === 'pending' ? ' · due ' . $d($iv['due_on']) : '' ?></p></div>
   <div class="box"><table><tr><th>Description</th><th class="right">Amount</th></tr>
     <tr><td><?= ag_h($iv['description']) ?><?= $iv['release_id'] ? ' · <a href="?p=release&id=' . (int) $iv['release_id'] . '">release</a>' : '' ?><?= $iv['licence_id'] ? ' · <a href="?p=licence&id=' . (int) $iv['licence_id'] . '">licence</a>' : '' ?></td><td class="right"><?= ag_h($iv['currency']) ?> <?= number_format((float) $iv['amount'], 2) ?></td></tr>
     <?php if ((float) $iv['tax'] > 0): ?><tr><td>GST <?= ag_h(rtrim(rtrim((string) $iv['tax_percent'], '0'), '.')) ?>%</td><td class="right"><?= ag_h($iv['currency']) ?> <?= number_format((float) $iv['tax'], 2) ?></td></tr><?php endif; ?>
     <tr><td><b>Total</b></td><td class="right"><b><?= ag_h($iv['currency']) ?> <?= number_format((float) $iv['total'], 2) ?></b></td></tr></table></div>
   <?php if ($iv['status'] === 'pending'): ?>
-  <div class="box"><div class="hd"><h2>Collect</h2><span class="muted">Razorpay order: <?= $iv['gateway_order_id'] ? '<code>' . ag_h($iv['gateway_order_id']) . '</code>' : 'not started yet' ?></span></div><div class="bd row">
+  <div class="box"><div class="hd"><h2><i class="fas fa-hand-holding-dollar"></i>Collect</h2><span class="muted">Razorpay order: <?= $iv['gateway_order_id'] ? '<code>' . ag_h($iv['gateway_order_id']) . '</code>' : 'not started yet' ?></span></div><div class="bd row">
     <form method="post" class="inline"><?= $csrf() ?><input type="hidden" name="do" value="invoice-reconcile"><input type="hidden" name="id" value="<?= $ivid ?>"><button class="btn navy"<?= $iv['gateway_order_id'] ? '' : ' disabled' ?>><i class="fas fa-magnifying-glass-dollar"></i>Check with Razorpay</button></form>
     <span class="muted">If the client paid but closed the page before it finished, this asks Razorpay and applies the payment.</span></div>
     <form method="post" class="ft row" style="justify-content:flex-start"><?= $csrf() ?><input type="hidden" name="do" value="invoice-paid"><input type="hidden" name="id" value="<?= $ivid ?>">
@@ -1619,7 +1627,7 @@ $myIni = strtoupper(implode('', array_map(static fn (string $w): string => mb_su
     <form method="post" class="ft row" style="justify-content:flex-start"><?= $csrf() ?><input type="hidden" name="do" value="invoice-cancel"><input type="hidden" name="id" value="<?= $ivid ?>">
       <b>Cancel:</b><input name="why" placeholder="reason" style="flex:1;min-width:220px"><button class="btn danger">Cancel invoice</button></form></div>
   <?php endif; ?>
-  <div class="box"><div class="hd"><h2>Payments</h2></div><table><tr><th>When</th><th>Via</th><th>Reference</th><th>Amount</th><th>Status</th><th>Detail</th><th class="right"></th></tr>
+  <div class="box"><div class="hd"><h2><i class="fas fa-receipt"></i>Payments</h2></div><table><tr><th>When</th><th>Via</th><th>Reference</th><th>Amount</th><th>Status</th><th>Detail</th><th class="right"></th></tr>
   <?php foreach ($ipays as $py): ?><tr><td style="white-space:nowrap"><?= ag_h($py['created_at']) ?></td><td><?= ag_h(ucfirst((string) $py['gateway'])) ?><?= $py['method'] ? ' · ' . ag_h($py['method']) : '' ?></td><td><code><?= ag_h((string) $py['gateway_payment_id']) ?></code></td>
     <td><?= ag_h($py['currency']) ?> <?= number_format((float) $py['amount'], 2) ?></td><td><?= $py['status'] === 'refunded' ? '<span class="pill red">Refunded</span>' : '<span class="pill green">Received</span>' ?></td>
     <td class="muted" style="font-size:12px;white-space:pre-wrap"><?= ag_h((string) $py['detail']) ?></td>
@@ -1631,7 +1639,7 @@ $myIni = strtoupper(implode('', array_map(static fn (string $w): string => mb_su
 <?php elseif ($page === 'gateway'): $gr = AmetecsBilling::gatewayRow() ?? []; $bs = AmetecsBilling::settings(); ?>
   <h1>Payment settings</h1><p class="sub">Razorpay keys for online payment, and the details printed on every invoice. The same Razorpay keys are used by SmartPRS 3's console.</p>
   <div class="msg <?= AmetecsBilling::gateway() !== null ? 'ok' : 'bad' ?>"><?= AmetecsBilling::gateway() !== null ? 'Online payment is ON (' . ag_h(ucfirst((string) ($gr['mode'] ?? 'test'))) . ' mode).' : 'Online payment is OFF: clients are told to contact Ametecs.' ?></div>
-  <form method="post" class="box" style="max-width:820px"><?= $csrf() ?><input type="hidden" name="do" value="gateway-save">
+  <form method="post" class="box"><?= $csrf() ?><input type="hidden" name="do" value="gateway-save">
     <div class="hd"><h2><i class="fas fa-credit-card"></i>Razorpay</h2><span class="muted">dashboard.razorpay.com → Account &amp; Settings → API Keys</span></div><div class="bd grid2">
       <div class="full"><label class="sw" style="text-transform:none;font-size:14px;color:var(--ink)"><input type="checkbox" name="enabled"<?= in_array(strtolower((string) ($gr['status'] ?? '')), ['configured', 'live', 'active'], true) ? ' checked' : '' ?>> Accept online payments</label></div>
       <div><label>Mode</label><select name="mode"><option value="test"<?= ($gr['mode'] ?? '') !== 'live' ? ' selected' : '' ?>>Test (rzp_test_ keys, no real money)</option><option value="live"<?= ($gr['mode'] ?? '') === 'live' ? ' selected' : '' ?>>Live</option></select></div>
@@ -1728,7 +1736,7 @@ $myIni = strtoupper(implode('', array_map(static fn (string $w): string => mb_su
       <td class="right"><button form="<?= $fid ?>" class="btn ghost">Save</button></td></tr>
   <?php endforeach; ?></table></div>
   <form method="post" class="box"><?= $csrf() ?><input type="hidden" name="do" value="app-save">
-    <div class="hd"><h2>Add a new app</h2><span class="muted">it appears for every client straight away, switched off until you licence it</span></div>
+    <div class="hd"><h2><i class="fas fa-circle-plus"></i>Add a new app</h2><span class="muted">it appears for every client straight away, switched off until you licence it</span></div>
     <div class="bd grid2">
       <div><label>App name <span class="req">*</span></label><input name="name" required placeholder="e.g. SmartVisit"></div>
       <div><label>What it does</label><input name="what" placeholder="one line clients will read"></div>
@@ -1762,8 +1770,8 @@ $myIni = strtoupper(implode('', array_map(static fn (string $w): string => mb_su
 <?php elseif ($page === 'email'): $mc = AmetecsMail::box($pdo)->config(); ?>
   <h1>Email settings</h1><p class="sub">The mailbox AmetecsGlobal sends from: password reset links for clients. Use your company mail server (SMTP) details.</p>
   <div class="msg <?= AmetecsMail::box($pdo)->ready() ? 'ok' : 'bad' ?>"><?= AmetecsMail::box($pdo)->ready() ? 'Email is ON.' : 'Email is OFF: "Email reset link" and "Forgot password?" will not work until this is set up and switched on.' ?></div>
-  <form method="post" class="box" style="max-width:760px"><?= $csrf() ?><input type="hidden" name="do" value="email-save">
-    <div class="hd"><h2>Mail server (SMTP)</h2></div><div class="bd grid2">
+  <form method="post" class="box"><?= $csrf() ?><input type="hidden" name="do" value="email-save">
+    <div class="hd"><h2><i class="fas fa-server"></i>Mail server (SMTP)</h2></div><div class="bd grid2">
       <div class="full"><label class="sw" style="text-transform:none;font-size:14px;color:var(--ink)"><input type="checkbox" name="enabled"<?= $mc['enabled'] ? ' checked' : '' ?>> Send emails</label></div>
       <div><label>Server (host)</label><input name="host" value="<?= ag_h((string) $mc['host']) ?>" placeholder="smtp.gmail.com"></div>
       <div><label>Port</label><input type="number" name="port" value="<?= (int) $mc['port'] ?>"></div>
@@ -1774,7 +1782,7 @@ $myIni = strtoupper(implode('', array_map(static fn (string $w): string => mb_su
       <div><label>From name</label><input name="from_name" value="<?= ag_h((string) $mc['from_name'] === 'SmartPRS' ? 'AmetecsGlobal' : (string) $mc['from_name']) ?>"></div>
       <div><label>Reply-to (optional)</label><input type="email" name="reply_to" value="<?= ag_h((string) $mc['reply_to']) ?>"></div>
     </div><div class="ft"><button class="btn navy">Save</button></div></form>
-  <form method="post" class="box" style="max-width:760px"><?= $csrf() ?><input type="hidden" name="do" value="email-test">
+  <form method="post" class="box"><?= $csrf() ?><input type="hidden" name="do" value="email-test">
     <div class="hd"><h2><i class="fas fa-paper-plane"></i>Send a test email</h2></div>
     <div class="bd row"><input type="email" name="to" required value="<?= ag_h($meEmail) ?>" placeholder="any email address" style="flex:1;min-width:240px">
       <button class="btn gold"<?= AmetecsMail::box($pdo)->ready() ? '' : ' disabled title="Save the mail server and switch on Send emails first"' ?>><i class="fas fa-paper-plane"></i>Send test</button></div>
@@ -1783,8 +1791,8 @@ $myIni = strtoupper(implode('', array_map(static fn (string $w): string => mb_su
 
 <?php elseif ($page === 'account'): ?>
   <h1>My account</h1><p class="sub"><?= ag_h($meEmail) ?></p>
-  <form method="post" class="box" style="max-width:480px"><?= $csrf() ?><input type="hidden" name="do" value="my-password">
-    <div class="hd"><h2>Change password</h2></div><div class="bd stack">
+  <form method="post" class="box"><?= $csrf() ?><input type="hidden" name="do" value="my-password">
+    <div class="hd"><h2><i class="fas fa-lock"></i>Change password</h2></div><div class="bd stack">
     <label>Current password</label><input type="password" name="current" required autocomplete="current-password"><br><br>
     <label>New password (<?= Session::PASSWORD_FLOOR ?>+ characters)</label><input type="password" name="new" required minlength="<?= Session::PASSWORD_FLOOR ?>" autocomplete="new-password"><br><br>
     <label>New password again</label><input type="password" name="again" required autocomplete="new-password"></div>
