@@ -555,7 +555,7 @@ PEM;
         }
 
         $ch = curl_init($this->server() . '/update/download');
-        curl_setopt_array($ch, [CURLOPT_POST => true, CURLOPT_POSTFIELDS => http_build_query(['key' => $key, 'version' => $version]),
+        curl_setopt_array($ch, [CURLOPT_POST => true, CURLOPT_POSTFIELDS => http_build_query(['key' => $key, 'version' => $version, 'fingerprint' => $this->fingerprint()]),
             CURLOPT_FILE => $fh, CURLOPT_TIMEOUT => 900, CURLOPT_CONNECTTIMEOUT => 15, CURLOPT_FOLLOWLOCATION => true] + $this->caOption());
         $ok = curl_exec($ch);
         $code = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
@@ -577,7 +577,7 @@ PEM;
     public function reportUpdate(string $version, string $action, string $detail): void
     {
         $key = $this->key();
-        $key === '' || $this->post('/update/report', ['key' => $key, 'version' => $version, 'action' => $action, 'detail' => $detail], 10);
+        $key === '' || $this->post('/update/report', ['key' => $key, 'version' => $version, 'action' => $action, 'detail' => $detail, 'fingerprint' => $this->fingerprint()], 10);
     }
 
     /**

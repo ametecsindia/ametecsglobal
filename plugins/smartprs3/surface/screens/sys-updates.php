@@ -88,7 +88,9 @@ if (!$onPrem) {
 <?php elseif (!empty($suCheck['update_available'])): ?>
   <p style="margin:8px 0 4px"><b>Version <?= e((string) $suCheck['version']) ?> is available</b> <span class="note">(you have <?= e($suRunning) ?><?= !empty($suCheck['released_at']) ? ' · released ' . e(SmartPRS\Surface\Dates::dmy(substr((string) $suCheck['released_at'], 0, 10))) : '' ?><?= (int) ($suCheck['size_bytes'] ?? 0) > 0 ? ' · ' . round((int) $suCheck['size_bytes'] / 1048576, 1) . ' MB' : '' ?>)</span></p>
   <div class="note" style="white-space:pre-wrap"><?= e((string) ($suCheck['notes'] ?? '')) ?></div>
-<?php if ($suMayInstall): ?>
+<?php if (($suCheck['downloadable'] ?? true) === false): ?>
+  <p class="note" style="margin:10px 0 0"><b><?= e((string) ($suCheck['message'] ?? 'This update is not available to download yet.')) ?></b></p>
+<?php elseif ($suMayInstall): ?>
   <form method="post" style="margin:10px 0 0" onsubmit="this.querySelector('button').disabled=true;this.querySelector('button').innerHTML='Downloading and installing — keep this page open…';return confirm('Download and install <?= e((string) $suCheck['version']) ?> now? Files being replaced are backed up first. Users may see a brief pause.')">
     <input type="hidden" name="csrf" value="<?= e($session->token()) ?>"><input type="hidden" name="action" value="system-update"><input type="hidden" name="op" value="install"><input type="hidden" name="version" value="<?= e((string) $suCheck['version']) ?>">
     <button class="btn btn-primary" type="submit"><i class="fas fa-download"></i> Download &amp; install <?= e((string) $suCheck['version']) ?></button></form>

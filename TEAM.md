@@ -76,6 +76,25 @@ Clients and their logins live in the database set in `plugins\smartprs3\.env` (S
    ```
 4. Create your Super Admin (in `C:\laragon\www\AmetecsGlobal`): `php plugins\smartprs3\tools\make-super-admin.php you@ametecsindia.com "Your Name"`
 
+## Client panel & Super Admin look (Phase 4, 18 Nov 2026)
+- One sidebar for the client panel and Organization Setup (`core/shell.php`, `core/assets/shell.css`, `core/assets/ui.js`):
+  Dashboard, My applications, Modules & plugins, Available updates, Upgrade history, Installations, Licences,
+  Subscription & plans, Payments & invoices, Company profile, Users & permissions, Organization setup, App access,
+  Notifications, Activity history, Support & help, Account settings. Employees see only Dashboard, Notifications, Support, Account.
+- Bell + Notifications: updates, overdue invoices, expiring/suspended licences, silent on-premise servers, failed installs.
+- Super Admin -> System & health: database, PHP, disk, signing key, Razorpay, email, security warnings, sync log.
+- Works on phones (menu button), long tables page by 25, buttons can't be pressed twice.
+
+## Connecting an on-premise install to the hub (Phase 5, 18 Nov 2026)
+- An on-premise SmartPRS3 (or any app using the SmartPRS licence client) needs one line in its `.env`:
+  `SMARTPRS_LICENCE_SERVER=https://<the AmetecsGlobal server>/core/update.php`
+  then the client activates with the AG-XXXX-XXXX-XXXX-XXXX key from Super Admin -> Licences -> the licence -> Issue licence key.
+- From then on everything comes from AmetecsGlobal: activation binds the key to that server, heartbeats carry renewals,
+  seats and suspensions, Administration -> Updates & Licence shows releases published in Updates & releases, a paid
+  upgrade is shown as "pay in your AmetecsGlobal panel" until paid or granted free, and each install is reported back
+  (Upgrade history / Installations). A copied install on another machine is refused and stops.
+- Apps written fresh can use the JSON door instead: `core/licence-api.php` (actions activate, check, updates, download, report).
+
 ## Every day
 - **Once per PC:** double-click `INSTALL-AUTOSYNC.bat`. AUTO-SYNC then runs hidden and starts by itself at every Windows sign-in (no window to keep open). Without it, `AUTO-SYNC.bat` must be left running (minimised). About a minute after you stop saving, your changes go to GitHub; others' changes arrive within 5 minutes. Only the AmetecsGlobal folder is watched.
 - `SYNC.bat` does the same once, on click.
