@@ -331,6 +331,10 @@ $logoOf = static function (string $code, array $p) use ($logos, $icons): string 
     $lock = '<span class="lockup"' . ($src !== '' ? ' hidden' : '') . '><i class="fas ' . ag_h($p['icon'] ?? ($icons[$code] ?? 'fa-cube')) . '"></i>' . ag_h((string) $p['name']) . '</span>';
     return ($src !== '' ? '<img src="' . ag_h($src) . '" alt="' . ag_h((string) $p['name']) . '"' . ($inv === 'inv' ? ' class="inv"' : '') . ' loading="lazy" onerror="this.hidden=true;this.nextElementSibling.hidden=false">' : '') . $lock;
 };
+// PHASE 7: the administrator's home is the unified dashboard (core/dashboard.php; ?frag=1 = its inner part only).
+if ($user !== null && $isAdmin && $view === 'home' && $pdo !== null) {
+    require __DIR__ . '/dashboard.php';
+}
 ?><!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title><?= $user !== null ? 'Home' : 'Sign in' ?> · AmetecsGlobal</title>
@@ -655,7 +659,7 @@ a{color:inherit}
 .ucnt{margin-left:auto;font-style:normal;font-size:11px;background:var(--gold);color:#fff;padding:1px 8px;border-radius:99px}.lic-t td.r,.lic-t th.r{text-align:right}
 .lp{display:inline-block;padding:2px 10px;border-radius:99px;font-size:12px;font-weight:600}.lp-green{background:var(--ok-bg);color:var(--ok)}.lp-amber{background:#fffbeb;color:#b45309}.lp-red{background:var(--bad-bg);color:var(--bad)}.lp-grey{background:#f1f5f9;color:var(--mute)}
 </style>
-<link rel="stylesheet" href="assets/shell.css?v=5"></head><body>
+<link rel="stylesheet" href="assets/shell.css?v=6"></head><body>
 <?php if ($user === null): ?>
 <div class="auth">
   <aside class="auth-side">
@@ -941,9 +945,29 @@ a{color:inherit}
   <div class="ph"><div><h1><?= $greet ?>, <?= ag_h((string) strtok($who, ' ')) ?></h1>
       <p><?= $now->format('l, d M Y') ?><?= $company !== '' ? ' &middot; ' . ag_h($company) : '' ?></p></div></div>
   <?php if ($problem !== null): ?><div class="msg"><i class="fas fa-circle-exclamation"></i><span><?= ag_h($problem) ?></span></div><?php endif; ?>
-  <?php if ($isAdmin && $notes !== []): ?>
-  <div class="panel attn"><h3><i class="fas fa-bell" style="color:var(--gold)"></i>Needs attention<?= count($notes) > 3 ? '<a href="?v=notifications">All ' . count($notes) . ' &rarr;</a>' : '' ?></h3><?= AmetecsShell::notificationList($notes, 3) ?></div>
-  <?php endif; ?>
+  <?php if (isset($dashHtml)): ?><div id="dash" data-every="60"><?= $dashHtml ?></div>
+  <script>
+  (function () {   // filters change -> fetch the dashboard for them; every minute -> fetch again (live)
+    var box = document.getElementById('dash'), busy = false;
+    function qs() { var p = new URLSearchParams(new FormData(document.getElementById('dfilters'))); [...p.keys()].forEach(function (k) { if (!p.get(k)) p.delete(k); }); if (p.get('d') !== 'custom') { p.delete('from'); p.delete('to'); } return p.toString(); }
+    function load(q, push) {
+      if (busy) return; busy = true; box.classList.add('loading');
+      fetch('?' + (q ? q + '&' : '') + 'frag=1', {credentials: 'same-origin'}).then(function (r) { if (!r.ok || r.redirected) throw 0; return r.text(); })
+        .then(function (h) { box.innerHTML = h; if (push) history.replaceState(null, '', q ? '?' + q : './'); })
+        .catch(function () { var u = document.getElementById('dupd'); if (u) u.textContent = 'could not refresh - retrying'; })
+        .finally(function () { busy = false; box.classList.remove('loading'); });
+    }
+    box.addEventListener('change', function (e) {
+      if (!e.target.closest('#dfilters')) return;
+      var custom = e.target.name === 'd' && e.target.value === 'custom';
+      box.querySelectorAll('.dcust').forEach(function (x) { x.hidden = document.querySelector('#dfilters [name=d]').value !== 'custom'; });
+      if (!custom) load(qs(), true);
+    });
+    box.addEventListener('click', function (e) { if (e.target.closest('[data-reset]')) { e.preventDefault(); load('', true); } });
+    setInterval(function () { if (!document.hidden) load(location.search.replace(/^\?/, ''), false); }, 60000);
+  })();
+  </script>
+  <?php else: ?>
   <?php // PHASE 6 (owner, 18 Nov 2026): one block per application the company uses, with that app's own figures, so the
         // administrator sees the business at a glance without opening each app. Apps not held are not shown at all.
   $dashApps = array_merge($groups['live'], $groups['soon']); $later = [];
@@ -962,6 +986,7 @@ a{color:inherit}
   <?php endforeach; ?>
   <?php if ($later !== []): ?><p class="dnote later"><i class="fas fa-hourglass-half"></i> Also in your plan, arriving on AmetecsGlobal soon: <?= ag_h(implode(', ', $later)) ?>.</p><?php endif; ?>
   <?php if ($dashApps === []): ?><div class="lic-t"><div class="empty2" style="padding:30px">No applications are switched on for your company yet.<?= $isAdmin ? ' <a href="?v=support">Contact Ametecs</a>.' : '' ?></div></div><?php endif; ?>
+  <?php endif; ?>
 <?php endif; ?>
 </main>
 </div></div>

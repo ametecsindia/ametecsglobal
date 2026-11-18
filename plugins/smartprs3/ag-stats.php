@@ -1,22 +1,27 @@
 <?php
 /**
- * SMARTPRS 3'S FIGURES FOR THE AMETECSGLOBAL DASHBOARD (owner, 18 Nov 2026 - Phase 6).
+ * SMARTPRS 3'S FIGURES FOR THE AMETECSGLOBAL DASHBOARD (owner, 18 Nov 2026 - Phases 6 and 7).
  *
- * AmetecsGlobal shows each app's own summary on the client's dashboard, so the administrator does not have to open the
- * app to see the basics. Every app may ship one file like this at plugins/<app>/ag-stats.php: it returns a function
- * (PDO $pdo, string $tenantId): array
- *   ['tiles' => [['label' => 'Present today', 'value' => '42', 'sub' => 'of 50', 'tone' => 'green|amber|red|blue|'], ...],
- *    'list'  => ['title' => '...', 'rows' => [['text' => '...', 'sub' => '...'], ...]]]   (list optional)
- * The cloud dashboard calls it directly; an on-premise install sends the same array with its hourly licence check-in.
+ * Every app may ship one file like this at plugins/<app>/ag-stats.php returning
+ *   function (PDO $pdo, string $tenantId, array $filters = []): array
+ * $filters (all optional): from, to (Y-m-d; to is never after today), ids (list of central employee ids the dashboard's
+ * company / branch / department / team / staff type / employee filters leave; null = everyone).
+ * It returns any of:
+ *   'tiles'  => [['key' => 'present', 'label' => 'Present', 'value' => '42', 'sub' => 'of 50', 'tone' => 'green|amber|red|blue|']]
+ *   'trend'  => ['title' => '...', 'labels' => [dates], 'sets' => ['Present' => [n, ...], ...]]   (a stacked bar chart)
+ *   'people' => [employeeId => ['present' => n, 'absent' => n, 'leave' => n, 'late' => n]]       (AmetecsGlobal groups
+ *               these by company / branch / team for the breakdown chart)
+ *   'list'   => ['title' => '...', 'rows' => [['text' => '...', 'sub' => '...']]]
+ * Cloud: run by the dashboard directly. On-premise: SmartPRS3 sends today's figures with its hourly licence check-in.
  *
- * Today's Present / On leave / Absent / Late / Early exits come from the SAME muster SmartPRS3's own dashboard and
- * Attendance Report use (AttendanceReport::muster), so the numbers here and in the app agree.
+ * Present / absent / leave / late / early come from the SAME muster SmartPRS3's own dashboard and Attendance Report use
+ * (AttendanceReport::muster), so the numbers here and in the app agree.
  */
 declare(strict_types=1);
 
 use SmartPRS\Surface\AttendanceReport;
 
-return static function (\PDO $pdo, string $tenant): array {
+return static function (\PDO $pdo, string $tenant, array $f = []): array {
     $root = __DIR__;
     $store = (new \SmartPRS\Surface\SqlStore($pdo))->forTenant($tenant);
     $cust = new \SmartPRS\Surface\Customisation($store);
@@ -30,61 +35,96 @@ return static function (\PDO $pdo, string $tenant): array {
         new \SmartPRS\Surface\Notifications($store, $root . '/config/notifications.json'));
     $report = new AttendanceReport($store, $attendance, $leave);
 
-    $people = array_values(array_filter($store->all('employees'), static fn (array $e): bool
-        => !\SmartPRS\Surface\Modules::isRetired($e) && strtolower(trim((string) ($e['status'] ?? 'active'))) === 'active'));
     $today = date('Y-m-d');
-    $d = ['present' => 0, 'leave' => 0, 'absent' => 0, 'late' => 0, 'early' => 0, 'counted' => 0];
-    foreach ($people === [] ? [] : $report->muster($people, $today, $today, $calendar->shiftStart(), $calendar->shiftEnd(), $today)['rows'] as $row) {
-        $c = $row['cells'][$today] ?? null;
-        if ($c === null || $c['status'] === AttendanceReport::NOT_JOINED) {
-            continue;
-        }
-        $st = (string) $c['status'];
-        if ($st === AttendanceReport::NOT_YET) {   // shift still under way: is today an off day for them?
-            $st = (string) ($attendance->dayWithoutPunches($row['code'], $today, $calendar->shiftStart(), $calendar->shiftEnd())['classification']['status'] ?? '');
-        }
-        $punched = (int) ($c['punches'] ?? 0) > 0;
-        if (in_array($st, ['HOLIDAY', 'WEEKLY_OFF'], true) && !$punched) {
-            continue;
-        }
-        $d['counted']++;
-        if (in_array($st, AttendanceReport::LEAVE_STATUSES, true)) {
-            $d['leave']++;
-        } elseif ($punched) {
-            $d['present']++;
-            $d['late'] += (int) ($c['late_minutes'] ?? 0) > 0 ? 1 : 0;
-            $d['early'] += (int) ($c['early_exit_minutes'] ?? 0) > 0 && ($c['last_out'] ?? null) !== null ? 1 : 0;
-        } else {
-            $d['absent']++;
-        }
+    $to = preg_match('/^\d{4}-\d{2}-\d{2}$/', (string) ($f['to'] ?? '')) === 1 ? min((string) $f['to'], $today) : $today;
+    $from = preg_match('/^\d{4}-\d{2}-\d{2}$/', (string) ($f['from'] ?? '')) === 1 ? min((string) $f['from'], $to) : $to;
+    // ponytail: the muster reads at most 62 days at a time; a longer range shows its last 62 days (the screen says so).
+    $from = max($from, date('Y-m-d', (int) strtotime($to . ' -61 days')));
+    $oneDay = $from === $to;
+    $ids = isset($f['ids']) && is_array($f['ids']) ? array_flip(array_map('strval', $f['ids'])) : null;
+
+    $people = array_values(array_filter($store->all('employees'), static fn (array $e): bool
+        => !\SmartPRS\Surface\Modules::isRetired($e) && strtolower(trim((string) ($e['status'] ?? 'active'))) === 'active'
+        && ($ids === null || isset($ids[(string) $e['id']]))));
+
+    $dates = [];
+    for ($d = $from; $d <= $to; $d = date('Y-m-d', (int) strtotime($d . ' +1 day'))) {
+        $dates[$d] = ['present' => 0, 'absent' => 0, 'leave' => 0];
     }
-    $off = $people !== [] && $d['counted'] === 0;   // a holiday / weekly off for everyone: "-" rather than a misleading 0
+    $sum = ['present' => 0, 'absent' => 0, 'leave' => 0, 'late' => 0, 'early' => 0, 'counted' => 0];
+    $per = [];
+    foreach ($people === [] ? [] : $report->muster($people, $from, $to, $calendar->shiftStart(), $calendar->shiftEnd(), $today)['rows'] as $row) {
+        $p = ['present' => 0, 'absent' => 0, 'leave' => 0, 'late' => 0];
+        foreach ($row['cells'] as $date => $c) {
+            if ($c['status'] === AttendanceReport::NOT_JOINED || !isset($dates[$date])) {
+                continue;
+            }
+            $st = (string) $c['status'];
+            if ($st === AttendanceReport::NOT_YET) {   // today's shift still under way: is today an off day for them?
+                $st = (string) ($attendance->dayWithoutPunches($row['code'], $date, $calendar->shiftStart(), $calendar->shiftEnd())['classification']['status'] ?? '');
+            }
+            $punched = (int) ($c['punches'] ?? 0) > 0;
+            if (in_array($st, ['HOLIDAY', 'WEEKLY_OFF'], true) && !$punched) {
+                continue;
+            }
+            $sum['counted']++;
+            $k = in_array($st, AttendanceReport::LEAVE_STATUSES, true) ? 'leave' : ($punched ? 'present' : 'absent');
+            $sum[$k]++;
+            $p[$k]++;
+            $dates[$date][$k]++;
+            if ($k === 'present') {
+                $late = (int) ($c['late_minutes'] ?? 0) > 0 ? 1 : 0;
+                $sum['late'] += $late;
+                $p['late'] += $late;
+                $sum['early'] += (int) ($c['early_exit_minutes'] ?? 0) > 0 && ($c['last_out'] ?? null) !== null ? 1 : 0;
+            }
+        }
+        $per[(string) $row['employment_id']] = $p;
+    }
+    $off = $people !== [] && $sum['counted'] === 0;   // a holiday / weekly off for everyone: "-" rather than a misleading 0
+    $n = static fn (int $v): string => $off ? '-' : (string) $v;
 
     $pendingLeave = 0;
     foreach ($store->all('leaves') as $l) {
-        $pendingLeave += strtolower((string) ($l['status'] ?? '')) === 'pending' ? 1 : 0;
+        $pendingLeave += strtolower((string) ($l['status'] ?? '')) === 'pending' && ($ids === null || isset($ids[(string) ($l['employee_id'] ?? '')])) ? 1 : 0;
     }
-    $runs = array_filter($store->all('payroll_runs'), static fn (array $r): bool => (string) ($r['status'] ?? '') !== 'discarded');
+    $company = (string) ($f['company'] ?? '');
+    $runs = array_filter($store->all('payroll_runs'), static fn (array $r): bool => (string) ($r['status'] ?? '') !== 'discarded'
+        && ($company === '' || (string) ($r['employer_company_id'] ?? '') === $company));
     usort($runs, static fn ($a, $b) => strcmp((string) ($b['pay_date'] ?? $b['created_at'] ?? ''), (string) ($a['pay_date'] ?? $a['created_at'] ?? '')));
     $awaiting = count(array_filter($runs, static fn (array $r): bool => (string) ($r['status'] ?? '') !== 'approved'));
     $last = $runs[0] ?? null;
-    $inr = static function ($v): string {   // 12,34,567 (Indian grouping), no paise
-        $n = (string) (int) round((float) $v);
-        $tail = substr($n, -3);
-        $head = substr($n, 0, -3);
+    $inr = static function ($v): string {   // Rs 12,34,567 (Indian grouping), no paise
+        $s = (string) (int) round((float) $v);
+        $tail = substr($s, -3);
+        $head = substr($s, 0, -3);
         return 'Rs ' . ($head === '' ? $tail : preg_replace('/\B(?=(\d{2})+$)/', ',', $head) . ',' . $tail);
     };
+    $rate = $sum['counted'] > 0 ? (int) round(100 * ($sum['present'] + $sum['leave']) / $sum['counted']) . '%' : '-';
 
-    return ['tiles' => [
-        ['label' => 'Employees', 'value' => (string) count($people), 'sub' => 'active'],
-        ['label' => 'Present today', 'value' => $off ? '-' : (string) $d['present'], 'sub' => $off ? 'holiday / weekly off' : 'of ' . $d['counted'], 'tone' => 'green'],
-        ['label' => 'Absent', 'value' => $off ? '-' : (string) $d['absent'], 'sub' => 'no punch, no leave', 'tone' => $d['absent'] > 0 ? 'red' : ''],
-        ['label' => 'On leave', 'value' => $off ? '-' : (string) $d['leave'], 'sub' => 'approved', 'tone' => 'blue'],
-        ['label' => 'Late arrivals', 'value' => $off ? '-' : (string) $d['late'], 'sub' => 'today', 'tone' => $d['late'] > 0 ? 'amber' : ''],
-        ['label' => 'Early logouts', 'value' => $off ? '-' : (string) $d['early'], 'sub' => 'today', 'tone' => $d['early'] > 0 ? 'amber' : ''],
-        ['label' => 'Leave requests', 'value' => (string) $pendingLeave, 'sub' => 'waiting for approval', 'tone' => $pendingLeave > 0 ? 'amber' : ''],
-        ['label' => 'Payroll', 'value' => $last === null ? '-' : $inr($last['net_total'] ?? 0),
-            'sub' => $last === null ? 'not run yet' : trim((string) ($last['cycle_label'] ?? '')) . ($awaiting > 0 ? ' · ' . $awaiting . ' awaiting approval' : ' · approved'),
-            'tone' => $awaiting > 0 ? 'amber' : ''],
-    ]];
+    $tiles = $oneDay ? [
+        ['key' => 'employees', 'label' => 'Employees', 'value' => (string) count($people), 'sub' => 'active'],
+        ['key' => 'present', 'label' => 'Present', 'value' => $n($sum['present']), 'sub' => $off ? 'holiday / weekly off' : 'of ' . $sum['counted'] . ' working', 'tone' => 'green'],
+        ['key' => 'absent', 'label' => 'Absent', 'value' => $n($sum['absent']), 'sub' => 'no punch, no leave', 'tone' => $sum['absent'] > 0 ? 'red' : ''],
+        ['key' => 'leave', 'label' => 'On leave', 'value' => $n($sum['leave']), 'sub' => 'approved', 'tone' => 'blue'],
+        ['key' => 'late', 'label' => 'Late arrivals', 'value' => $n($sum['late']), 'tone' => $sum['late'] > 0 ? 'amber' : ''],
+        ['key' => 'early', 'label' => 'Early logouts', 'value' => $n($sum['early']), 'tone' => $sum['early'] > 0 ? 'amber' : ''],
+    ] : [
+        ['key' => 'employees', 'label' => 'Employees', 'value' => (string) count($people), 'sub' => 'active'],
+        ['key' => 'rate', 'label' => 'Attendance', 'value' => $rate, 'sub' => 'present or on leave, of working days', 'tone' => 'green'],
+        ['key' => 'present', 'label' => 'Present', 'value' => (string) $sum['present'], 'sub' => 'person-days', 'tone' => 'green'],
+        ['key' => 'absent', 'label' => 'Absent', 'value' => (string) $sum['absent'], 'sub' => 'person-days', 'tone' => $sum['absent'] > 0 ? 'red' : ''],
+        ['key' => 'leave', 'label' => 'On leave', 'value' => (string) $sum['leave'], 'sub' => 'person-days', 'tone' => 'blue'],
+        ['key' => 'late', 'label' => 'Late arrivals', 'value' => (string) $sum['late'], 'sub' => 'times', 'tone' => $sum['late'] > 0 ? 'amber' : ''],
+        ['key' => 'early', 'label' => 'Early logouts', 'value' => (string) $sum['early'], 'sub' => 'times', 'tone' => $sum['early'] > 0 ? 'amber' : ''],
+    ];
+    $tiles[] = ['key' => 'leave_requests', 'label' => 'Leave requests', 'value' => (string) $pendingLeave, 'sub' => 'waiting for approval', 'tone' => $pendingLeave > 0 ? 'amber' : ''];
+    $tiles[] = ['key' => 'payroll', 'label' => 'Payroll', 'value' => $last === null ? '-' : $inr($last['net_total'] ?? 0),
+        'sub' => $last === null ? 'not run yet' : trim((string) ($last['cycle_label'] ?? '')) . ($awaiting > 0 ? ' · ' . $awaiting . ' awaiting approval' : ' · approved'),
+        'tone' => $awaiting > 0 ? 'amber' : ''];
+
+    return ['tiles' => $tiles, 'people' => $per,
+        'trend' => $oneDay ? null : ['title' => 'Attendance by day', 'labels' => array_keys($dates),
+            'sets' => ['Present' => array_column($dates, 'present'), 'On leave' => array_column($dates, 'leave'), 'Absent' => array_column($dates, 'absent')]],
+        'range' => [$from, $to]];
 };

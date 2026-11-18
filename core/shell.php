@@ -46,7 +46,7 @@ final class AmetecsShell
         $str = static fn ($v, int $n): string => mb_substr(trim(is_scalar($v) ? (string) $v : ''), 0, $n);
         $tiles = [];
         foreach (array_slice(array_values(array_filter((array) ($in['tiles'] ?? []), 'is_array')), 0, 12) as $t) {
-            $str($t['label'] ?? '', 40) !== '' && $tiles[] = ['label' => $str($t['label'], 40), 'value' => $str($t['value'] ?? '', 30), 'sub' => $str($t['sub'] ?? '', 60),
+            $str($t['label'] ?? '', 40) !== '' && $tiles[] = ['key' => preg_replace('/[^a-z_]/', '', strtolower($str($t['key'] ?? '', 30))), 'label' => $str($t['label'], 40), 'value' => $str($t['value'] ?? '', 30), 'sub' => $str($t['sub'] ?? '', 60),
                 'tone' => in_array($t['tone'] ?? '', ['green', 'amber', 'red', 'blue'], true) ? $t['tone'] : ''];
         }
         $rows = [];
@@ -72,23 +72,33 @@ final class AmetecsShell
      * Cloud: the app's own plugins/<app>/ag-stats.php, run now. On-premise: what its server last reported.
      * @return array{tiles: list<array>, list?: array, at?: string, error?: string}|null
      */
-    public static function appStats(string $tenant, string $code, array $licence): ?array
+    public static function appStats(string $tenant, string $code, array $licence, array $filters = []): ?array
     {
-        $k = $tenant . '|' . $code;
+        $k = $tenant . '|' . $code . '|' . md5((string) json_encode($filters));
         if (array_key_exists($k, self::$statsCache)) {
             return self::$statsCache[$k];
         }
         $file = __DIR__ . '/../plugins/' . preg_replace('/[^a-z0-9]/', '', $code) . '/ag-stats.php';
         $out = null;
         if ($licence['deployment'] !== 'onprem' && is_file($file)) {
+            // ponytail: 30-second file cache per client + filters, so the dashboard's auto-refresh and several open tabs
+            // do not re-read the whole muster every time. A shared cache (Redis) if many clients sit on one server.
+            $cf = sys_get_temp_dir() . '/ag-stats-' . md5($k . '|' . filemtime($file)) . '.json';
+            $hit = is_file($cf) && filemtime($cf) > time() - 30 ? json_decode((string) file_get_contents($cf), true) : null;
+            if (is_array($hit)) {
+                return self::$statsCache[$k] = $hit;
+            }
             try {
-                $out = self::cleanStats((array) (require $file)(AmetecsLicences::pdo(), $tenant));
+                $raw = (array) (require $file)(AmetecsLicences::pdo(), $tenant, $filters);
+                $out = self::cleanStats($raw) + array_filter(['trend' => is_array($raw['trend'] ?? null) ? $raw['trend'] : null,
+                    'people' => is_array($raw['people'] ?? null) ? $raw['people'] : null, 'range' => $raw['range'] ?? null]);
+                @file_put_contents($cf, json_encode($out), LOCK_EX);
             } catch (\Throwable $x) {
                 error_log('AmetecsGlobal dashboard figures for ' . $code . ': ' . $x->getMessage());
                 $out = ['tiles' => [], 'error' => 'The summary could not be read just now.'];
             }
         } elseif (($j = json_decode((string) ($licence['stats_json'] ?? ''), true)) !== null && is_array($j)) {
-            $out = self::cleanStats($j) + ['at' => (string) ($licence['stats_at'] ?? '')];
+            $out = self::cleanStats($j) + ['at' => (string) ($licence['stats_at'] ?? ''), 'reported' => true];
         }
         return self::$statsCache[$k] = $out;
     }

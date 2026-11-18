@@ -939,7 +939,7 @@ main{max-width:1560px;padding:16px 26px 20px}
 @media (max-width:1100px){.kstrip{grid-template-columns:repeat(3,1fr)}.dgrid2{grid-template-columns:1fr}}
 .cn b{white-space:nowrap}.mxt td:last-child,.mxt th:last-child{padding-right:16px;white-space:nowrap}.mxt th.ac{padding-left:4px;padding-right:4px}.mxt th:first-child{width:30%}
 </style>
-<link rel="stylesheet" href="assets/shell.css?v=5"></head><body>
+<link rel="stylesheet" href="assets/shell.css?v=6"><link rel="stylesheet" href="assets/super.css?v=1"></head><body>
 <?php
 $myName = trim((string) ($me['name'] ?? '')) ?: ucfirst((string) strtok($meEmail, '@'));
 $myIni = strtoupper(implode('', array_map(static fn (string $w): string => mb_substr($w, 0, 1), array_slice(preg_split('/[\s._-]+/', $myName) ?: ['S'], 0, 2))));
@@ -968,20 +968,30 @@ $myIni = strtoupper(implode('', array_map(static fn (string $w): string => mb_su
   </div></div>
 </div>
 <?php else:
-  $navItems = ['Overview' => ['dashboard' => ['Dashboard', 'fa-gauge-high'], 'clients' => ['Clients', 'fa-building'], 'client-new' => ['New client', 'fa-plus'], 'licences' => ['Licences', 'fa-key'], 'releases' => ['Updates & releases', 'fa-cloud-arrow-up'], 'billing' => ['Payments & invoices', 'fa-file-invoice-dollar'], 'apps' => ['Apps', 'fa-puzzle-piece'], 'activity' => ['Activity log', 'fa-clock-rotate-left']],
-      'Settings' => ['system' => ['System & health', 'fa-heart-pulse'], 'gateway' => ['Payment settings', 'fa-credit-card'], 'email' => ['Email settings', 'fa-envelope'], 'staff' => ['Super Admins', 'fa-user-shield'], 'account' => ['My account', 'fa-circle-user']]];
+  // PHASE 7 (owner, 18 Nov 2026: "organise everything properly"): grouped by what Ametecs staff do - customers,
+  // products, money, the platform itself. New client is the sidebar's action button; My account is under the user menu.
+  $navItems = ['' => ['dashboard' => ['Dashboard', 'fa-gauge-high']],
+      'Customers' => ['clients' => ['Clients', 'fa-building'], 'licences' => ['Licences', 'fa-key']],
+      'Products' => ['apps' => ['Applications', 'fa-layer-group'], 'releases' => ['Updates & releases', 'fa-cloud-arrow-up']],
+      'Revenue' => ['billing' => ['Payments & invoices', 'fa-file-invoice-dollar'], 'gateway' => ['Payment settings', 'fa-credit-card']],
+      'Platform' => ['system' => ['System & health', 'fa-heart-pulse'], 'email' => ['Email settings', 'fa-envelope'], 'staff' => ['Super Admins', 'fa-user-shield'], 'activity' => ['Activity log', 'fa-clock-rotate-left']]];
+  $navGroupOf = ['client' => 'clients', 'client-new' => 'clients', 'licence' => 'licences', 'release' => 'releases', 'invoice' => 'billing'];
+  $crumb = '';
+  foreach ($navItems as $grp => $items) { foreach ($items as $k => [$label]) { if ($k === ($navGroupOf[$page] ?? $page)) { $crumb = ($grp !== '' ? $grp . ' <i class="fas fa-chevron-right"></i> ' : '') . ag_h($label); } } }
   $titles = ['dashboard' => 'Dashboard', 'clients' => 'Clients', 'client-new' => 'New client', 'client' => 'Client', 'licences' => 'Licences', 'licence' => 'Licence', 'releases' => 'Updates & releases', 'release' => 'Release', 'billing' => 'Payments & invoices', 'invoice' => 'Invoice', 'gateway' => 'Payment settings', 'system' => 'System & health', 'apps' => 'Apps', 'activity' => 'Activity log', 'email' => 'Email settings', 'staff' => 'Super Admins', 'account' => 'My account']; ?>
 <div class="shell">
 <aside class="side">
   <a class="brand" href="?p=dashboard"><span class="lm">AG</span><span>Ametecs<b>Global</b><small>SUPER ADMIN</small></span></a>
-  <?php foreach ($navItems as $grp => $items): ?><div class="nav-l"><?= $grp ?></div>
-    <?php foreach ($items as $k => [$label, $ic]): ?><a class="nv<?= $page === $k || ($page === 'client' && $k === 'clients') || ($page === 'licence' && $k === 'licences') || ($page === 'release' && $k === 'releases') || ($page === 'invoice' && $k === 'billing') ? ' on' : '' ?>" href="?p=<?= $k ?>" title="<?= ag_h($label) ?>"><i class="fas <?= $ic ?>"></i><span><?= ag_h($label) ?></span><?= $k === 'clients' ? '<em class="cnt">' . count($tenants) . '</em>' : '' ?></a><?php endforeach; ?>
+  <a class="newc" href="?p=client-new"><i class="fas fa-plus"></i><span>New client</span></a>
+  <?php foreach ($navItems as $grp => $items): ?><?= $grp !== '' ? '<div class="nav-l">' . $grp . '</div>' : '' ?>
+    <?php foreach ($items as $k => [$label, $ic]): ?><a class="nv<?= $k === ($navGroupOf[$page] ?? $page) ? ' on' : '' ?>" href="?p=<?= $k ?>" title="<?= ag_h($label) ?>"><i class="fas <?= $ic ?>"></i><span><?= ag_h($label) ?></span><?= $k === 'clients' ? '<em class="cnt">' . count($tenants) . '</em>' : '' ?></a><?php endforeach; ?>
   <?php endforeach; ?>
   <div class="bottom"><a class="nv" href="./" target="_blank" title="Client view"><i class="fas fa-arrow-up-right-from-square"></i><span>Client view</span></a></div>
 </aside>
 <div>
 <header class="top">
   <button class="ib" type="button" data-drawer onclick="if(innerWidth<=860)return;document.body.classList.toggle('mini');try{localStorage.setItem('agMini',document.body.classList.contains('mini')?1:0)}catch(e){}" title="Collapse menu"><i class="fas fa-bars"></i></button>
+  <div class="crumb"><?= $crumb ?></div>
   <div class="search" onclick="pal(true)"><i class="fas fa-magnifying-glass"></i><span>Jump to a client or page…</span><kbd>Ctrl K</kbd></div>
   <div class="right">
     <a class="cv" href="./" target="_blank"><i class="fas fa-eye"></i>Client view</a>
@@ -1028,10 +1038,6 @@ $myIni = strtoupper(implode('', array_map(static fn (string $w): string => mb_su
         $st === 'suspended' => '<span class="chk bad" title="Licence suspended" style="background:#d97706"><i class="fas fa-pause"></i></span>',
         default => '<span class="chk off" title="Not licensed"></span>' };
     $att = array_merge($expired, $expiring); ?>
-  <div class="dh">
-    <div class="dh-t"><h1><?= $hourNow < 12 ? 'Good morning' : ($hourNow < 17 ? 'Good afternoon' : 'Good evening') ?>, <?= ag_h((string) strtok($myName, ' ')) ?></h1><span><?= ag_h(date('l, d M Y', (int) strtotime($today))) ?> &middot; across AmetecsGlobal</span></div>
-    <div class="row"><a class="btn ghost" href="?p=activity"><i class="fas fa-clock-rotate-left"></i>Activity</a><a class="btn gold" href="?p=client-new"><i class="fas fa-plus"></i>New client</a></div>
-  </div>
   <?php
     $lr = AmetecsLicences::ready() ? array_merge(...array_map('array_values', array_values(AmetecsLicences::rows()) ?: [[]])) : [];
     $live = array_filter($lr, static fn ($r) => $r['status'] !== 'cancelled');
@@ -1055,11 +1061,18 @@ $myIni = strtoupper(implode('', array_map(static fn (string $w): string => mb_su
         ['?p=releases', 'k6', 'fa-cloud-arrow-down', $liveReleases, 'Available updates'],
         ['?p=releases', 'k3', 'fa-triangle-exclamation', AmetecsReleases::countEvents('failed'), 'Failed installations (30 days)'],
     ]; ?>
-  <section class="kstrip">
-    <?php foreach ($tiles as [$href, $kk, $ic, $num, $label]): $inner = '<span class="ki ' . $kk . '"><i class="fas ' . $ic . '"></i></span><div>' . ($num === null ? '<b title="Arrives with the payments / update phases">&mdash;</b>' : (is_string($num) ? '<b>' . ag_h($num) . '</b>' : '<b data-count="' . (int) $num . '">0</b>')) . '<span>' . $label . '</span></div>'; ?>
-      <?= $href !== null ? '<a href="' . $href . '">' . $inner . '</a>' : '<div title="Arrives with the payments / update phases" style="opacity:.6">' . $inner . '</div>' ?>
-    <?php endforeach; ?>
+  <?php $tv = array_column(array_map(static fn ($t) => [$t[4], $t], $tiles), 1, 0); ?>
+  <section class="hero2">
+    <div class="h2t"><span class="eyebrow2"><?= ag_h(date('l, d M Y', (int) strtotime($today))) ?></span>
+      <h1><?= $hourNow < 12 ? 'Good morning' : ($hourNow < 17 ? 'Good afternoon' : 'Good evening') ?>, <?= ag_h((string) strtok($myName, ' ')) ?></h1>
+      <p><?= (int) $tv['Cloud licences'][3] ?> cloud and <?= (int) $tv['On-premise licences'][3] ?> on-premise licences across <?= count($plugins) ?> applications.</p>
+      <div class="row"><a class="btn gold" href="?p=client-new"><i class="fas fa-plus"></i>New client</a><a class="btn hghost" href="?p=releases"><i class="fas fa-upload"></i>Publish an update</a><a class="btn hghost" href="?p=billing"><i class="fas fa-file-invoice"></i>New invoice</a></div></div>
+    <div class="h2k"><?php foreach (['Customers', 'Active subscriptions', 'Total revenue', 'Active administrators'] as $lab): [$href, , $ic, $num] = $tv[$lab]; ?>
+      <a href="<?= $href ?>"><i class="fas <?= $ic ?>"></i><b><?= is_string($num) ? ag_h($num) : '<span data-count="' . (int) $num . '">' . (int) $num . '</span>' ?></b><span><?= ag_h($lab) ?></span></a><?php endforeach; ?></div>
   </section>
+  <section class="actc"><?php foreach (['Pending installations' => 'amber', 'Pending payments' => 'amber', 'Expired subscriptions' => 'red', 'Failed installations (30 days)' => 'red', 'Available updates' => 'blue'] as $lab => $tone): [$href, , $ic, $num] = $tv[$lab]; $zero = (int) $num === 0; ?>
+    <a class="ac2 <?= $zero ? 'zero' : $tone ?>" href="<?= $href ?>"><span class="ai"><i class="fas <?= $ic ?>"></i></span><span><b><?= (int) $num ?></b><small><?= ag_h($lab) ?></small></span><i class="fas fa-chevron-right go"></i></a>
+  <?php endforeach; ?></section>
   <div class="dgrid2">
     <div class="dcol2"><div class="box"><div class="hd"><h2><i class="fas fa-table-cells"></i>Client licences</h2>
         <span class="lg"><em><span class="chk on"><i class="fas fa-check"></i></span>Live</em><em><span class="chk soon"><i class="fas fa-check"></i></span>Licensed, arriving soon</em><em><span class="chk off"></span>Off</em><em><span class="chk bad"><i class="fas fa-xmark"></i></span>Expired</em></span>

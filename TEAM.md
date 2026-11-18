@@ -110,6 +110,17 @@ Clients and their logins live in the database set in `plugins\smartprs3\.env` (S
   Update. A purchase covers later versions. Super Admin -> Licences -> the client's licence -> Plugins for this client:
   Give free, Take back free, Block, Stop/Allow downloads. Apps ask `AmetecsPlugins::on($tenant, $app, $code)`.
 
+## Unified dashboard + Super Admin look (Phase 7, 18 Nov 2026)
+- Client administrator's Dashboard = every application's live figures in one view, with filters: date (today, yesterday,
+  7 / 30 days, this / last month, custom), application, staff type (Field / Office agents = the employee's "Staff Type"),
+  company, branch, department, team, employee. Filters apply without reloading; figures refresh every minute.
+  Combined tiles add up the same figure from every app; charts: attendance by day, and by company / branch / team /
+  employee (one level below the narrowest filter). Code: core/dashboard.php; each app's plugins/<app>/ag-stats.php
+  receives from / to / ids (the filtered employees). On-premise apps show today's reported figures (filters do not apply).
+- Super Admin: menu grouped as Customers (Clients, Licences), Products (Applications, Updates & releases), Revenue
+  (Payments & invoices, Payment settings), Platform (System & health, Email settings, Super Admins, Activity log);
+  New client is the gold button at the top; My account is under your name. New look: core/assets/super.css.
+
 ## Every day
 - **Once per PC:** double-click `INSTALL-AUTOSYNC.bat`. AUTO-SYNC then runs hidden and starts by itself at every Windows sign-in (no window to keep open). Without it, `AUTO-SYNC.bat` must be left running (minimised). About a minute after you stop saving, your changes go to GitHub; others' changes arrive within 5 minutes. Only the AmetecsGlobal folder is watched.
 - `SYNC.bat` does the same once, on click.
