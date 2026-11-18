@@ -59,3 +59,20 @@
     draw();
   });
 })();
+
+// RESPONSIVE TABLES (owner, 18 Nov 2026: "make full responsive"): every cell learns its column's name, so on a phone each
+// row can show as a small card ("Status: Active") instead of a table wider than the screen (CSS in shell.css).
+(function () {
+  function label(t) {
+    var head = t.querySelector('tr'); if (!head || !head.querySelector('th')) return;
+    var names = [].map.call(head.children, function (c) { return (c.textContent || '').trim(); });
+    t.classList.add('rt');
+    [].forEach.call(t.querySelectorAll('tr'), function (r) {
+      if (r === head) return;
+      var i = 0;
+      [].forEach.call(r.children, function (c) { if (c.tagName === 'TD' && !c.hasAttribute('data-label')) c.setAttribute('data-label', names[i] || ''); i += c.colSpan || 1; });
+    });
+  }
+  document.querySelectorAll('main table').forEach(label);
+  new MutationObserver(function () { document.querySelectorAll('main table:not(.rt)').forEach(label); }).observe(document.body, {childList: true, subtree: true});
+})();

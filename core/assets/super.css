@@ -151,7 +151,7 @@ main{padding-top:22px}
 .pgm,.pgs{display:grid;gap:16px;min-width:0}.pgm>.box,.pgs>.box,.pgm>form>.box,.pgs>form>.box,.pgm>form.box,.pgs>form.box{margin:0}
 .pgs .box .bd.row{flex-direction:column;align-items:stretch}.pgs .box .bd.row>*{width:auto}
 .pgs .grid2{grid-template-columns:1fr!important}.pgs code{word-break:break-all}
-@media (max-width:1100px){.pg2{grid-template-columns:1fr}.pgs{position:static}}
+@media (max-width:1100px){.pg2{grid-template-columns:minmax(0,1fr)}.pgs{position:static}}
 .stepn{width:26px;height:26px;border-radius:50%;background:linear-gradient(135deg,#25476f,#1F3A5F);color:#fff;display:inline-grid;place-items:center;font-size:12.5px;font-weight:800;box-shadow:0 4px 10px -4px rgba(31,58,95,.6)}
 main.pg-client-new{max-width:1080px}main.pg-client-new>form>.box{margin-bottom:16px}
 main.pg-gateway>form.box,main.pg-email>form.box,main.pg-account>form.box,main.pg-staff>.box,main.pg-staff>form.box{max-width:none}
@@ -193,3 +193,25 @@ label{font-weight:600;color:#334155}
 .sasec li:last-child{border:0}.sasec i{width:30px;height:30px;border-radius:9px;background:#f6efe2;color:#b8893b;display:grid;place-items:center;flex:none;font-size:12px}
 .sasec b{display:block;color:#0f172a;font-size:13px}.sasec code{font-size:11px;word-break:break-all}
 @media (max-width:700px){main.pg-staff .lsum{grid-template-columns:1fr 1fr!important}}
+
+/* ---------- Responsive, Super Admin ---------- */
+@media (max-width:1100px){.top{gap:8px}.top .search{max-width:260px}.top .cv{display:none}}
+@media (max-width:860px){
+  main{padding:16px 14px 40px}
+  .top .search{display:none}.top .right{margin-left:auto}.me .nm{display:none}
+  .hero2{padding:20px}.h2k b{font-size:22px}
+  .lph{align-items:stretch}.lph .btn{align-self:flex-start}
+  .phero{padding:16px}.phero h1{font-size:20px!important}
+  .lcl>summary{flex-wrap:wrap}.cpills{display:none}
+  .lr{grid-template-columns:1fr 1fr;gap:10px}.lr .lapp{grid-column:1/-1}.lact{grid-column:1/-1;justify-content:flex-start}
+  .ltabs a{padding:9px 10px}
+  .xall{width:100%}.xall button{flex:1;justify-content:center}.vsw{width:100%}.vsw a{flex:1;justify-content:center}
+  .ldet{grid-template-columns:1fr}
+  .dgrid2,.dgrid,.dcol2{grid-template-columns:1fr!important;display:grid}
+  .sacards{grid-template-columns:1fr}.sac dl{grid-template-columns:1fr 1fr 1fr}
+  main.pg-email{display:block}
+}
+@media (max-width:560px){.lsum,.actc,main.pg-staff .lsum{grid-template-columns:1fr 1fr!important}.ls{padding:12px}.ls .li{display:none}.h2k{grid-template-columns:1fr 1fr}.hero2 .row .btn{flex:1 1 auto}}
+@media (max-width:760px){.kstrip{grid-template-columns:1fr 1fr!important}.kstrip>a,.kstrip>div{padding:10px 12px;min-width:0}.pgm .box .bd{overflow-wrap:anywhere}}
+@media (max-width:1100px){.kstrip{grid-template-columns:repeat(2,minmax(0,1fr))!important}}
+.pgm>*,.pgs>*,.lgrp>*,.sacards>*{min-width:0}
