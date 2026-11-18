@@ -285,6 +285,16 @@ final class AmetecsLicences
         }
     }
 
+    public static function byKey(string $key): ?array
+    {
+        if (!self::ready() || trim($key) === '') {
+            return null;
+        }
+        $q = self::pdo()->prepare('SELECT * FROM ag_licences WHERE key_hash = ? LIMIT 1');
+        $q->execute([self::hashKey($key)]);
+        return $q->fetch(\PDO::FETCH_ASSOC) ?: null;
+    }
+
     // ------------------------------------------------------------------ the one-time move from access.json
 
     private static function importJson(): void

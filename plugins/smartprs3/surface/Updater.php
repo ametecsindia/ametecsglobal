@@ -244,10 +244,11 @@ final class Updater
 
         // MIGRATIONS (pending only, never --fresh), then the application account's grants.
         $log = "Installed {$written} file(s); backup " . basename($backupPath) . "\n";
-        $migrated = $this->runTool('tools/db/migrate.php');
+        // Apps without SmartPRS3's migration tool (other AmetecsGlobal plugins) have no database step here.
+        $migrated = is_file($this->root . '/tools/db/migrate.php') ? $this->runTool('tools/db/migrate.php') : ['ok' => true, 'log' => "\n(no database migrations for this app)\n"];
         $log .= $migrated['log'];
 
-        if ($migrated['ok']) {
+        if ($migrated['ok'] && is_file($this->root . '/tools/db/grant-application-account.php')) {
             $grant = $this->runTool('tools/db/grant-application-account.php --apply');
             $log .= $grant['log'] . ($grant['ok'] ? '' : "\n(grant step reported a problem — the update itself is installed)\n");
         }

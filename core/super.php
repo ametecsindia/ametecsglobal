@@ -6,6 +6,8 @@
  *   Clients     every client (tenant); New client = company + master company + first administrator + app licences
  *   Client      details, suspend/reactivate/close, apps & licences, logins (create admin, set password, disable/enable)
  *   Licences    every licence of every app: cloud / on-premise, plan, status, seats, validity, keys, servers, history
+ *   Updates     releases, patches and plugins for every app: upload, publish / schedule, who gets them, free grants,
+ *               install on Ametecs' cloud server (with backup) and roll back; every download / install / failure logged
  *   Apps        the catalogue, who uses each app, seats
  *   Activity    every change made here: who, when, what
  *   Super Admins Ametecs staff accounts (platform_users)
@@ -404,6 +406,128 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && $pdo !== null) {
         $back($to, null, 'Nothing to do.');
     }
 
+    /* ---------------- updates & releases (Phase 2, 18 Nov 2026) */
+    if (str_starts_with($do, 'release-')) {
+        if (!AmetecsReleases::ready()) {
+            $back('?p=releases', null, 'The update tables are not on this PC yet. They arrive with the next sync (or run SYNC.bat).');
+        }
+        if ($do === 'release-upload' || $do === 'release-import') {
+            $app = (string) ($_POST['app'] ?? '');
+            if (!isset($plugins[$app])) {
+                $back('?p=releases', null, 'Choose the app this package is for.');
+            }
+            if ($do === 'release-upload') {
+                $f = $_FILES['package'] ?? null;
+                $code = (int) ($f['error'] ?? UPLOAD_ERR_NO_FILE);
+                if ($code !== UPLOAD_ERR_OK) {
+                    $back('?p=releases', null, $code === UPLOAD_ERR_INI_SIZE || $code === UPLOAD_ERR_FORM_SIZE
+                        ? 'The file is bigger than this server accepts (' . ini_get('upload_max_filesize') . '). Copy it into core\\data\\releases\\incoming and use "Add from the incoming folder".'
+                        : 'Choose the package (.zip) to upload.');
+                }
+                $file = (string) $f['tmp_name'];
+            } else {
+                $pick = basename((string) ($_POST['incoming'] ?? ''));
+                $file = AmetecsReleases::dir('incoming') . '/' . $pick;
+                if ($pick === '' || !in_array($pick, AmetecsReleases::incoming(), true)) {
+                    $back('?p=releases', null, 'Choose a zip from the incoming folder.');
+                }
+            }
+            $res = AmetecsReleases::upload($app, (string) ($_POST['kind'] ?? 'full'), $file, $_POST);
+            if (!$res['ok']) {
+                $back('?p=releases', null, $res['why'] . ' Nothing was added.');
+            }
+            $do === 'release-import' && @unlink($file);
+            AmetecsData::log($meEmail, 'Uploaded ' . $plugins[$app]['name'] . ' ' . $res['release']['version'] . ' (' . strtolower(AmetecsReleases::KINDS[$res['release']['kind']]) . ')');
+            $back('?p=release&id=' . (int) $res['release']['id'], 'Package checked and stored as a draft. Choose who gets it, then publish.'
+                . (trim((string) $res['release']['signature']) === '' ? ' It is NOT signed: this server has no signing key, so it can be tested here but never installed on a production server.' : ''));
+        }
+        if ($do === 'release-rollback') {
+            $app = (string) ($_POST['app'] ?? '');
+            $res = isset($plugins[$app]) ? AmetecsReleases::rollbackPlatform($app) : ['ok' => false, 'message' => 'Unknown app.'];
+            $res['ok'] && AmetecsData::log($meEmail, 'Rolled back ' . $plugins[$app]['name'] . ' on the cloud server', '', $res['message']);
+            $back('?p=releases', $res['ok'] ? $res['message'] : null, $res['ok'] ? null : $res['message']);
+        }
+        $rel = AmetecsReleases::byId($id);
+        if ($rel === null) {
+            $back('?p=releases', null, 'Unknown release.');
+        }
+        $to = '?p=release&id=' . (int) $id;
+        $rn = ($plugins[$rel['app']]['name'] ?? $rel['app']) . ' ' . $rel['version'];
+        if ($do === 'release-save') {
+            $price = trim((string) ($_POST['price'] ?? ''));
+            $req = trim((string) ($_POST['requires_version'] ?? ''));
+            if (($price !== '' && !is_numeric($price)) || ($req !== '' && preg_match('/^\d+(\.\d+){0,3}$/', $req) !== 1)) {
+                $back($to, null, 'Price must be a number and "requires" a version like 2.1.0. Nothing was saved.');
+            }
+            AmetecsReleases::save($rel, ['title' => trim((string) ($_POST['title'] ?? '')) ?: null, 'notes' => trim((string) ($_POST['notes'] ?? '')) ?: null,
+                'requires_version' => $req ?: null, 'min_php' => trim((string) ($_POST['min_php'] ?? '')) ?: null, 'mandatory' => isset($_POST['mandatory']) ? 1 : 0,
+                'downloadable' => isset($_POST['downloadable']) ? 1 : 0, 'price' => is_numeric($price) && (float) $price > 0 ? number_format((float) $price, 2, '.', '') : null,
+                'currency' => in_array($_POST['currency'] ?? '', ['INR', 'USD', 'AED', 'SAR', 'EUR', 'GBP'], true) ? (string) $_POST['currency'] : 'INR'], 'details changed');
+            AmetecsData::log($meEmail, 'Changed release ' . $rn);
+            $back($to, 'Saved.');
+        }
+        if ($do === 'release-audience') {
+            $all = ($_POST['audience'] ?? '') === 'all';
+            $pick = [];
+            foreach ((array) ($_POST['t'] ?? []) as $tid => $v) {
+                if (ctype_digit((string) $tid) && $tenant((string) $tid) !== null && !empty($v['on'])) {
+                    $pick[(string) $tid] = !empty($v['free']);
+                }
+            }
+            if (!$all && $pick === []) {
+                $back($to . '#who', null, 'Tick at least one client, or choose "every client with this app".');
+            }
+            AmetecsReleases::save($rel, ['audience' => $all ? 'all' : 'selected'], 'audience changed');
+            AmetecsReleases::setAccess($rel, $pick);
+            AmetecsData::log($meEmail, 'Changed who gets ' . $rn, '', $all ? 'every client' . ($pick ? ', ' . count(array_filter($pick)) . ' free' : '') : count($pick) . ' client(s)');
+            $back($to . '#who', 'Saved who gets this release.');
+        }
+        if ($do === 'release-status') {
+            $st = (string) ($_POST['to'] ?? '');
+            $when = trim((string) ($_POST['publish_at'] ?? ''));
+            $set = match ($st) {
+                'publish' => ['status' => 'published', 'publish_at' => null],
+                'schedule' => preg_match('/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/', $when) === 1 ? ['status' => 'published', 'publish_at' => str_replace('T', ' ', $when) . ':00'] : null,
+                'disable' => ['status' => 'disabled'],
+                'withdraw' => ['status' => 'withdrawn'],
+                'draft' => ['status' => 'draft', 'publish_at' => null],
+                default => null,
+            };
+            if ($set === null) {
+                $back($to, null, $st === 'schedule' ? 'Choose the date and time to publish.' : 'Unknown action.');
+            }
+            if ($rel['status'] === 'withdrawn' && $st !== 'draft') {
+                $back($to, null, 'A withdrawn release is never offered again. Upload a new version instead.');
+            }
+            $label = ['publish' => 'published', 'schedule' => 'scheduled', 'disable' => 'disabled', 'withdraw' => 'withdrawn', 'draft' => 'back to draft'][$st];
+            AmetecsReleases::save($rel, $set, $label);
+            AmetecsData::log($meEmail, ucfirst($label) . ' ' . $rn, '', $st === 'schedule' ? 'for ' . $set['publish_at'] : '');
+            $back($to, ['publish' => $rn . ' is live: clients it goes to see it now.', 'schedule' => $rn . ' goes live on ' . date('d M Y, h:i A', (int) strtotime((string) $set['publish_at'])) . '.',
+                'disable' => $rn . ' is paused: no client sees it until you publish it again.', 'withdraw' => $rn . ' is withdrawn. Clients already on it are offered the previous stable version.',
+                'draft' => $rn . ' is a draft again.'][$st]);
+        }
+        if ($do === 'release-install') {
+            session_write_close();
+            $res = AmetecsReleases::installOnPlatform($rel);
+            session_start();
+            AmetecsData::log($meEmail, ($res['ok'] ? 'Installed ' : 'Install failed: ') . $rn . ' on the cloud server', '', $res['message']);
+            $_SESSION['install_log'] = $res['log'];
+            $back($to, $res['ok'] ? $res['message'] . ' The sync now shares the new code with every PC.' : null, $res['ok'] ? null : 'Not installed: ' . $res['message']);
+        }
+        if ($do === 'release-file') {
+            $path = AmetecsReleases::path($rel);
+            if (!is_file($path)) {
+                $back($to, null, 'The package file is not on this server.');
+            }
+            header('Content-Type: application/zip');
+            header('Content-Length: ' . filesize($path));
+            header('Content-Disposition: attachment; filename="' . basename($path) . '"');
+            readfile($path);
+            exit;
+        }
+        $back($to, null, 'Nothing to do.');
+    }
+
     if ($do === 'app-save') {
         $catalogue = AmetecsAccess::plugins(true);
         $code = (string) ($_POST['code'] ?? '');
@@ -736,14 +860,14 @@ $myIni = strtoupper(implode('', array_map(static fn (string $w): string => mb_su
   </div></div>
 </div>
 <?php else:
-  $navItems = ['Overview' => ['dashboard' => ['Dashboard', 'fa-gauge-high'], 'clients' => ['Clients', 'fa-building'], 'client-new' => ['New client', 'fa-plus'], 'licences' => ['Licences', 'fa-key'], 'apps' => ['Apps', 'fa-puzzle-piece'], 'activity' => ['Activity log', 'fa-clock-rotate-left']],
+  $navItems = ['Overview' => ['dashboard' => ['Dashboard', 'fa-gauge-high'], 'clients' => ['Clients', 'fa-building'], 'client-new' => ['New client', 'fa-plus'], 'licences' => ['Licences', 'fa-key'], 'releases' => ['Updates & releases', 'fa-cloud-arrow-up'], 'apps' => ['Apps', 'fa-puzzle-piece'], 'activity' => ['Activity log', 'fa-clock-rotate-left']],
       'Settings' => ['email' => ['Email settings', 'fa-envelope'], 'staff' => ['Super Admins', 'fa-user-shield'], 'account' => ['My account', 'fa-circle-user']]];
-  $titles = ['dashboard' => 'Dashboard', 'clients' => 'Clients', 'client-new' => 'New client', 'client' => 'Client', 'licences' => 'Licences', 'licence' => 'Licence', 'apps' => 'Apps', 'activity' => 'Activity log', 'email' => 'Email settings', 'staff' => 'Super Admins', 'account' => 'My account']; ?>
+  $titles = ['dashboard' => 'Dashboard', 'clients' => 'Clients', 'client-new' => 'New client', 'client' => 'Client', 'licences' => 'Licences', 'licence' => 'Licence', 'releases' => 'Updates & releases', 'release' => 'Release', 'apps' => 'Apps', 'activity' => 'Activity log', 'email' => 'Email settings', 'staff' => 'Super Admins', 'account' => 'My account']; ?>
 <div class="shell">
 <aside class="side">
   <a class="brand" href="?p=dashboard"><span class="lm">AG</span><span>Ametecs<b>Global</b><small>SUPER ADMIN</small></span></a>
   <?php foreach ($navItems as $grp => $items): ?><div class="nav-l"><?= $grp ?></div>
-    <?php foreach ($items as $k => [$label, $ic]): ?><a class="nv<?= $page === $k || ($page === 'client' && $k === 'clients') || ($page === 'licence' && $k === 'licences') ? ' on' : '' ?>" href="?p=<?= $k ?>" title="<?= ag_h($label) ?>"><i class="fas <?= $ic ?>"></i><span><?= ag_h($label) ?></span><?= $k === 'clients' ? '<em class="cnt">' . count($tenants) . '</em>' : '' ?></a><?php endforeach; ?>
+    <?php foreach ($items as $k => [$label, $ic]): ?><a class="nv<?= $page === $k || ($page === 'client' && $k === 'clients') || ($page === 'licence' && $k === 'licences') || ($page === 'release' && $k === 'releases') ? ' on' : '' ?>" href="?p=<?= $k ?>" title="<?= ag_h($label) ?>"><i class="fas <?= $ic ?>"></i><span><?= ag_h($label) ?></span><?= $k === 'clients' ? '<em class="cnt">' . count($tenants) . '</em>' : '' ?></a><?php endforeach; ?>
   <?php endforeach; ?>
   <div class="bottom"><a class="nv" href="./" target="_blank" title="Client view"><i class="fas fa-arrow-up-right-from-square"></i><span>Client view</span></a></div>
 </aside>
@@ -804,6 +928,10 @@ $myIni = strtoupper(implode('', array_map(static fn (string $w): string => mb_su
     $lr = AmetecsLicences::ready() ? array_merge(...array_map('array_values', array_values(AmetecsLicences::rows()) ?: [[]])) : [];
     $live = array_filter($lr, static fn ($r) => $r['status'] !== 'cancelled');
     $kc = static fn (callable $f): int => count(array_filter($live, $f));
+    // Updates: releases live now; on-premise licences whose reported version is behind what they are offered.
+    $liveReleases = count(array_filter(AmetecsReleases::all(), static fn ($r) => AmetecsReleases::stateOf($r) === 'published'));
+    $pendingInstalls = count(array_filter($live, static fn ($r) => $r['deployment'] === 'onprem' && AmetecsLicences::stateOf($r) === 'on'
+        && AmetecsReleases::offerFor((string) $r['tenant_id'], (string) $r['app'], (string) ($r['app_version'] ?? ''))['updates'] !== []));
     $admActive = $pdo !== null ? (int) $pdo->query("SELECT COUNT(*) FROM users WHERE status = 'administrator' AND disabled_at IS NULL")->fetchColumn() : 0;
     $tiles = [
         ['?p=clients', 'k1', 'fa-building', count($tenants), 'Customers'],
@@ -813,11 +941,11 @@ $myIni = strtoupper(implode('', array_map(static fn (string $w): string => mb_su
         ['?p=licences&amp;dep=cloud', 'k6', 'fa-cloud', $kc(static fn ($r) => $r['deployment'] === 'cloud'), 'Cloud licences'],
         ['?p=licences&amp;st=on', 'k2', 'fa-circle-check', $kc(static fn ($r) => AmetecsLicences::stateOf($r) === 'on'), 'Active subscriptions'],
         ['?p=licences&amp;st=expired', 'k3', 'fa-hourglass-end', $kc(static fn ($r) => AmetecsLicences::stateOf($r) === 'expired'), 'Expired subscriptions'],
-        ['?p=licences&amp;st=suspended', 'k5', 'fa-pause', $kc(static fn ($r) => AmetecsLicences::stateOf($r) === 'suspended'), 'Suspended licences'],
+        ['?p=releases', 'k5', 'fa-hourglass-half', $pendingInstalls, 'Pending installations'],
         [null, 'k5', 'fa-file-invoice', null, 'Pending payments'],
         [null, 'k4', 'fa-indian-rupee-sign', null, 'Total revenue'],
-        [null, 'k6', 'fa-cloud-arrow-down', null, 'Available updates'],
-        [null, 'k3', 'fa-triangle-exclamation', null, 'Failed installations'],
+        ['?p=releases', 'k6', 'fa-cloud-arrow-down', $liveReleases, 'Available updates'],
+        ['?p=releases', 'k3', 'fa-triangle-exclamation', AmetecsReleases::countEvents('failed'), 'Failed installations (30 days)'],
     ]; ?>
   <section class="kstrip">
     <?php foreach ($tiles as [$href, $kk, $ic, $num, $label]): $inner = '<span class="ki ' . $kk . '"><i class="fas ' . $ic . '"></i></span><div>' . ($num === null ? '<b title="Arrives with the payments / update phases">&mdash;</b>' : '<b data-count="' . (int) $num . '">0</b>') . '<span>' . $label . '</span></div>'; ?>
@@ -1048,6 +1176,121 @@ $myIni = strtoupper(implode('', array_map(static fn (string $w): string => mb_su
 
   <div class="box"><div class="hd"><h2><i class="fas fa-clock-rotate-left"></i>Licence history</h2></div><table><tr><th>When</th><th>Who</th><th>What</th><th>Detail</th></tr>
   <?php foreach (AmetecsLicences::events((string) $lid) as $e): ?><tr><td style="white-space:nowrap"><?= ag_h($e['created_at']) ?></td><td><?= ag_h($e['by_who']) ?></td><td><?= ag_h($e['action']) ?></td><td class="muted" style="font-size:12.5px"><?= ag_h($e['detail']) ?></td></tr><?php endforeach; ?></table></div>
+
+<?php elseif ($page === 'releases'):
+    $fa = (string) ($_GET['app'] ?? '');
+    $rels = AmetecsReleases::all($fa);
+    $inc = AmetecsReleases::ready() ? AmetecsReleases::incoming() : []; ?>
+  <h1>Updates &amp; releases</h1><p class="sub">Every release, patch and plugin for every app. Upload a package, choose who gets it, publish now or on a date. Clients see only updates for apps they hold. Cloud clients run Ametecs' server: install a release on it here (with automatic backup and roll-back).</p>
+  <?php if (!AmetecsReleases::ready()): ?><div class="msg bad"><i class="fas fa-circle-exclamation"></i><span>The update tables are not on this PC yet. They arrive with the next sync.</span></div><?php else: ?>
+  <div class="box"><div class="hd"><h2><i class="fas fa-server"></i>Ametecs cloud server</h2><span class="muted">the version each app runs for cloud clients</span></div>
+    <table><tr><th>App</th><th>Running</th><th>Newest published</th><th>On-premise clients behind</th><th class="right"></th></tr>
+    <?php foreach ($plugins as $c => $p):
+        $pv = AmetecsReleases::platformVersion($c);
+        $newest = null; foreach (AmetecsReleases::all($c) as $r) { if ($r['kind'] !== 'plugin' && AmetecsReleases::stateOf($r) === 'published' && ($newest === null || version_compare($r['version'], $newest['version'], '>'))) { $newest = $r; } }
+        $behind = 0; foreach (AmetecsLicences::rows() as $ltid => $la) { $l = $la[$c] ?? null; if ($l !== null && $l['deployment'] === 'onprem' && AmetecsLicences::stateOf($l) === 'on' && AmetecsReleases::offerFor((string) $ltid, $c, (string) ($l['app_version'] ?? ''))['updates'] !== []) { $behind++; } }
+        $hasBackup = ($root = AmetecsReleases::pluginRoot($c)) !== null && is_file($root . '/storage/updates/history.json'); ?>
+      <tr><td><b><?= ag_h($p['name']) ?></b></td><td><?= $pv !== '' ? ag_h($pv) : '<span class="muted">' . (AmetecsReleases::pluginRoot($c) === null ? 'not on this server yet' : 'unknown') . '</span>' ?></td>
+        <td><?= $newest !== null ? '<a href="?p=release&id=' . (int) $newest['id'] . '">' . ag_h($newest['version']) . '</a>' . ($pv !== '' && version_compare($newest['version'], $pv, '>') ? ' <span class="pill amber">newer than this server</span>' : '') : '<span class="muted">none yet</span>' ?></td>
+        <td><?= $behind ?></td>
+        <td class="right"><?php if ($hasBackup): ?><form method="post" class="inline" onsubmit="return confirm('Roll back the last install of <?= ag_h($p['name']) ?> on the cloud server?')"><?= $csrf() ?><input type="hidden" name="do" value="release-rollback"><input type="hidden" name="app" value="<?= ag_h($c) ?>"><button class="btn ghost"><i class="fas fa-rotate-left"></i>Roll back last install</button></form><?php endif; ?></td></tr>
+    <?php endforeach; ?></table></div>
+
+  <form method="post" enctype="multipart/form-data" class="box"><?= $csrf() ?><input type="hidden" name="do" value="release-upload">
+    <div class="hd"><h2><i class="fas fa-upload"></i>Upload a package</h2><span class="muted">a .zip from the app's release builder, with release.json at the top &middot; this server accepts up to <?= ag_h((string) ini_get('upload_max_filesize')) ?></span></div>
+    <div class="bd grid2">
+      <div><label>App <span class="req">*</span></label><select name="app" required><?php foreach ($plugins as $c => $p): ?><option value="<?= ag_h($c) ?>"<?= $fa === $c ? ' selected' : '' ?>><?= ag_h($p['name']) ?></option><?php endforeach; ?></select></div>
+      <div><label>Type <span class="req">*</span></label><select name="kind"><?php foreach (AmetecsReleases::KINDS as $k => $v): ?><option value="<?= $k ?>"><?= $v ?></option><?php endforeach; ?></select></div>
+      <div><label>Package (.zip) <span class="req">*</span></label><input type="file" name="package" accept=".zip" required></div>
+      <div><label>Version <span class="muted">(empty = from release.json)</span></label><input name="version" placeholder="2.4.0"></div>
+      <div><label>Title</label><input name="title" placeholder="e.g. GST return filing"></div>
+      <div><label>Requires version <span class="muted">(installed version must be at least)</span></label><input name="requires_version" placeholder="2.3.0"></div>
+      <div class="full"><label>Release notes <span class="muted">(shown to clients; empty = from release.json)</span></label><textarea name="notes" rows="3"></textarea></div>
+      <div><label>Upgrade price <span class="muted">(empty = free)</span></label><input name="price" inputmode="decimal" placeholder="0.00"></div>
+      <div><label class="sw" style="text-transform:none;font-size:14px;color:var(--ink);margin-top:26px"><input type="checkbox" name="mandatory"> Mandatory update</label></div>
+    </div><div class="ft"><button class="btn gold"><i class="fas fa-upload"></i>Upload &amp; check</button></div></form>
+  <?php if ($inc !== []): ?>
+  <form method="post" class="box"><?= $csrf() ?><input type="hidden" name="do" value="release-import">
+    <div class="hd"><h2><i class="fas fa-folder-open"></i>Add from the incoming folder</h2><span class="muted">for packages bigger than the upload limit: copy them into core\data\releases\incoming</span></div>
+    <div class="bd row"><select name="incoming"><?php foreach ($inc as $z): ?><option><?= ag_h($z) ?></option><?php endforeach; ?></select>
+      <select name="app"><?php foreach ($plugins as $c => $p): ?><option value="<?= ag_h($c) ?>"><?= ag_h($p['name']) ?></option><?php endforeach; ?></select>
+      <select name="kind"><?php foreach (AmetecsReleases::KINDS as $k => $v): ?><option value="<?= $k ?>"><?= $v ?></option><?php endforeach; ?></select>
+      <button class="btn navy">Check &amp; add</button></div></form>
+  <?php endif; ?>
+
+  <form class="toolbar"><input type="hidden" name="p" value="releases"><span class="si"><i class="fas fa-magnifying-glass"></i><input data-live="#rel-t" placeholder="Search version, title…" autocomplete="off"></span>
+    <select name="app" onchange="this.form.submit()"><option value="">All apps</option><?php foreach ($plugins as $c => $p): ?><option value="<?= ag_h($c) ?>"<?= $fa === $c ? ' selected' : '' ?>><?= ag_h($p['name']) ?></option><?php endforeach; ?></select></form>
+  <div class="box"><table id="rel-t" class="sortable"><tr><th>App</th><th>Version</th><th>Type</th><th>Status</th><th>Goes to</th><th>Price</th><th>Downloads</th><th>Installs</th><th>Failures</th><th></th></tr>
+  <?php foreach ($rels as $r): [$sl, $sc] = AmetecsReleases::STATUSES[AmetecsReleases::stateOf($r)]; ?><tr>
+    <td><?= ag_h($plugins[$r['app']]['name'] ?? $r['app']) ?></td>
+    <td><b><?= ag_h($r['version']) ?></b><?= $r['mandatory'] ? ' <span class="pill red">Mandatory</span>' : '' ?><?= trim((string) $r['signature']) === '' ? ' <span class="pill grey" title="No signing key on this server">Unsigned</span>' : '' ?><div class="muted" style="font-size:12px"><?= ag_h((string) $r['title']) ?></div></td>
+    <td><?= ag_h(AmetecsReleases::KINDS[$r['kind']] ?? $r['kind']) ?></td><td><span class="pill <?= $sc ?>"><?= $sl ?></span><?= AmetecsReleases::stateOf($r) === 'scheduled' ? '<div class="muted" style="font-size:12px">' . ag_h(date('d M Y H:i', (int) strtotime((string) $r['publish_at']))) . '</div>' : '' ?></td>
+    <td><?= $r['audience'] === 'all' ? 'Every client with the app' : count(AmetecsReleases::access((string) $r['id'])) . ' selected' ?></td>
+    <td><?= ($r['price'] ?? null) !== null ? ag_h($r['currency']) . ' ' . number_format((float) $r['price'], 2) : 'Free' ?></td>
+    <td><?= AmetecsReleases::countEvents('downloaded', 3650, (string) $r['id']) ?></td><td><?= AmetecsReleases::countEvents('installed', 3650, (string) $r['id']) ?></td><td><?= AmetecsReleases::countEvents('failed', 3650, (string) $r['id']) ?></td>
+    <td class="right"><a class="btn ghost" href="?p=release&id=<?= (int) $r['id'] ?>">Open</a></td></tr>
+  <?php endforeach; ?><?php if ($rels === []): ?><tr><td colspan="10"><div class="empty"><i class="fas fa-box-open"></i>No releases yet. Upload the first package above.</div></td></tr><?php endif; ?></table></div>
+  <?php endif; ?>
+
+<?php elseif ($page === 'release' && ($rl = AmetecsReleases::byId((string) ($_GET['id'] ?? ''))) !== null):
+    $rp = $plugins[$rl['app']] ?? ['name' => $rl['app']]; $rid = (int) $rl['id']; $rst = AmetecsReleases::stateOf($rl); [$sl, $sc] = AmetecsReleases::STATUSES[$rst];
+    $acc = AmetecsReleases::access((string) $rid); $pv = AmetecsReleases::platformVersion((string) $rl['app']);
+    $ilog = $_SESSION['install_log'] ?? null; unset($_SESSION['install_log']);
+    $holders = array_filter($tenants, static fn ($t) => AmetecsLicences::row((string) $t['id'], (string) $rl['app']) !== null && AmetecsLicences::row((string) $t['id'], (string) $rl['app'])['status'] !== 'cancelled');
+    $sbtn = static fn (string $to, string $label, string $cls, string $ask = '') => '<form method="post" class="inline"' . ($ask !== '' ? ' onsubmit="return confirm(\'' . ag_h($ask) . '\')"' : '') . '>' . $csrf()
+        . '<input type="hidden" name="do" value="release-status"><input type="hidden" name="id" value="' . $rid . '"><input type="hidden" name="to" value="' . $to . '"><button class="btn ' . $cls . '">' . $label . '</button></form>'; ?>
+  <div class="row" style="margin-bottom:6px"><a href="?p=releases" class="muted">← Updates &amp; releases</a></div>
+  <div class="row"><h1><?= ag_h($rp['name']) ?> <?= ag_h($rl['version']) ?></h1><span class="pill <?= $sc ?>"><?= $sl ?></span><span class="pill grey"><?= ag_h(AmetecsReleases::KINDS[$rl['kind']]) ?></span><?= $rl['mandatory'] ? '<span class="pill red">Mandatory</span>' : '' ?></div>
+  <p class="sub"><?= ag_h((string) ($rl['title'] ?? '')) ?> · <?= (int) $rl['size'] >= 1048576 ? round((int) $rl['size'] / 1048576, 1) . ' MB' : max(1, (int) round((int) $rl['size'] / 1024)) . ' KB' ?> · SHA-256 <code><?= ag_h(substr((string) $rl['sha256'], 0, 20)) ?>…</code> · <?= trim((string) $rl['signature']) !== '' ? '<span class="pill green"><i class="fas fa-shield-halved"></i> Signed by Ametecs</span>' : '<span class="pill grey">Unsigned (no signing key on this server) - test only</span>' ?></p>
+
+  <div class="box"><div class="hd"><h2>Publishing</h2></div><div class="bd row">
+    <?php if ($rl['status'] !== 'withdrawn'): ?>
+      <?= $rst !== 'published' ? $sbtn('publish', '<i class="fas fa-rocket"></i> Publish now', 'gold', 'Publish ' . $rp['name'] . ' ' . $rl['version'] . ' to the clients it goes to?') : '' ?>
+      <form method="post" class="inline row" style="gap:6px"><?= $csrf() ?><input type="hidden" name="do" value="release-status"><input type="hidden" name="id" value="<?= $rid ?>"><input type="hidden" name="to" value="schedule">
+        <input type="datetime-local" name="publish_at" value="<?= ag_h($rst === 'scheduled' ? str_replace(' ', 'T', substr((string) $rl['publish_at'], 0, 16)) : '') ?>"><button class="btn ghost"><i class="far fa-calendar"></i> Schedule</button></form>
+      <?= in_array($rst, ['published', 'scheduled'], true) ? $sbtn('disable', '<i class="fas fa-pause"></i> Disable', 'ghost') : '' ?>
+      <?= $rst !== 'draft' ? $sbtn('draft', 'Back to draft', 'ghost') : '' ?>
+      <?= $sbtn('withdraw', '<i class="fas fa-ban"></i> Withdraw', 'danger', 'Withdraw this release for good? Clients running it will be offered the previous stable version.') ?>
+    <?php else: ?><span>Withdrawn: never offered again. Clients running it are offered the newest older full release.</span><?php endif; ?>
+    <form method="post" class="inline" style="margin-left:auto"><?= $csrf() ?><input type="hidden" name="do" value="release-file"><input type="hidden" name="id" value="<?= $rid ?>"><button class="btn ghost"><i class="fas fa-download"></i> Package</button></form>
+  </div></div>
+
+  <div class="box"><div class="hd"><h2><i class="fas fa-server"></i>Ametecs cloud server</h2><span class="muted">cloud clients run this copy of <?= ag_h($rp['name']) ?></span></div><div class="bd row">
+    <span>Running: <b><?= $pv !== '' ? ag_h($pv) : 'unknown' ?></b></span>
+    <?php if ($rl['kind'] !== 'plugin' && AmetecsReleases::pluginRoot((string) $rl['app']) !== null && ($pv === '' || version_compare((string) $rl['version'], $pv, '>'))): ?>
+      <form method="post" class="inline" onsubmit="return confirm('Install <?= ag_h($rp['name'] . ' ' . $rl['version']) ?> on the cloud server now? Every replaced file is backed up first.')"><?= $csrf() ?><input type="hidden" name="do" value="release-install"><input type="hidden" name="id" value="<?= $rid ?>"><button class="btn navy"><i class="fas fa-download"></i> Install on cloud server</button></form>
+      <span class="muted">Verifies the package, backs up every file it replaces, installs, runs database changes; on any failure everything is put back.</span>
+    <?php elseif (AmetecsReleases::pluginRoot((string) $rl['app']) === null): ?><span class="muted"><?= ag_h($rp['name']) ?> is not on this server yet.</span>
+    <?php else: ?><span class="muted">Nothing to install here: the server already runs this version or newer<?= $rl['kind'] === 'plugin' ? ' (plugins install on the client\'s own server)' : '' ?>.</span><?php endif; ?>
+  </div><?php if (is_string($ilog) && $ilog !== ''): ?><pre style="margin:0 16px 16px;max-height:260px;overflow:auto;background:#0f172a;color:#e2e8f0;padding:12px;border-radius:8px;font-size:12px"><?= ag_h($ilog) ?></pre><?php endif; ?></div>
+
+  <form method="post" class="box"><?= $csrf() ?><input type="hidden" name="do" value="release-save"><input type="hidden" name="id" value="<?= $rid ?>">
+    <div class="hd"><h2>Details</h2></div><div class="bd grid2">
+    <div><label>Title</label><input name="title" value="<?= ag_h((string) ($rl['title'] ?? '')) ?>"></div>
+    <div><label>Requires version (at least)</label><input name="requires_version" value="<?= ag_h((string) ($rl['requires_version'] ?? '')) ?>" placeholder="any"></div>
+    <div class="full"><label>Release notes (clients read these)</label><textarea name="notes" rows="4"><?= ag_h((string) ($rl['notes'] ?? '')) ?></textarea></div>
+    <div><label>Minimum PHP</label><input name="min_php" value="<?= ag_h((string) ($rl['min_php'] ?? '')) ?>" placeholder="8.2"></div>
+    <div><label>Upgrade price per client</label><div class="row"><select name="currency" style="width:90px"><?php foreach (['INR', 'USD', 'AED', 'SAR', 'EUR', 'GBP'] as $cu): ?><option<?= $rl['currency'] === $cu ? ' selected' : '' ?>><?= $cu ?></option><?php endforeach; ?></select><input name="price" value="<?= ag_h((string) ($rl['price'] ?? '')) ?>" placeholder="free" style="flex:1"></div></div>
+    <div><label class="sw" style="text-transform:none;font-size:14px;color:var(--ink)"><input type="checkbox" name="mandatory"<?= $rl['mandatory'] ? ' checked' : '' ?>> Mandatory update</label></div>
+    <div><label class="sw" style="text-transform:none;font-size:14px;color:var(--ink)"><input type="checkbox" name="downloadable"<?= $rl['downloadable'] ? ' checked' : '' ?>> Clients may download the package from their panel</label></div>
+    </div><div class="ft"><button class="btn navy">Save details</button></div></form>
+
+  <form method="post" class="box" id="who"><?= $csrf() ?><input type="hidden" name="do" value="release-audience"><input type="hidden" name="id" value="<?= $rid ?>">
+    <div class="hd"><h2><i class="fas fa-users"></i>Who gets it</h2><span class="muted">only clients holding <?= ag_h($rp['name']) ?> are listed</span></div>
+    <div class="bd"><label class="sw" style="text-transform:none;font-size:14px;color:var(--ink)"><input type="radio" name="audience" value="all"<?= $rl['audience'] === 'all' ? ' checked' : '' ?>> Every client with <?= ag_h($rp['name']) ?></label>
+      &nbsp; <label class="sw" style="text-transform:none;font-size:14px;color:var(--ink)"><input type="radio" name="audience" value="selected"<?= $rl['audience'] === 'selected' ? ' checked' : '' ?>> Only the clients ticked below</label>
+      <p class="muted" style="font-size:12.5px;margin:8px 0 0">"Free" lets that client take a paid upgrade without paying (works with either choice).</p></div>
+    <table><tr><th>Client</th><th>Deployment</th><th>Running</th><th>Gets it</th><th>Free</th></tr>
+    <?php foreach ($holders as $t): $tl = AmetecsLicences::row((string) $t['id'], (string) $rl['app']); $tid = (string) $t['id']; ?><tr>
+      <td><?= ag_h($t['name']) ?></td><td><?= $tl['deployment'] === 'onprem' ? 'On-premise' : 'Cloud' ?></td><td><?= ag_h($tl['deployment'] === 'onprem' ? ((string) ($tl['app_version'] ?: '—')) : ($pv ?: '—')) ?></td>
+      <td><input type="checkbox" name="t[<?= (int) $tid ?>][on]"<?= array_key_exists($tid, $acc) ? ' checked' : '' ?>></td><td><input type="checkbox" name="t[<?= (int) $tid ?>][free]"<?= !empty($acc[$tid]) ? ' checked' : '' ?>></td></tr>
+    <?php endforeach; ?><?php if ($holders === []): ?><tr><td colspan="5" class="muted">No client holds <?= ag_h($rp['name']) ?> yet.</td></tr><?php endif; ?></table>
+    <div class="ft"><button class="btn navy">Save who gets it</button></div></form>
+
+  <div class="box"><div class="hd"><h2><i class="fas fa-clock-rotate-left"></i>Downloads, installs &amp; history</h2></div><table><tr><th>When</th><th>Where</th><th>What</th><th>From → to</th><th>Who</th><th>Detail</th></tr>
+  <?php $tn = array_column($tenants, 'name', 'id'); foreach (AmetecsReleases::events(['release_id' => $rid]) as $e): ?><tr><td style="white-space:nowrap"><?= ag_h($e['created_at']) ?></td><td><?= (int) $e['tenant_id'] === 0 ? 'Ametecs' : ag_h($tn[$e['tenant_id']] ?? '#' . $e['tenant_id']) ?></td>
+    <td><?= ag_h(ucfirst(str_replace('_', ' ', (string) $e['action']))) ?></td><td><?= ag_h(trim(($e['from_version'] ?? '') . ' → ' . ($e['to_version'] ?? ''), ' →')) ?></td><td><?= ag_h($e['by_who']) ?></td>
+    <td class="muted" style="font-size:12px;max-width:420px;white-space:pre-wrap"><?= ag_h(mb_substr((string) $e['detail'], 0, 400)) ?></td></tr><?php endforeach; ?></table></div>
 
 <?php elseif ($page === 'apps'): ?>
   <h1>Apps</h1><p class="sub">The apps every client sees. This list is shared: a change here reaches every PC through GitHub within minutes. An app with an "Opens at" link is <b>Live</b> and opens from the client's front door; without one it can already be licensed and shows as coming. Retired apps disappear for clients but their licences and data are kept.</p>
