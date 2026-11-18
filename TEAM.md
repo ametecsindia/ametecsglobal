@@ -5,9 +5,10 @@
 AmetecsGlobal\
   index.php            front door -> core/
   core\                AmetecsGlobal itself: client sign-in + app tiles (index.php), Super Admin console (super.php),
-                       licences & email (access.php), the gate every app passes through (gate.php)
+                       app access & email (access.php), licensing for every app (licensing.php), the on-premise
+                       licence server (licence-api.php), the gate every app passes through (gate.php)
   core\apps.json       the app list (shared through GitHub)
-  core\data\           this PC's clients, licences, activity log (never on GitHub)
+  core\data\           this PC's client contacts, activity log (never on GitHub)
   plugins\smartprs3\   everything SmartPRS3: its code, vendor, .env, storage, tools, mobile app
   plugins\<app>\       one folder per app as each joins (SmartEPT next)
   SYNC.bat / AUTO-SYNC.bat, sync.ps1, autosync.ps1, sync-apps.json   keeping it all up to date
@@ -32,6 +33,16 @@ Clients and their logins live in the database set in `plugins\smartprs3\.env` (S
   its own version of these, hide it in that app (as done for SmartPRS3) and map the app to the core's records.
 - New app: use these central tables for employees and organisation; never its own employee table or employee screens.
 
+## Licences (Phase 1, 18 Nov 2026)
+- One licence per client per app, for every app, in the database (`ag_licences`, history in `ag_licence_events`).
+  Super Admin -> Licences: cloud or on-premise, plan (trial / monthly / yearly / perpetual), seats, validity, price;
+  Activate / Suspend / Cancel / Renew; nothing is ever deleted. Only an Active, in-date licence opens the app.
+- On-premise: issue a licence key (`AG-XXXX-XXXX-XXXX-XXXX`, shown once). The installed app calls
+  `core/licence-api.php` (action activate / check); the first server is bound, others are refused until
+  "Release from server". Offline servers get a signed .lic file (needs the signing key, which lives only on the
+  live licence server). The old `core\data\access.json` is imported once and renamed `access.json.imported`.
+- Updates for every app will come from AmetecsGlobal Super Admin (decided 18 Nov 2026); payments use Razorpay.
+
 ## New PC (once)
 1. Install Laragon and Git for Windows. Ask Ejaz to add your GitHub account to the repository (Write access).
 2. Download `SETUP-NEW-PC.bat` from the repository into `C:\laragon\www`.
@@ -48,9 +59,9 @@ Clients and their logins live in the database set in `plugins\smartprs3\.env` (S
 - If the window says **"the same file was changed here and on GitHub"**: you and someone else edited the same lines. Nothing was overwritten. Tell Claude which file; it gets merged by hand.
 
 ## Rules
-- **Plugins are edited inside AmetecsGlobal** (`plugins\<app>` is the master copy). The original app folders (e.g. `C:\laragon\www\SmartPRS3`) are never read or touched by the sync. A plugin built or changed on one PC reaches the other through GitHub, and the sync sets it up there by itself (.env, PHP libraries, database). Later each plugin takes its own releases through **Check for updates** (under its licence information) from that plugin's own central.
+- **Plugins are edited inside AmetecsGlobal** (`plugins\<app>` is the master copy). The original app folders (e.g. `C:\laragon\www\SmartPRS3`) are never read or touched by the sync. A plugin built or changed on one PC reaches the other through GitHub, and the sync sets it up there by itself (.env, PHP libraries, database). Releases and patches for every plugin will come from AmetecsGlobal Super Admin (the update hub, decided 18 Nov 2026).
 - **Shared through GitHub (same on every PC):** all code, screens and logic - client view, Super Admin console, every app in `plugins\`, and the app list (`core\apps.json`).
-- **Kept on each PC:** its own database and `core\data` - clients, licences, logins, Super Admins, activity log. Each person creates their own Super Admin on their own PC.
+- **Kept on each PC:** its own database (clients, licences, logins, Super Admins) and `core\data` (contacts, activity log). Each person creates their own Super Admin on their own PC.
 - **Database changes travel automatically:** when an app's code arrives with new database tables, the sync updates that PC's database by itself.
 - **The repository is public.** `.env`, `vendor`, `storage`, uploads, keys and `core\data` are never uploaded; the sync stops if one is about to be, and never pushes after a failed step.
 - Two people editing the same lines is the one thing the sync cannot settle on its own - agree who works on which screen.
