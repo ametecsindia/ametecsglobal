@@ -127,6 +127,23 @@ if (-not $NoGit -and $cfg.git -and $cfg.git.remote -and $failed -gt 0) {
   } catch { $failed++; Say "  FAILED GitHub: $($_.Exception.Message)" }
 }
 
+# MySQL must be running for the database steps. AUTO-SYNC starts at Windows sign-in, often before Laragon has started
+# MySQL; then the steps wait for a later sync instead of failing (18 Nov 2026: the first sign-in run reported the
+# database check as broken because MySQL was not up yet).
+function MySql-Up([string]$dir) {
+  $h = '127.0.0.1'; $port = 3306
+  $envF = Join-Path $dir '.env'
+  if (Test-Path $envF) {
+    foreach ($l in [IO.File]::ReadAllLines($envF)) {
+      if ($l -match '^\s*DB_HOST\s*=\s*"?([^"\s#]+)') { $h = $Matches[1] }
+      if ($l -match '^\s*DB_PORT\s*=\s*"?(\d+)') { $port = [int]$Matches[1] }
+    }
+  }
+  if ($h -eq 'localhost') { $h = '127.0.0.1' }
+  $c = New-Object Net.Sockets.TcpClient
+  try { return $c.ConnectAsync($h, $port).Wait(1500) -and $c.Connected } catch { return $false } finally { $c.Dispose() }
+}
+
 # ------------------------------------------------------------------ every plugin runnable on THIS PC
 # A plugin that arrived through GitHub (tested on the other PC) has its code but not this PC's own parts: its .env,
 # its PHP libraries (vendor) and its database. Each sync makes every plugin folder runnable, whichever PC brought it in:
@@ -169,7 +186,9 @@ foreach ($app in $cfg.apps) {
       }
     }
     $doneF = Join-Path $dataDir "installed-$tag.txt"
-    if ($app.install -and -not (Test-Path $doneF)) {
+    if ($app.install -and -not (Test-Path $doneF) -and -not (MySql-Up $dir)) {
+      Say "   $($app.name): MySQL is not running yet (start Laragon) - its database setup will run on a later sync"
+    } elseif ($app.install -and -not (Test-Path $doneF)) {
       if (-not $phpExe) { throw 'PHP was not found (start Laragon), so the plugin could not be set up on this PC.' }
       Say "== $($app.name): first time on this PC - setting up its database"
       foreach ($cmd in $app.install) { Run-In $dir $phpExe @($cmd -split ' ') }
@@ -192,6 +211,7 @@ foreach ($app in $cfg.apps) {
     $seenFile = Join-Path (Join-Path $root 'core/data') ("db-" + ($app.name -replace '[^A-Za-z0-9]', '') + '.txt')
     $seen = if (Test-Path $seenFile) { [IO.File]::ReadAllText($seenFile) } else { '' }
     if ($now -eq $seen) { continue }
+    if (-not (MySql-Up $dir)) { Say "   $($app.name): MySQL is not running yet (start Laragon) - database changes will be applied on a later sync"; continue }
     $php = (Get-Command php -ErrorAction SilentlyContinue).Source
     if (-not $php) { $php = @(Get-ChildItem 'C:\laragon\bin\php\*\php.exe' -ErrorAction SilentlyContinue | Sort-Object FullName -Descending | Select-Object -First 1).FullName }
     if (-not $php) { throw 'PHP was not found (start Laragon), so the database could not be updated.' }

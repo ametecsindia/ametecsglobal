@@ -1,10 +1,19 @@
-# AmetecsGlobal AUTOMATIC sync (started by AUTO-SYNC.bat; leave its window open or minimised).
+# AmetecsGlobal AUTOMATIC sync. Normally started hidden at Windows sign-in (INSTALL-AUTOSYNC.bat, once per PC);
+# AUTO-SYNC.bat starts it in a visible window instead, for watching it work.
 #   - any saved change in AmetecsGlobal -> sync about a minute later (the original app folders are not watched or read)
 #     (it waits for a minute with no further saves, so a half-finished edit is not pushed mid-way)
 #   - every 5 minutes anyway, to pick up changes made on GitHub
 param([int]$quietSeconds = 60, [int]$pollMinutes = 5)
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
+# A BACKGROUND JOB THAT NEVER GETS IN THE USER'S WAY (owner, 18 Nov 2026):
+#   - below-normal priority; git, composer and php started from here inherit it, so the PC stays responsive
+#   - git never opens a sign-in window or prompt; if GitHub needs signing in again, the sync fails quietly and says
+#     so in sync-log.txt
+#   - INSTALL-AUTOSYNC.bat starts this hidden at every Windows sign-in (no window at all)
+try { (Get-Process -Id $PID).PriorityClass = 'BelowNormal' } catch { }
+$env:GIT_TERMINAL_PROMPT = '0'; $env:GCM_INTERACTIVE = 'never'
+$env:COMPOSER_NO_INTERACTION = '1'
 $single = New-Object System.Threading.Mutex($false, 'AmetecsGlobalAutoSync')
 if (-not $single.WaitOne(0)) { Write-Host 'AUTO-SYNC is already running in another window.'; Start-Sleep 5; exit }
 
