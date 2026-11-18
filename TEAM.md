@@ -41,7 +41,22 @@ Clients and their logins live in the database set in `plugins\smartprs3\.env` (S
   `core/licence-api.php` (action activate / check); the first server is bound, others are refused until
   "Release from server". Offline servers get a signed .lic file (needs the signing key, which lives only on the
   live licence server). The old `core\data\access.json` is imported once and renamed `access.json.imported`.
-- Updates for every app will come from AmetecsGlobal Super Admin (decided 18 Nov 2026); payments use Razorpay.
+- Payments (Phase 3) use Razorpay.
+
+## Updates & releases (Phase 2, 18 Nov 2026)
+- Super Admin -> Updates & releases is the one place for every app's full releases, patches and plugins/modules.
+  Upload a .zip with release.json {product, version, notes} at its top (bigger than the upload limit? copy it into
+  core\data\releases\incoming and use "Add from the incoming folder"). Packages are checked (paths, product, version),
+  stored in core\data\releases (never on GitHub) with their SHA-256, and signed when the server holds the licence key.
+- Each release: notes, "requires version", minimum PHP, mandatory, download allowed, price, every client or selected
+  clients (with a free grant per client), publish now / schedule / disable / withdraw. Every download, install,
+  failure and rollback is logged per release.
+- Cloud: "Install on cloud server" uses SmartPRS3's installer (verify, back up every replaced file, write, restore
+  on failure, migrate); "Roll back last install" puts the backup back. The sync then shares the new code with every PC.
+  Unsigned packages install only on non-production PCs.
+- On-premise: the installed app asks core/licence-api.php (actions updates / download / report, with its key from its
+  bound server). Client administrators see their own apps under Updates (and a banner on Home); paid upgrades wait
+  for payment (Phase 3, Razorpay) unless Super Admin grants them free.
 
 ## New PC (once)
 1. Install Laragon and Git for Windows. Ask Ejaz to add your GitHub account to the repository (Write access).
