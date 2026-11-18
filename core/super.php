@@ -808,7 +808,7 @@ $licenceRows = static function (string $tid, array $prefill = []) use ($plugins,
 $statusPill = static fn (string $s): string => '<span class="pill ' . (['active' => 'green', 'suspended' => 'amber', 'closed' => 'red'][$s] ?? 'grey') . '">' . ag_h(ucfirst($s ?: 'unknown')) . '</span>';
 $f = static fn (string $k, string $default = '') => ag_h((string) ($form[$k] ?? $default));
 ?><!DOCTYPE html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<html lang="en"><head><meta charset="utf-8"><script>try{localStorage.getItem("agTheme")==="classic"||document.documentElement.classList.add("t-gold")}catch(e){document.documentElement.classList.add("t-gold")}</script><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Super Admin · AmetecsGlobal</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 <style>
@@ -954,7 +954,7 @@ main{max-width:1560px;padding:16px 26px 20px}
 @media (max-width:1100px){.kstrip{grid-template-columns:repeat(3,1fr)}.dgrid2{grid-template-columns:1fr}}
 .cn b{white-space:nowrap}.mxt td:last-child,.mxt th:last-child{padding-right:16px;white-space:nowrap}.mxt th.ac{padding-left:4px;padding-right:4px}.mxt th:first-child{width:30%}
 </style>
-<link rel="stylesheet" href="assets/shell.css?v=7"><link rel="stylesheet" href="assets/super.css?v=7"></head><body>
+<link rel="stylesheet" href="assets/shell.css?v=7"><link rel="stylesheet" href="assets/super.css?v=7"><link rel="stylesheet" href="assets/theme-gold.css?v=1"></head><body>
 <?php
 $myName = trim((string) ($me['name'] ?? '')) ?: ucfirst((string) strtok($meEmail, '@'));
 $myIni = strtoupper(implode('', array_map(static fn (string $w): string => mb_substr($w, 0, 1), array_slice(preg_split('/[\s._-]+/', $myName) ?: ['S'], 0, 2))));
@@ -1011,7 +1011,7 @@ $myIni = strtoupper(implode('', array_map(static fn (string $w): string => mb_su
   <div class="right">
     <a class="cv" href="./" target="_blank"><i class="fas fa-eye"></i>Client view</a>
     <details class="me"><summary><span class="av"><?= ag_h($myIni) ?></span><span class="nm"><?= ag_h($myName) ?><small>Super Admin</small></span><i class="fas fa-chevron-down" style="font-size:11px;color:var(--mute)"></i></summary>
-      <div class="dd"><a href="?p=account"><i class="fas fa-circle-user"></i>My account</a><a href="?p=staff"><i class="fas fa-user-shield"></i>Super Admins</a>
+      <div class="dd"><a href="?p=account"><i class="fas fa-circle-user"></i>My account</a><a data-theme-toggle><i class="fas fa-palette"></i><span data-theme-label>Classic navy theme</span></a><a href="?p=staff"><i class="fas fa-user-shield"></i>Super Admins</a>
         <form method="post"><?= $csrf() ?><button name="do" value="signout"><i class="fas fa-arrow-right-from-bracket"></i>Sign out</button></form></div></details>
   </div>
 </header>
@@ -1893,6 +1893,6 @@ document.addEventListener('keydown',function(e){if((e.ctrlKey||e.metaKey)&&e.key
 document.addEventListener('click',function(e){document.querySelectorAll('details.me[open],details.act[open]').forEach(function(d){if(!d.contains(e.target))d.removeAttribute('open')})});
 })();
 </script>
-<script src="assets/ui.js?v=6"></script>
+<script src="assets/ui.js?v=7"></script>
 <?php endif; ?>
 </body></html>

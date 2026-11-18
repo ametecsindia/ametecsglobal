@@ -76,3 +76,17 @@
   document.querySelectorAll('main table').forEach(label);
   new MutationObserver(function () { document.querySelectorAll('main table:not(.rt)').forEach(label); }).observe(document.body, {childList: true, subtree: true});
 })();
+
+// THEME SWITCH (owner, 18 Nov 2026: gold by default; "Classic navy theme" in the user menu), remembered on this browser.
+(function () {
+  var root = document.documentElement;
+  function label() { document.querySelectorAll('[data-theme-label]').forEach(function (l) { l.textContent = root.classList.contains('t-gold') ? 'Classic navy theme' : 'Gold theme'; }); }
+  document.addEventListener('click', function (e) {
+    if (!e.target.closest('[data-theme-toggle]')) return;
+    e.preventDefault();
+    var gold = root.classList.toggle('t-gold');
+    try { localStorage.setItem('agTheme', gold ? 'gold' : 'classic'); } catch (x) {}
+    label();
+  });
+  label();
+})();
