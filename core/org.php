@@ -102,7 +102,7 @@ tr:nth-child(even) td{background:#f8fafc}select,input[type=text]{padding:6px 8px
 .col{flex:1;display:flex;flex-direction:column;min-width:0;min-height:0}.umbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:10px 18px;background:#fff;border-bottom:1px solid var(--line);font-size:13px}.umbar .msg{flex-basis:100%;margin:0}.umbar input{padding:6px 8px;border:1px solid var(--line);border-radius:8px}
 @media (max-width:860px){.top-in .who{display:none}.top-in{padding:0 14px}}
 </style>
-<link rel="stylesheet" href="assets/shell.css?v=8"><link rel="stylesheet" href="assets/theme-gold.css?v=2"></head><body>
+<link rel="stylesheet" href="assets/shell.css?v=10"><link rel="stylesheet" href="assets/theme-gold.css?v=2"></head><body>
 <div class="shell">
 <?= AmetecsShell::nav($company, $isAdmin, $active, ['notifications' => count($notes)], './') ?>
 <div class="orgmain">

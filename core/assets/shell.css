@@ -193,3 +193,7 @@ img,video,canvas{max-width:100%}
 .top-in .crumb i{font-size:9px;color:#b6c0ce}
 .top-in .crumb+.bell{margin-left:auto}
 @media (max-width:860px){.top-in .crumb{display:none}}
+/* left menu (18 Nov 2026): fixed to the full window height on desktop, so it reaches the bottom of every page; thin dark scrollbar */
+@media (min-width:861px){.shell>.side{position:fixed;left:0;top:0;bottom:0;width:264px;height:auto;z-index:40}.shell>.side+*{grid-column:2}}
+.side{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.18) transparent}
+.side::-webkit-scrollbar{width:6px}.side::-webkit-scrollbar-thumb{background:rgba(255,255,255,.18);border-radius:6px}.side::-webkit-scrollbar-track{background:transparent}
