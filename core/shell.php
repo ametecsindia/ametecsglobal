@@ -183,10 +183,13 @@ final class AmetecsShell
     {
         $v = static fn (string $k): string => $k === 'home' ? ($base === '' ? './' : $base) : $base . '?v=' . $k;
         $item = static function (string $href, string $icon, string $label, bool $on, int $count = 0, string $extra = ''): string {
-            return '<a class="nv' . ($on ? ' on' : '') . '" href="' . ag_h($href) . '"' . $extra . '><i class="fas ' . $icon . '"></i><span>' . ag_h($label) . '</span>'
+            return '<a class="nv' . ($on ? ' on' : '') . '" href="' . ag_h($href) . '" title="' . ag_h($label) . '"' . $extra . '><i class="fas ' . $icon . '"></i><span>' . ag_h($label) . '</span>'
                 . ($count > 0 ? '<em class="ucnt">' . $count . '</em>' : '') . '</a>';
         };
-        $h = '<aside class="side"><a class="brand" href="' . ag_h($v('home')) . '"><span class="logo-mark">AG</span><span>Ametecs<b>Global</b></span></a>';
+        // MENU, 18 Nov 2026 (owner: "redesign left side menu and toggle option like hide and unhide"): the arrow by the
+        // brand folds the menu to an icon rail and back (remembered in this browser, html.sb-mini; ui.js).
+        $h = '<aside class="side cside"><div class="brandrow"><a class="brand" href="' . ag_h($v('home')) . '"><span class="logo-mark">AG</span><span>Ametecs<b>Global</b></span></a>'
+            . '<button type="button" class="sbtog" data-sbtog title="Hide menu" aria-label="Hide or show the menu"><i class="fas fa-angles-left"></i></button></div>';
         if ($company !== '') {
             $h .= '<div class="ws"><span class="ws-i">' . ag_h(mb_strtoupper(mb_substr($company, 0, 1))) . '</span><span><b>' . ag_h($company) . '</b><small>Workspace</small></span></div>';
         }
@@ -213,14 +216,14 @@ final class AmetecsShell
                     $q = AmetecsSetup::href($it);
                     $subs .= '<a class="sub' . ($route === $active ? ' on' : '') . '" href="' . ag_h($base . 'org.php' . str_replace('?r=', '?s=', $q)) . '" data-q="' . ag_h($q) . '"><i class="fas ' . ag_h($it[2]) . '"></i><span>' . ag_h($label) . '</span></a>';
                 }
-                $h .= '<details class="grp"' . ($open ? ' open' : '') . '><summary><i class="fas ' . ($orgIcons[$grp] ?? 'fa-folder') . '"></i><span>' . ag_h($grp) . '</span><i class="fas fa-chevron-down car"></i></summary>' . $subs . '</details>';
+                $h .= '<details class="grp"' . ($open ? ' open' : '') . '><summary title="' . ag_h($grp) . '"><i class="fas ' . ($orgIcons[$grp] ?? 'fa-folder') . '"></i><span>' . ag_h($grp) . '</span><i class="fas fa-chevron-down car"></i></summary>' . $subs . '</details>';
             }
             $h .= $item($base . 'org.php?s=ag-apps', 'fa-toggle-on', 'App access', $active === 'org:ag-apps');
         }
         $h .= '<div class="nav-l">Help</div>'
             . ($isAdmin ? $item($v('activity'), 'fa-clock-rotate-left', 'Activity history', $active === 'activity') : '')
             . $item($v('support'), 'fa-life-ring', 'Support & help', $active === 'support')
-            . '</nav><div class="side-foot"><span class="dotlive"></span><span>All systems normal</span></div></aside>';
+            . '</nav><div class="side-foot"><span class="dotlive"></span><span>All systems normal</span><button type="button" class="sbtog2" data-sbtog title="Hide / show menu"><i class="fas fa-angles-left"></i></button></div></aside>';
         return $h;
     }
 }

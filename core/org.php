@@ -75,7 +75,7 @@ $titles = ['ag-apps' => 'App access', 'users' => 'Users & permissions', 'setup-c
 $title = $titles[$cur[0]] ?? 'Organization setup';
 foreach (AmetecsSetup::CORE as $items) { foreach ($items as $label => $it) { if ($it[0] === $cur[0] && $it[1] === $cur[1] && !isset($titles[$cur[0]])) { $title = $label; } } }
 ?><!DOCTYPE html>
-<html lang="en"><head><meta charset="utf-8"><script>try{localStorage.getItem("agTheme")==="classic"||document.documentElement.classList.add("t-gold")}catch(e){document.documentElement.classList.add("t-gold")}</script><meta name="viewport" content="width=device-width, initial-scale=1">
+<html lang="en"><head><meta charset="utf-8"><script>try{localStorage.getItem("agTheme")==="classic"||document.documentElement.classList.add("t-gold");localStorage.getItem("agSb")==="1"&&document.documentElement.classList.add("sb-mini")}catch(e){document.documentElement.classList.add("t-gold")}</script><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Organization Setup · AmetecsGlobal</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 <style>
@@ -102,7 +102,7 @@ tr:nth-child(even) td{background:#f8fafc}select,input[type=text]{padding:6px 8px
 .col{flex:1;display:flex;flex-direction:column;min-width:0;min-height:0}.umbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:10px 18px;background:#fff;border-bottom:1px solid var(--line);font-size:13px}.umbar .msg{flex-basis:100%;margin:0}.umbar input{padding:6px 8px;border:1px solid var(--line);border-radius:8px}
 @media (max-width:860px){.top-in .who{display:none}.top-in{padding:0 14px}}
 </style>
-<link rel="stylesheet" href="assets/shell.css?v=15"><link rel="stylesheet" href="assets/theme-gold.css?v=2"></head><body>
+<link rel="stylesheet" href="assets/shell.css?v=16"><link rel="stylesheet" href="assets/theme-gold.css?v=2"></head><body>
 <div class="shell">
 <?= AmetecsShell::nav($company, $isAdmin, $active, ['notifications' => count($notes)], './') ?>
 <div class="orgmain">
@@ -123,5 +123,5 @@ document.querySelectorAll('.side a[data-q]').forEach(function(a){a.addEventListe
 function mark(h){document.querySelectorAll('.side a').forEach(function(a){a.classList.toggle('on',a.getAttribute('href')===h)})}
 window.addEventListener('popstate',function(){location.reload()});
 </script>
-<script src="assets/ui.js?v=9"></script>
+<script src="assets/ui.js?v=10"></script>
 </body></html>

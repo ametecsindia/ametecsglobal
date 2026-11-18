@@ -252,3 +252,53 @@ img,video,canvas{max-width:100%}
 @media (max-width:520px){.lstrip{grid-template-columns:1fr}}
 .pf-row.one{grid-template-columns:1fr}
 .pf-sum span{gap:12px}.pf-sum b{white-space:nowrap}
+/* CLIENT MENU v2 (18 Nov 2026): cleaner rows, gold active pill, hide / show to an icon rail */
+.cside{padding:14px 12px 10px;gap:0;transition:width .2s ease}
+.cside .brandrow{display:flex;align-items:center;gap:6px;margin-bottom:12px}.cside .brand{flex:1;min-width:0;padding:2px 6px}
+.cside .sbtog,.cside .sbtog2{border:0;background:rgba(232,201,119,.08);color:#c9b48a;width:28px;height:28px;border-radius:8px;display:grid;place-items:center;cursor:pointer;flex:none;font-size:12px;transition:background .15s,transform .2s}
+.cside .sbtog:hover,.cside .sbtog2:hover{background:rgba(232,201,119,.2);color:#f3dc95}
+.cside .sbtog2{margin-left:auto;display:none}
+.cside .ws{margin:0 0 14px;padding:10px 11px;border-radius:14px}
+.cside .nav-l{padding:14px 12px 6px;font-size:10px;letter-spacing:1.4px;font-weight:700}
+.cside a.nv,.cside .grp summary{padding:5px 10px;gap:11px;border-radius:10px;font-size:13.5px;position:relative}
+.cside a.nv>i,.cside .grp summary>i:first-child{width:28px;height:28px;border-radius:8px;display:grid;place-items:center;font-size:13px;flex:none;background:rgba(255,255,255,.04);transition:background .15s}
+.cside a.nv.on>i{background:linear-gradient(135deg,#e8c977,#b8893b);color:#1c1408!important}
+.cside a.nv:hover>i,.cside .grp summary:hover>i:first-child{background:rgba(232,201,119,.14)}
+.cside .grp a.sub{padding:6px 10px 6px 50px;font-size:12.5px}
+.cside .grp a.sub:before{content:"";position:absolute;left:24px;top:0;bottom:0;width:1px;background:rgba(232,201,119,.15)}
+.cside .grp a.sub.on{color:#f3dc95;background:rgba(232,201,119,.08)}
+.cside .side-foot{padding:10px 8px 2px}
+/* hidden = icon rail */
+@media (min-width:861px){
+  html.sb-mini .shell{grid-template-columns:76px 1fr!important}
+  html.sb-mini .shell>.cside{width:76px;padding:14px 10px 10px;overflow-x:hidden}
+  html.sb-mini .cside .brand span:not(.logo-mark),html.sb-mini .cside .ws span:not(.ws-i),html.sb-mini .cside a.nv>span,html.sb-mini .cside a.nv .ucnt,
+  html.sb-mini .cside .grp summary>span,html.sb-mini .cside .grp summary .car,html.sb-mini .cside .grp a.sub,html.sb-mini .cside .side-foot>span:not(.dotlive){display:none}
+  html.sb-mini .cside .brandrow{justify-content:center;flex-direction:column;gap:10px}html.sb-mini .cside .sbtog{transform:rotate(180deg)}html.sb-mini .cside .brand{flex:none;padding:2px}
+  html.sb-mini .cside .ws{justify-content:center;padding:8px 0}
+  html.sb-mini .cside .nav-l{font-size:0;padding:8px 0;margin:0 14px;border-top:1px solid rgba(232,201,119,.12)}
+  html.sb-mini .cside a.nv,html.sb-mini .cside .grp summary{justify-content:center;padding:6px 0}
+  html.sb-mini .cside a.nv .ucnt{display:block;position:absolute;top:2px;right:8px;font-size:9px;padding:0 5px}
+  html.sb-mini .cside .side-foot{flex-direction:column;gap:10px}html.sb-mini .cside .sbtog2{display:grid;margin:0;transform:rotate(180deg)}
+}
+/* Activity history v2 (18 Nov 2026) */
+.akpis{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px;margin-bottom:14px}
+.akpis a{display:grid;grid-template-columns:34px 1fr;column-gap:10px;align-items:center;background:#fff;border:1px solid #efe6d4;border-radius:14px;padding:12px;text-decoration:none;color:#17130c;transition:transform .15s,border-color .15s}
+.akpis a:hover{transform:translateY(-2px)}.akpis a.on{border-color:#d4a65a;box-shadow:0 0 0 3px rgba(212,166,90,.15)}
+.akpis i{grid-row:span 2;width:34px;height:34px;border-radius:10px;display:grid;place-items:center;font-size:13px;background:#fbf3e2;color:#9a7228}
+.akpis b{font-size:18px;line-height:1.1}.akpis span{font-size:11.5px;color:#7a6e5b}
+.k-licence .tlic,.akpis .k-licence i{background:#fbf3e2;color:#9a7228}.k-billing .tlic,.akpis .k-billing i{background:#ecfdf3;color:#15803d}.k-access .tlic,.akpis .k-access i{background:#eff4ff;color:#1d4ed8}
+.k-update .tlic,.akpis .k-update i{background:#f5f0ff;color:#6d28d9}.k-settings .tlic,.akpis .k-settings i{background:#f1f5f9;color:#475569}
+.afilt{display:flex;gap:10px;align-items:center;flex-wrap:wrap;background:#fff;border:1px solid #efe6d4;border-radius:14px;padding:10px 12px;margin-bottom:14px}
+.afilt .fsearch{flex:1;min-width:220px;margin:0}.afilt select{height:38px;border:1px solid #e5dccb;border-radius:9px;padding:0 10px;font:inherit;font-size:13px;background:#fff}
+.acnt{margin-left:auto;font-size:12px;color:#7a6e5b;font-weight:600}
+.tl{position:relative}.tlday{position:sticky;top:60px;z-index:2;display:inline-block;margin:14px 0 8px;padding:4px 12px;border-radius:20px;background:#17130c;color:#f3dc95;font-size:11.5px;font-weight:700;letter-spacing:.3px}
+.tli{display:flex;gap:14px;position:relative;padding:0 0 12px 0}.tli:before{content:"";position:absolute;left:17px;top:38px;bottom:0;width:2px;background:#efe6d4}
+.tlic{width:36px;height:36px;border-radius:12px;display:grid;place-items:center;flex:none;font-size:13px;position:relative;z-index:1;box-shadow:0 0 0 4px #faf6ee}
+.tlb{flex:1;min-width:0;background:#fff;border:1px solid #efe6d4;border-radius:12px;padding:10px 14px}
+.tlh{display:flex;gap:10px;justify-content:space-between;align-items:baseline}.tlh b{font-size:13.5px}.tlh time{font-size:11.5px;color:#94a3b8;white-space:nowrap}
+.tlb p{margin:4px 0 0;font-size:12.5px;color:#5c5040;overflow-wrap:anywhere}.tlb small{display:flex;align-items:center;gap:6px;margin-top:6px;font-size:11.5px;color:#94a3b8}
+.tlb .av{width:18px;height:18px;border-radius:50%;display:grid;place-items:center;background:linear-gradient(135deg,#e8c977,#b8893b);color:#1c1408;font-size:9.5px;font-weight:800}
+@media (max-width:1100px){.akpis{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media (max-width:560px){.akpis{grid-template-columns:1fr 1fr}.tlday{top:56px}.acnt{margin-left:0}}
+.afilt .fsearch input{width:100%}.afilt .fsearch{display:flex;align-items:center}

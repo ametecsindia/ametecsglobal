@@ -108,3 +108,24 @@
   }
   document.querySelectorAll('form[data-seats]').forEach(function (f) { calc(f); f.addEventListener('input', function () { calc(f); }); });
 })();
+// menu hide / show (client panel): folds the sidebar to an icon rail; remembered in this browser
+document.addEventListener('click', function (e) {
+  var b = e.target.closest('[data-sbtog]'); if (!b) return;
+  var on = document.documentElement.classList.toggle('sb-mini');
+  try { localStorage.setItem('agSb', on ? '1' : '0'); } catch (x) {}
+  document.querySelectorAll('.cside details.grp[open]').forEach(function (d) { on && d.removeAttribute('open'); });
+});
+// timeline search (Activity history) and CSV download of the rows shown
+document.addEventListener('input', function (e) {
+  var i = e.target.closest('[data-live-tl]'); if (!i) return;
+  var q = i.value.toLowerCase(), box = document.querySelector(i.dataset.liveTl);
+  box.querySelectorAll('.tli').forEach(function (r) { r.hidden = q !== '' && r.textContent.toLowerCase().indexOf(q) < 0; });
+  box.querySelectorAll('.tlday').forEach(function (d) { var n = d.nextElementSibling, any = false; while (n && !n.classList.contains('tlday')) { any = any || !n.hidden; n = n.nextElementSibling; } d.hidden = !any; });
+});
+document.addEventListener('click', function (e) {
+  var b = e.target.closest('[data-csv]'); if (!b) return;
+  var rows = [['When', 'Kind', 'What', 'Who', 'Detail']];
+  document.querySelectorAll(b.dataset.csv + ' [data-csv-row]').forEach(function (r) { if (!r.hidden) rows.push(JSON.parse(r.dataset.csvRow)); });
+  var csv = rows.map(function (r) { return r.map(function (c) { return '"' + String(c).replace(/"/g, '""') + '"'; }).join(','); }).join('\r\n');
+  var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv' })); a.download = b.dataset.name || 'export.csv'; a.click();
+});

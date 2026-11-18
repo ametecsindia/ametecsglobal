@@ -379,7 +379,7 @@ if ($user !== null && $isAdmin && $view === 'home' && $pdo !== null) {
     require __DIR__ . '/dashboard.php';
 }
 ?><!DOCTYPE html>
-<html lang="en"><head><meta charset="utf-8"><script>try{localStorage.getItem("agTheme")==="classic"||document.documentElement.classList.add("t-gold")}catch(e){document.documentElement.classList.add("t-gold")}</script><meta name="viewport" content="width=device-width, initial-scale=1">
+<html lang="en"><head><meta charset="utf-8"><script>try{localStorage.getItem("agTheme")==="classic"||document.documentElement.classList.add("t-gold");localStorage.getItem("agSb")==="1"&&document.documentElement.classList.add("sb-mini")}catch(e){document.documentElement.classList.add("t-gold")}</script><meta name="viewport" content="width=device-width, initial-scale=1">
 <title><?= $user !== null ? 'Home' : 'Sign in' ?> · AmetecsGlobal</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 <style>
@@ -702,7 +702,7 @@ a{color:inherit}
 .ucnt{margin-left:auto;font-style:normal;font-size:11px;background:var(--gold);color:#fff;padding:1px 8px;border-radius:99px}.lic-t td.r,.lic-t th.r{text-align:right}
 .lp{display:inline-block;padding:2px 10px;border-radius:99px;font-size:12px;font-weight:600}.lp-green{background:var(--ok-bg);color:var(--ok)}.lp-amber{background:#fffbeb;color:#b45309}.lp-red{background:var(--bad-bg);color:var(--bad)}.lp-grey{background:#f1f5f9;color:var(--mute)}
 </style>
-<link rel="stylesheet" href="assets/shell.css?v=15"><link rel="stylesheet" href="assets/theme-gold.css?v=2"></head><body>
+<link rel="stylesheet" href="assets/shell.css?v=16"><link rel="stylesheet" href="assets/theme-gold.css?v=2"></head><body>
 <?php if ($user === null): ?>
 <div class="auth">
   <aside class="auth-side">
@@ -991,16 +991,56 @@ a{color:inherit}
   <div class="panel"><?= AmetecsShell::notificationList($notes) ?></div>
 
 <?php elseif ($view === 'activity'): $apps = AmetecsAccess::plugins(true);
+    // PHASE 7 (owner, 18 Nov 2026: "make full advance this page"): every change, sorted into kinds, filtered by kind,
+    // period and person, grouped by day as a timeline, with figures and a CSV download of what is shown.
     $feed = [];
-    foreach (AmetecsData::activity($tenant, 300) as $a) { $feed[] = [$a['at'], $a['who'], $a['what'], (string) $a['detail'], 'fa-circle-dot']; }
-    foreach (AmetecsReleases::ready() ? AmetecsReleases::events(['tenant_id' => $tenant], 300) : [] as $e) { $feed[] = [$e['created_at'], $e['by_who'], ($apps[$e['app']]['name'] ?? $e['app']) . ' ' . $e['to_version'] . ': ' . str_replace('_', ' ', $e['action']), mb_strimwidth((string) $e['detail'], 0, 120, '…'), 'fa-code-branch']; }
-    foreach (AmetecsLicences::events(null, $tenant, 300) as $e) { $feed[] = [$e['created_at'], $e['by_who'], ($apps[$e['app']]['name'] ?? $e['app']) . ' licence: ' . $e['action'], mb_strimwidth((string) $e['detail'], 0, 120, '…'), 'fa-key']; }
-    usort($feed, static fn ($a, $b) => strcmp((string) $b[0], (string) $a[0])); ?>
-  <div class="pgh"><div><h1>Activity history</h1><p>Everything that changed for your company: logins and settings, licences, payments, updates and installs, by whom and when.</p></div></div>
-  <div style="margin-bottom:10px"><label class="fsearch" style="margin:0"><i class="fas fa-magnifying-glass"></i><input data-live="#act-t" placeholder="Filter by who or what" autocomplete="off"></label></div>
-  <div class="lic-t"><table id="act-t" class="paged"><tr><th>When</th><th>What</th><th>Who</th><th>Detail</th></tr>
-  <?php foreach ($feed as [$at, $who2, $what, $det, $ic]): ?><tr><td style="white-space:nowrap"><?= ag_h(date('d M Y H:i', (int) strtotime((string) $at))) ?></td><td style="white-space:normal"><i class="fas <?= $ic ?>" style="color:var(--gold)"></i> <?= ag_h((string) $what) ?></td><td class="muted2"><?= ag_h((string) $who2) ?></td><td class="muted2" style="white-space:normal;max-width:420px"><?= ag_h($det) ?></td></tr><?php endforeach; ?>
-  <?php if ($feed === []): ?><tr><td colspan="4" class="muted2">Nothing yet.</td></tr><?php endif; ?></table></div>
+    $kindOf = static function (string $what): string {
+        $w = strtolower($what);
+        return match (true) {
+            str_contains($w, 'invoice') || str_contains($w, 'payment') || str_contains($w, 'refund') => 'billing',
+            str_contains($w, 'signed') || str_contains($w, 'password') || str_contains($w, 'login') || str_contains($w, 'administrator') || str_contains($w, 'user') => 'access',
+            str_contains($w, 'plugin') || str_contains($w, 'update') || str_contains($w, 'install') || str_contains($w, 'release') => 'update',
+            str_contains($w, 'licen') || str_contains($w, 'plan') || str_contains($w, 'seat') || str_contains($w, 'apps') => 'licence',
+            default => 'settings' };
+    };
+    foreach (AmetecsData::activity($tenant, 1000) as $a) { $feed[] = [$a['at'], $a['who'], $a['what'], (string) $a['detail'], $kindOf((string) $a['what'])]; }
+    foreach (AmetecsReleases::ready() ? AmetecsReleases::events(['tenant_id' => $tenant], 500) : [] as $e) { $feed[] = [$e['created_at'], $e['by_who'], ($apps[$e['app']]['name'] ?? $e['app']) . ' ' . $e['to_version'] . ': ' . str_replace('_', ' ', $e['action']), mb_strimwidth((string) $e['detail'], 0, 160, '…'), 'update']; }
+    foreach (AmetecsLicences::events(null, $tenant, 500) as $e) { $feed[] = [$e['created_at'], $e['by_who'], ($apps[$e['app']]['name'] ?? $e['app']) . ' licence: ' . $e['action'], mb_strimwidth((string) $e['detail'], 0, 160, '…'), 'licence']; }
+    usort($feed, static fn ($a, $b) => strcmp((string) $b[0], (string) $a[0]));
+    $kinds = ['licence' => ['Licences & plans', 'fa-key'], 'billing' => ['Payments', 'fa-indian-rupee-sign'], 'access' => ['Logins & users', 'fa-user-shield'], 'update' => ['Updates & plugins', 'fa-cloud-arrow-down'], 'settings' => ['Settings', 'fa-sliders']];
+    $fk = isset($kinds[$_GET['k'] ?? '']) ? (string) $_GET['k'] : '';
+    $periods = ['today' => 'Today', '7d' => 'Last 7 days', '30d' => 'Last 30 days', '90d' => 'Last 90 days', '' => 'All time'];
+    $fp = isset($periods[$_GET['pd'] ?? '']) ? (string) ($_GET['pd'] ?? '') : '';
+    $since = ['today' => AmetecsAccess::today(), '7d' => date('Y-m-d', strtotime('-6 days')), '30d' => date('Y-m-d', strtotime('-29 days')), '90d' => date('Y-m-d', strtotime('-89 days'))][$fp] ?? '';
+    $people = array_values(array_unique(array_filter(array_map(static fn ($r) => (string) $r[1], $feed))));
+    sort($people);
+    $fw = in_array($_GET['who'] ?? '', $people, true) ? (string) $_GET['who'] : '';
+    $inPeriod = array_values(array_filter($feed, static fn ($r) => $since === '' || substr((string) $r[0], 0, 10) >= $since));
+    $rows = array_values(array_filter($inPeriod, static fn ($r) => ($fk === '' || $r[4] === $fk) && ($fw === '' || $r[1] === $fw)));
+    $byKind = array_count_values(array_map(static fn ($r) => $r[4], $inPeriod));
+    $lim = min(count($rows), max(100, (int) ($_GET['n'] ?? 100)));
+    $aq = static fn (array $o) => '?' . http_build_query(array_filter($o + ['v' => 'activity', 'k' => $fk, 'pd' => $fp, 'who' => $fw], static fn ($v) => $v !== ''));
+    $dayName = static fn (string $d) => $d === AmetecsAccess::today() ? 'Today' : ($d === date('Y-m-d', strtotime('-1 day')) ? 'Yesterday' : date('l, d M Y', (int) strtotime($d))); ?>
+  <div class="pgh"><div><h1>Activity history</h1><p>Everything that changed for your company: logins and users, licences and plans, payments, updates and settings, by whom and when.</p></div>
+    <button type="button" class="btn2 ghost" data-csv="#acttl" data-name="activity-<?= ag_h(AmetecsAccess::today()) ?>.csv"><i class="fas fa-file-arrow-down"></i>Download CSV</button></div>
+  <section class="akpis">
+    <a class="<?= $fk === '' ? 'on' : '' ?>" href="<?= ag_h($aq(['k' => ''])) ?>"><i class="fas fa-layer-group"></i><b><?= count($inPeriod) ?></b><span>All changes</span></a>
+    <?php foreach ($kinds as $k => [$lab, $ic]): ?><a class="k-<?= $k ?><?= $fk === $k ? ' on' : '' ?>" href="<?= ag_h($aq(['k' => $k])) ?>"><i class="fas <?= $ic ?>"></i><b><?= (int) ($byKind[$k] ?? 0) ?></b><span><?= ag_h($lab) ?></span></a><?php endforeach; ?>
+  </section>
+  <form class="afilt" method="get"><input type="hidden" name="v" value="activity"><?php if ($fk !== ''): ?><input type="hidden" name="k" value="<?= ag_h($fk) ?>"><?php endif; ?>
+    <label class="fsearch"><i class="fas fa-magnifying-glass"></i><input data-live-tl="#acttl" placeholder="Search what, who or detail…" autocomplete="off"></label>
+    <select name="pd" onchange="this.form.submit()"><?php foreach ($periods as $k => $v2): ?><option value="<?= $k ?>"<?= $fp === $k ? ' selected' : '' ?>><?= $v2 ?></option><?php endforeach; ?></select>
+    <select name="who" onchange="this.form.submit()"><option value="">Everyone</option><?php foreach ($people as $pp2): ?><option<?= $fw === $pp2 ? ' selected' : '' ?>><?= ag_h($pp2) ?></option><?php endforeach; ?></select>
+    <?php if ($fk !== '' || $fp !== '' || $fw !== ''): ?><a class="btn2 ghost" href="?v=activity"><i class="fas fa-xmark"></i>Clear</a><?php endif; ?>
+    <span class="acnt"><?= count($rows) ?> <?= count($rows) === 1 ? 'change' : 'changes' ?></span></form>
+  <div class="tl" id="acttl"><?php $lastDay = ''; foreach (array_slice($rows, 0, $lim) as [$at, $who2, $what, $det, $k]): $day = substr((string) $at, 0, 10);
+      if ($day !== $lastDay): $lastDay = $day; ?><div class="tlday"><?= ag_h($dayName($day)) ?></div><?php endif; ?>
+    <div class="tli k-<?= $k ?>" data-csv-row="<?= ag_h(json_encode([date('Y-m-d H:i', (int) strtotime((string) $at)), $kinds[$k][0], $what, $who2, $det])) ?>"><span class="tlic"><i class="fas <?= $kinds[$k][1] ?>"></i></span>
+      <div class="tlb"><div class="tlh"><b><?= ag_h((string) $what) ?></b><time><?= ag_h(date('h:i A', (int) strtotime((string) $at))) ?></time></div>
+        <?= $det !== '' ? '<p>' . ag_h($det) . '</p>' : '' ?><small><span class="av"><?= ag_h(mb_strtoupper(mb_substr((string) $who2 ?: '?', 0, 1))) ?></span><?= ag_h((string) $who2 ?: 'system') ?> &middot; <?= ag_h($kinds[$k][0]) ?></small></div></div>
+  <?php endforeach; ?>
+  <?php if ($rows === []): ?><div class="lic-t"><div class="empty2" style="padding:34px"><i class="fas fa-wind" style="font-size:22px;color:#e2c98f;display:block;margin-bottom:8px"></i>Nothing matches these filters.</div></div><?php endif; ?></div>
+  <?php if ($lim < count($rows)): ?><div style="text-align:center;margin:14px 0"><a class="btn2 ghost" href="<?= ag_h($aq(['n' => $lim + 100])) ?>">Show more (<?= count($rows) - $lim ?> older)</a></div><?php endif; ?>
 
 <?php elseif ($view === 'support'): $bs = AmetecsBilling::settings(); $sEmail = (string) (($bs['support_email'] ?? '') ?: $bs['email']); $sPhone = (string) ($bs['support_phone'] ?? ''); ?>
   <div class="pgh"><div><h1>Support &amp; help</h1><p>Questions, changes to your plan, or something not working: Ametecs is here to help.</p></div></div>
@@ -1118,5 +1158,5 @@ document.addEventListener('click',function(e){document.querySelectorAll('details
 </script>
 <?php endif; ?>
 <?php if ($user !== null): ?><div class="foot">AmetecsGlobal by Ametecs India &middot; <a href="super.php">Super Admin</a></div><?php endif; ?>
-<script src="assets/ui.js?v=9"></script>
+<script src="assets/ui.js?v=10"></script>
 </body></html>
