@@ -1,0 +1,20 @@
+/* AMETECSGLOBAL BRAND LAYER (19 Nov 2026, Phase 3 - one brand): loaded only inside AmetecsGlobal. Same black and gold as
+   the AmetecsGlobal panel; SmartEPT's layout, screens and behaviour are untouched - only its colour tokens change. */
+html:root{--accent:#b8893b;--accent-2:#c9a24c;--accent-3:#e8c977;--accent-weak:#f6efe0;--accent-ink:#7a5a1e;--info:#9a7230;--info-w:#f6efe0;
+  --navy:#14100a;--navy-2:#2a2012;--canvas:#f6f3ec;--ring:0 0 0 3px rgba(201,162,76,.25)}
+.ag-home{position:fixed;right:16px;bottom:16px;z-index:9999;width:42px;height:42px;border-radius:12px;background:#c9a24c;color:#14100a;display:grid;place-items:center;font:800 14px/1 Inter,Arial,sans-serif;text-decoration:none;box-shadow:0 8px 20px -8px rgba(20,16,10,.6)}
+.ag-home:hover{background:#e8c977}
+.side{background:linear-gradient(178deg,#14100a 0%,#1d160c 60%,#2a2012 100%)!important}
+/* THEME FOLLOWS AMETECSGLOBAL (19 Nov 2026): the Golden/Navy/Light/Dark choice in the AmetecsGlobal user menu (agTheme) */
+html.th-navy:root{--navy:#0a1a33;--navy-2:#132b50;--canvas:#f2f4f8}
+html.th-navy .side{background:linear-gradient(178deg,#0a1a33 0%,#10284a 60%,#132b50 100%)!important}
+html.th-light:root{--canvas:#ffffff;--card-2:#fdfbf6}
+html.th-dark:root{--canvas:#0d0b08;--card:#17130d;--card-2:#1d1810;--border:#2e2618;--hairline:#272014;--ink:#efe6d2;--ink-2:#c9bc9f;--ink-3:#8f8268;--accent-weak:#2a2012}
+html.th-dark .side{background:#0d0b08!important;border-right:1px solid #2e2618}
+html.th-dark body{background-color:#0d0b08!important;color:#efe6d2}
+html.th-dark select,html.th-dark input,html.th-dark textarea{background-color:#1d1810;color:#efe6d2;border-color:#2e2618}
+/* ONE LOGIN (19 Nov 2026): inside AmetecsGlobal the SmartEPT password form is gone - only "Sign in through AmetecsGlobal" */
+#login .box>label,#login .box>input,#btn-login,#fp-link,#fp-box{display:none!important}
+/* COMMON SETUP (owner, 19 Nov 2026: "hide them in apps"): Organisation (branches, departments, teams, shifts), Users (one
+   login) and Biometric devices are set up once in AmetecsGlobal - Settings › Organization, Logins & access, Attendance devices */
+.nav[data-view="org"],.nav[data-view="users"],.nav[data-view="biometric"]{display:none!important}

@@ -264,14 +264,32 @@ export function App() {
   const [, setOrgTick] = useState(0);   // bumped by the Branch / Team / Employee filter → pages remount and reload
   useEffect(() => { if (me) get<{ message: string | null; state?: string }>('/licence').then((l) => { if (AG_MANAGED && l.state && !['active', 'grace', 'unrestricted'].includes(l.state)) agLock(); setLicenceMsg(l.message); }, () => setLicenceMsg(null)); }, [me]);
   if (loading) return <p className="muted" style={{ padding: 24 }}>Loading…</p>;
-  if (!me) return <LoginPage />;
+  if (!me) {
+    // AmetecsGlobal: no separate ROVEXY sign-in - an expired session is renewed through AmetecsGlobal's one sign-in.
+    // Guard: if that just failed (within 30 s), show the normal page instead of going round in a loop.
+    const last = Number(sessionStorage.getItem('ag-resso') || 0);
+    if (AG_MANAGED && Date.now() - last > 30000) {
+      sessionStorage.setItem('ag-resso', String(Date.now()));
+      window.top!.location.href = ROOT.replace(/\/plugins\/rovexy\/public$/, '') + '/core/open.php?app=rovexy';
+      return <p className="muted" style={{ padding: 24 }}>Signing in through AmetecsGlobal…</p>;
+    }
+    // ONE LOGIN (19 Nov 2026): inside AmetecsGlobal there is no ROVEXY password page - only the way back to AmetecsGlobal.
+    if (AG_MANAGED) {
+      return <div className="card" style={{ maxWidth: 420, margin: '12vh auto', padding: 28, textAlign: 'center' }}>
+        <h2 style={{ marginTop: 0 }}>Sign in through AmetecsGlobal</h2>
+        <p className="muted">ROVEXY uses your AmetecsGlobal sign-in.</p>
+        <a className="btn primary" href={ROOT.replace(/\/plugins\/rovexy\/public$/, '') + '/core/open.php?app=rovexy'} target="_top">Open AmetecsGlobal sign-in</a>
+      </div>;
+    }
+    return <LoginPage />;
+  }
 
   const logout = async () => {
     await post('/auth/logout').catch(() => undefined);
     disconnectRealtime();
     setMe(null);
   };
-  const items = NAV.filter((n) => (!n.perm || can(n.perm)) && !(AG_MANAGED && n.to === '/licence'));
+  const items = NAV.filter((n) => (!n.perm || can(n.perm)) && !(AG_MANAGED && ['/licence', '/branding'].includes(n.to)));
   const orgKey = JSON.stringify(orgFilter());
   const name = branding?.display_name ?? me.company.name;
   return (

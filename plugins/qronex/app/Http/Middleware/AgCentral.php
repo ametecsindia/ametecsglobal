@@ -16,7 +16,8 @@ use Illuminate\Http\Request;
 final class AgCentral
 {
     private const TO = [
-        'home' => 'core/', 'pricing' => 'core/', 'contact' => 'core/', 'register' => 'core/', 'login' => 'core/', 'password.' => 'core/', 'two-factor.' => 'core/',
+        'home' => 'core/', 'pricing' => 'core/', 'contact' => 'core/', 'register' => 'core/', 'login' => 'core/open.php?app=qronex',   // signed out: straight back in through AmetecsGlobal
+         'password.' => 'core/', 'two-factor.' => 'core/',
         'admin.' => 'core/super.php',
         'portal.billing.' => 'core/?v=licences&app=qronex',
         'portal.company.' => 'core/org.php?s=setup-companies',
@@ -27,6 +28,12 @@ final class AgCentral
 
     public function handle(Request $request, Closure $next)
     {
+        // ONE LOGIN (19 Nov 2026): a portal session opened from AmetecsGlobal ends when that AmetecsGlobal session ends.
+        if (AgBridge::managed() && auth()->check() && !AgBridge::sameSession($request->session()->get('ag_sid'))) {
+            auth()->logout();
+            $request->session()->invalidate();
+            return redirect()->away(AgBridge::agUrl('core/open.php?app=qronex'));
+        }
         $name = (string) $request->route()?->getName();
         if ($name !== '' && AgBridge::managed()) {
             foreach (self::TO as $prefix => $to) {

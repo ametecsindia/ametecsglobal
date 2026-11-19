@@ -13,7 +13,10 @@ $agConsole = static function () {
     $root = rtrim(request()->getBasePath(), '/');
     // No inline script and no <base>: the Content-Security-Policy (SecurityHeaders) forbids both. A <meta> carries the folder.
     $html = str_replace(['<head>', '"./assets/', '"../brand/', '"../favicon.ico"'],
-        ['<head><meta name="ag-root" content="' . e($root) . '">' . (\App\Services\AgBridge::managed() ? '<meta name="ag-managed" content="1">' : ''), '"' . $root . '/admin/assets/', '"' . $root . '/brand/', '"' . $root . '/favicon.ico"'], (string) file_get_contents($index));
+        ['<head><meta name="ag-root" content="' . e($root) . '">' . (\App\Services\AgBridge::managed() ? '<meta name="ag-managed" content="1"><link rel="stylesheet" href="' . e($root) . '/ag-brand.css?v=4"><script src="' . e($root) . '/ag-theme.js?v=1"></script>' : ''), '"' . $root . '/admin/assets/', '"' . $root . '/brand/', '"' . $root . '/favicon.ico"'], (string) file_get_contents($index));
+    if (\App\Services\AgBridge::managed()) {   // one brand: the AmetecsGlobal button, back to the panel
+        $html = preg_replace('/<body([^>]*)>/', '<body$1><a class="ag-home" href="' . e(preg_replace('#/plugins/rovexy/public$#', '', $root) . '/core/') . '" title="Back to AmetecsGlobal" target="_top">AG</a><script src="' . e(preg_replace('#/plugins/rovexy/public$#', '', $root) . '/core/assets/ag-topbar.js?v=3') . '" defer></script>', $html, 1);
+    }
     return response($html, 200, ['Content-Type' => 'text/html; charset=UTF-8', 'Cache-Control' => 'no-store']);
 };
 Route::get('/admin/{path?}', $agConsole)->where('path', '.*'); // real files (admin/assets/*) are served by the web server before Laravel

@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+@if(\App\Services\AgBridge::managed())<link rel="stylesheet" href="{{ rtrim(request()->getBasePath(), '/') }}/ag-brand.css?v=5"><script>(function(h){function s(){var t;try{t=localStorage.getItem("agTheme")}catch(e){}h.classList.remove("th-navy","th-light","th-dark");if(t&&t!="gold")h.classList.add("th-"+t)}s();addEventListener("storage",s)})(document.documentElement)</script>@endif
   <link rel="icon" href="{{ rtrim(request()->getBasePath(), '/') }}/favicon.ico?v=2" sizes="any">
   <link rel="icon" type="image/png" sizes="32x32" href="{{ rtrim(request()->getBasePath(), '/') }}/favicon-32x32.png?v=2">
   <link rel="apple-touch-icon" href="{{ rtrim(request()->getBasePath(), '/') }}/apple-touch-icon.png?v=2">
@@ -571,6 +572,7 @@
 </style>
 </head>
 <body>
+@if(\App\Services\AgBridge::managed())<a class="ag-home" href="{{ \App\Services\AgBridge::agUrl('core/') }}" title="Back to AmetecsGlobal" target="_top">AG</a><script src="{{ \App\Services\AgBridge::agUrl('core/assets/ag-topbar.js') }}?v=3" defer></script>@endif
 
 <!-- LOGIN -->
 <div class="login" id="login">
@@ -581,6 +583,7 @@
     <label>Password</label><input id="password" type="password" value="password">
     <button class="primary" id="btn-login">Sign in</button>
     <div class="err" id="login-err"></div>
+    @if(\App\Services\AgBridge::managed())<a class="primary ag-sso" href="{{ \App\Services\AgBridge::agUrl('core/open.php?app=smartept') }}" target="_top" style="display:block;text-align:center;padding:11px;border-radius:10px;text-decoration:none;margin-top:8px">Sign in through AmetecsGlobal</a>@endif
     <a href="#" id="fp-link" style="display:block;text-align:center;margin-top:10px;font-size:12.5px;color:#006699;font-weight:700;text-decoration:none">Forgot password?</a>
     <div id="fp-box" style="display:none;margin-top:10px;border-top:1px solid #E5EAEC;padding-top:10px">
       <div id="fp-step1">
@@ -2827,6 +2830,14 @@ function toast(msg, onClick, ms) { // 30-Sep-2026: optional click action + durat
   el._t = setTimeout(() => { el.style.opacity = '0'; el.style.transform = 'translateY(8px)'; }, ms || 3000);
 }
 
+// AmetecsGlobal: no separate SmartEPT sign-in - go (back) through AmetecsGlobal's one sign-in. Not again within 30 s,
+// so a failure shows the page (with its "Sign in through AmetecsGlobal" button) instead of a loop.
+function agResso() {
+  if (Date.now() - Number(sessionStorage.getItem('ag-resso') || 0) <= 30000) return false;
+  sessionStorage.setItem('ag-resso', String(Date.now()));
+  window.top.location.href = AG_LOCK.split('/core/')[0] + '/core/open.php?app=smartept';
+  return true;
+}
 async function api(path, opts = {}) {
   const isForm = opts.body instanceof FormData;
   const r = await fetch(API + path, {
@@ -2847,6 +2858,8 @@ async function api(path, opts = {}) {
     // wall once, rather than letting every screen fail with its own error toast.
     // TOKEN check: on the sign-in screen the inline error is enough — the wall is
     // for someone already inside the console when the licence stops.
+    // ONE LOGIN (19 Nov 2026): signed out in AmetecsGlobal (or the session ended) - back through AmetecsGlobal's sign-in
+    if (r.status === 401 && TOKEN && AG_LOCK) { TOKEN = null; sessionStorage.removeItem('ept_token'); agResso(); }
     if (r.status === 403 && e?.error?.code === 'LICENSE_BLOCKED' && TOKEN && AG_LOCK) { window.top.location.href = AG_LOCK; }   // AmetecsGlobal: renew there
     else if (r.status === 403 && e?.error?.code === 'LICENSE_BLOCKED' && TOKEN) licenceWall(e.error);
     const err = new Error(msg); err.status = r.status; err.body = e; throw err;
@@ -3345,10 +3358,13 @@ $('#signout').onclick = async () => {
     }
   }
   const saved = sessionStorage.getItem('ept_token');
+  // AmetecsGlobal: no separate SmartEPT sign-in - a new tab or ended session signs in again through AmetecsGlobal
+  // (guard: not again within 30 s, so a failure shows the normal page instead of a loop).
+  if (!saved && AG_LOCK && agResso()) return;
   if (!saved) return;
   TOKEN = saved;
   try { const res = await api('/auth/me'); ME = res.user; enterApp(); }
-  catch (e) { TOKEN = null; sessionStorage.removeItem('ept_token'); }
+  catch (e) { TOKEN = null; sessionStorage.removeItem('ept_token'); AG_LOCK && agResso(); }
 })();
 
 // ---- nav ----

@@ -37,7 +37,7 @@ final class AgSsoController extends Controller
         });
         Auth::guard('web')->login($user);
         $r->session()->regenerate();
-        $r->session()->put(['auth_started_at' => time(), 'mfa_verified_at' => time()]);   // AmetecsGlobal already checked who this is
+        $r->session()->put(['auth_started_at' => time(), 'mfa_verified_at' => time(), 'ag_sid' => (string) ($p['sid'] ?? '')]);   // AmetecsGlobal already checked who this is
         return redirect('/w/' . $c->slug . '/admin/');   // url() adds the sub-folder
     }
 }

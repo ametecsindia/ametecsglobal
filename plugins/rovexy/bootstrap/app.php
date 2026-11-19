@@ -40,6 +40,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'platform' => \App\Http\Middleware\PlatformAccess::class,
             'feature' => \App\Http\Middleware\RequireFeature::class,
             'central' => \App\Http\Middleware\CentralOnly::class,
+            'ag.session' => \App\Http\Middleware\AgSession::class,   // AmetecsGlobal: one sign-in, one sign-out
             'ag.locked' => \App\Http\Middleware\AgLocked::class,     // AmetecsGlobal: console stops while the licence is not active
             'ag.managed' => \App\Http\Middleware\AgManaged::class,   // AmetecsGlobal: licences only in its Super Admin
         ]);

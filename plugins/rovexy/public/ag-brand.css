@@ -1,0 +1,15 @@
+/* AMETECSGLOBAL BRAND LAYER (19 Nov 2026, Phase 3 - one brand): loaded only inside AmetecsGlobal. ROVEXY's navy colour
+   tokens become AmetecsGlobal black and gold; layout and behaviour untouched. */
+html:root{--primary:#14100a;--navy-2:#2a2012;--accent:#c9a24c;--ring:#b8893b;--info:#9a7230;--info-bg:#f6efe0;--gm-brand:#14100a;--gm-navy:#14100a;--gm-gold:#c9a24c}
+.ag-home{position:fixed;right:16px;bottom:16px;z-index:9999;width:42px;height:42px;border-radius:12px;background:#c9a24c;color:#14100a;display:grid;place-items:center;font:800 14px/1 Inter,Arial,sans-serif;text-decoration:none;box-shadow:0 8px 20px -8px rgba(20,16,10,.6)}
+.ag-home:hover{background:#e8c977}
+.sidebar{background:linear-gradient(180deg,#14100a,#2a2012)!important}
+/* THEME FOLLOWS AMETECSGLOBAL (19 Nov 2026): the Golden/Navy/Light/Dark choice in the AmetecsGlobal user menu (agTheme) */
+html.th-navy:root{--primary:#0a1a33;--navy-2:#132b50;--gm-brand:#0a1a33;--gm-navy:#0a1a33;--bg:#f2f4f8}
+html.th-navy .sidebar{background:linear-gradient(180deg,#0a1a33,#132b50)!important}
+html.th-light:root{--bg:#ffffff}
+html.th-dark:root{--bg:#0d0b08;--surface:#17130d;--border:#2e2618;--text:#efe6d2;--muted:#a89a7e;--muted-bg:#1d1810;--ok-bg:#12251a;--warn-bg:#2a2010;--bad-bg:#2a1312;--info-bg:#2a2012}
+html.th-dark .sidebar{background:#0d0b08!important;border-right:1px solid #2e2618}
+html.th-dark body{background:#0d0b08;color:#efe6d2}
+html.th-dark select,html.th-dark input,html.th-dark textarea{background-color:#1d1810;color:#efe6d2;border-color:#2e2618}
+html.th-dark .topbar{background:rgba(13,11,8,.88)!important;border-color:#2e2618!important}html.th-dark h1,html.th-dark h2,html.th-dark h3,html.th-dark .stat-value,html.th-dark .crumb b,html.th-dark .crumb strong{color:#efe6d2!important}

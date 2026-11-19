@@ -8,9 +8,11 @@
 <link rel="stylesheet" href="{{ asset('css/qronex.css') }}?v={{ @filemtime(public_path('css/qronex.css')) }}">
 <script defer src="{{ asset('vendor/alpine.min.js') }}"></script>
 <script defer src="{{ asset('js/qronex.js') }}?v={{ @filemtime(public_path('js/qronex.js')) }}"></script>
+@if(\App\Services\AgBridge::managed())<link rel="stylesheet" href="{{ asset('ag-brand.css') }}?v=3"><script>(function(h){function s(){var t;try{t=localStorage.getItem("agTheme")}catch(e){}h.classList.remove("th-navy","th-light","th-dark");if(t&&t!="gold")h.classList.add("th-"+t)}s();addEventListener("storage",s)})(document.documentElement)</script><link rel="icon" href="{{ asset('favicon.ico') }}?v=ag">@endif
 @stack('head')
 </head>
 <body class="bg-slate-50 text-slate-800 min-h-screen antialiased">
+@if(\App\Services\AgBridge::managed())<a class="ag-home" href="{{ \App\Services\AgBridge::agUrl('core/') }}" title="Back to AmetecsGlobal">AG</a><script src="{{ \App\Services\AgBridge::agUrl('core/assets/ag-topbar.js') }}?v=3" defer></script>@endif
 <div class="loading-bar" aria-hidden="true"></div>
 @auth
 @php
@@ -31,8 +33,8 @@
       'Organisation' => [['Employees', 'portal.employees.index', 'portal.employees.*', 'users', 'manage-employees'], ['Offices & gates', 'portal.offices.index', 'portal.offices.*', 'building', 'manage-offices'], ['Users & roles', 'portal.users.index', 'portal.users.*', 'shield', 'manage-users']],
       'Settings' => [['Attendance policy', 'portal.policy.edit', 'portal.policy.*', 'sliders', 'manage-company'], ['API & webhooks', 'portal.api.index', 'portal.api.*', 'code', 'manage-company'], ['Company profile', 'portal.company.edit', 'portal.company.*', 'briefcase', 'manage-company'], ['Subscription & billing', 'portal.billing.index', 'portal.billing.*', 'card', 'manage-billing'], ['Help & support', 'portal.help.index', 'portal.help.*', 'help']],
   ];
-  if (\App\Services\AgBridge::managed()) {   // AmetecsGlobal: the licence and payments live in AmetecsGlobal, not here
-      foreach ($nav as $g => $items) { $nav[$g] = array_values(array_filter($items, fn ($i) => $i[1] !== 'portal.billing.index')); }
+  if (\App\Services\AgBridge::managed()) {   // AmetecsGlobal: licence, payments, company profile and logins (one login) live there
+      foreach ($nav as $g => $items) { $nav[$g] = array_values(array_filter($items, fn ($i) => !in_array($i[1], ['portal.billing.index', 'portal.company.edit', 'portal.users.index'], true))); }
   }
   $initials = collect(explode(' ', $u->name))->filter()->map(fn ($w) => mb_substr($w, 0, 1))->take(2)->join('');
 @endphp

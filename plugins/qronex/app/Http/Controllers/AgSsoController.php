@@ -34,6 +34,7 @@ final class AgSsoController extends Controller
         AuditLog::create(['tenant_id' => $t->id, 'user_id' => $u->id, 'action' => 'auth.login', 'subject' => $u->email, 'meta' => ['via' => 'ametecsglobal'], 'ip' => $r->ip()]);
         Auth::login($u);
         $r->session()->regenerate();
+        $r->session()->put('ag_sid', (string) ($p['sid'] ?? ''));   // signed out in AmetecsGlobal = signed out here (AgCentral)
         return redirect('/' . $t->slug);   // url() adds the sub-folder
     }
 }

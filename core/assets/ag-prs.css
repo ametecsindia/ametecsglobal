@@ -1,0 +1,9 @@
+/* SMARTPRS 3 INSIDE AMETECSGLOBAL (19 Nov 2026, owner: same everywhere): AmetecsGlobal's black and gold, the theme chosen
+   in the AmetecsGlobal menu (Golden / Navy / Light / Dark), and AmetecsGlobal's top bar (ag-topbar.js). Colours only. */
+html:root:root{--navy:#14100a;--navy2:#1d160c;--navy3:#2a2012;--accent:#c9a24c;--accent2:#e8c977;--accent-soft:rgba(201,162,76,.12)}
+html.th-navy:root:root{--navy:#0a1a33;--navy2:#10284a;--navy3:#132b50}
+html.th-light:root:root{--bg:#fbfaf7}
+html.th-light .sidebar img.sp-logo{content:url(../../plugins/smartprs3/public/images/smartprs-logo-navy.png)}
+html.th-light #ag-back{background:#faf3e3!important}
+.topbar .theme-wrap,.topbar .topbar-avatar{display:none!important}   /* theme and account: AmetecsGlobal's top bar */
+.main-wrap>.agtb~.topbar{top:58px!important}

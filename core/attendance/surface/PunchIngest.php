@@ -39,6 +39,8 @@ final class PunchIngest
     private array $names = [];
     /** @var array<string, string> code => employee id */
     private array $ids = [];
+    /** @var array<string, string> code => employer company id (whose attendance source decides) */
+    private array $cos = [];
     private ?QrAttendance $ways = null;
     /** @var array<string, list<array{0: string, 1: string}>> code|day => [[at, dir]] */
     private array $dayPunches = [];
@@ -128,6 +130,14 @@ final class PunchIngest
                 continue;
             }
 
+            // ONE ATTENDANCE SOURCE PER COMPANY (owner, 19 Nov 2026): a SmartEPT or QRONEX punch counts only where the
+            // company's source (Organization Setup -> QR attendance) is that app or Standard; the app keeps its own record.
+            if ($code !== null && !$this->sourceAllowed($code, $source)) {
+                $results[] = ['external_id' => $ext, 'status' => 'rejected', 'reason' => 'OTHER_ATTENDANCE_SOURCE'];
+                $counts['rejected']++;
+                continue;
+            }
+
             if (!$this->claim($ext)) {
                 $results[] = ['external_id' => $ext, 'status' => 'duplicate'];
                 $counts['duplicates']++;
@@ -176,6 +186,17 @@ final class PunchIngest
         return $this->ways->deviceAllowed($this->ids[$code] ?? '');
     }
 
+    private function sourceAllowed(string $code, string $source): bool
+    {
+        if (!in_array($source, [SmartEpt::SOURCE, 'qronex'], true)) {
+            return true;
+        }
+        $this->ways ??= QrAttendance::load(new Customisation($this->store), dirname((\dirname(__DIR__, 3) . '/plugins/smartprs3/surface')));
+        $chosen = $this->ways->sourceFor($this->cos[$code] ?? '');
+
+        return in_array($chosen, ['standard', $source], true);
+    }
+
     public function match(string $given, string $full, string $raw): ?string
     {
         if ($this->byCode === null) {
@@ -192,6 +213,7 @@ final class PunchIngest
                 $this->byCode[strtolower($c)] = $c;
                 $this->names[$c] = (string) ($e['name'] ?? '');
                 $this->ids[$c] = (string) ($e['id'] ?? '');
+                $this->cos[$c] = (string) ($e['employer_company_id'] ?? '');
                 $d = strtolower(trim((string) ($e['device_user_id'] ?? '')));
 
                 if ($d !== '') {
