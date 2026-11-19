@@ -1,0 +1,205 @@
+<?php
+
+namespace App\Http\Controllers\Api;
+
+use App\Http\Controllers\Controller;
+use Illuminate\Validation\Rule;
+use App\Models\Branch;
+use App\Models\Department;
+use App\Models\Designation;
+use App\Models\Shift;
+use App\Models\Team;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Database\Eloquent\Model;
+
+/**
+ * Compact CRUD for the organisational sub-entities (branches, departments, teams,
+ * designations, shifts). All are company-scoped automatically via the tenant trait,
+ * so listing/creating is bounded to the caller's company. Routed with a {type} param.
+ */
+class OrgController extends Controller
+{
+    private const MAP = [
+        'branches'     => Branch::class,
+        'departments'  => Department::class,
+        'teams'        => Team::class,
+        'designations' => Designation::class,
+        'shifts'       => Shift::class,
+    ];
+
+    public function index(Request $request, string $type): JsonResponse
+    {
+        return response()->json(['data' => $this->model($type)::query()->latest('id')->get()]);
+    }
+
+    public function store(Request $request, string $type): JsonResponse
+    {
+        $class = $this->model($type);
+        $data = $this->stampGateGrantor($request, $request->validate($this->rules($type)));
+        /** @var Model $row */
+        $row = $class::create($data); // company_id auto-filled by BelongsToCompany
+        $this->audit($request, 'CREATE', $class, $row->id, $data);
+
+        return response()->json(['data' => $row], 201);
+    }
+
+    public function update(Request $request, string $type, int $id): JsonResponse
+    {
+        $class = $this->model($type);
+        $row = $class::findOrFail($id);
+        $data = $this->stampGateGrantor($request, $request->validate($this->rules($type, false)));
+        $row->update($data);
+        $this->audit($request, 'UPDATE', $class, $row->id, $data);
+
+        return response()->json(['data' => $row]);
+    }
+
+    public function destroy(Request $request, string $type, int $id): JsonResponse
+    {
+        $class = $this->model($type);
+        $row = $class::findOrFail($id);
+        $row->delete();
+        $this->audit($request, 'DELETE', $class, $id);
+
+        return response()->json(null, 204);
+    }
+
+    private function model(string $type): string
+    {
+        abort_unless(isset(self::MAP[$type]), 404, "Unknown org resource: {$type}");
+        return self::MAP[$type];
+    }
+
+    private function rules(string $type, bool $creating = true): array
+    {
+        $req = $creating ? 'required' : 'sometimes';
+        $companyId = auth()->user()->company_id;
+        $base = ['name' => [$req, 'string', 'max:255'], 'code' => ['nullable', 'string', 'max:64']];
+
+        return match ($type) {
+            'branches' => $base + [
+                'city' => ['nullable', 'string'], 'state' => ['nullable', 'string'],
+                'country' => ['nullable', 'string'], 'public_ip_whitelist' => ['nullable', 'array'],
+                'timezone' => ['nullable', 'timezone'],   // EPT-20: per-branch override of company timezone
+                'tracking_mode' => ['nullable', 'in:FULL,NO_SCREENSHOTS,PRESENCE_ONLY,EXCLUDED'],
+                // Enforcement at this level (27-Aug-2026, Ejaz). ENFORCED = these people's PCs
+                // apply the blocking rules; EXEMPT = they are outside enforcement; null =
+                // inherit from the level above. Resolved most-specific-wins in
+                // PolicyResolver::effectiveEnforcementMode(); see EnforcementMode.
+                'enforcement_mode' => ['nullable', 'in:ENFORCED,EXEMPT'],
+                // Gate-to-PC exclusion (18-Aug-2026): EXCLUDED = no door punch needed here,
+                // REQUIRED = claw back an exclusion granted higher up. null = inherit.
+                // The from/until window is what makes "the reader is dead this week" safe:
+                // outside it the setting stops applying and the gate re-arms itself.
+                'gate_mode' => ['nullable', 'in:REQUIRED,EXCLUDED'],
+                'gate_mode_from' => ['nullable', 'date'],
+                'gate_mode_until' => ['nullable', 'date', 'after_or_equal:gate_mode_from'],
+                'gate_mode_reason' => ['nullable', 'string', 'max:255'],
+            ],
+            'departments' => $base + [
+                'branch_id' => ['nullable', 'integer', Rule::exists('branches', 'id')->where(fn ($q) => $q->where('company_id', $companyId))],
+                'tracking_mode' => ['nullable', 'in:FULL,NO_SCREENSHOTS,PRESENCE_ONLY,EXCLUDED'],
+                // Enforcement at this level (27-Aug-2026, Ejaz). ENFORCED = these people's PCs
+                // apply the blocking rules; EXEMPT = they are outside enforcement; null =
+                // inherit from the level above. Resolved most-specific-wins in
+                // PolicyResolver::effectiveEnforcementMode(); see EnforcementMode.
+                'enforcement_mode' => ['nullable', 'in:ENFORCED,EXEMPT'],
+                // Gate-to-PC exclusion (18-Aug-2026): EXCLUDED = no door punch needed here,
+                // REQUIRED = claw back an exclusion granted higher up. null = inherit.
+                // The from/until window is what makes "the reader is dead this week" safe:
+                // outside it the setting stops applying and the gate re-arms itself.
+                'gate_mode' => ['nullable', 'in:REQUIRED,EXCLUDED'],
+                'gate_mode_from' => ['nullable', 'date'],
+                'gate_mode_until' => ['nullable', 'date', 'after_or_equal:gate_mode_from'],
+                'gate_mode_reason' => ['nullable', 'string', 'max:255'],
+            ],
+            'teams' => $base + [
+                'department_id' => ['nullable', 'integer', Rule::exists('departments', 'id')->where(fn ($q) => $q->where('company_id', $companyId))],
+                'manager_user_id' => ['nullable', 'integer', Rule::exists('users', 'id')->where(fn ($q) => $q->where('company_id', $companyId))],
+                'team_leader_user_id' => ['nullable', 'integer', Rule::exists('users', 'id')->where(fn ($q) => $q->where('company_id', $companyId))],
+                'tracking_mode' => ['nullable', 'in:FULL,NO_SCREENSHOTS,PRESENCE_ONLY,EXCLUDED'],
+                // Enforcement at this level (27-Aug-2026, Ejaz). ENFORCED = these people's PCs
+                // apply the blocking rules; EXEMPT = they are outside enforcement; null =
+                // inherit from the level above. Resolved most-specific-wins in
+                // PolicyResolver::effectiveEnforcementMode(); see EnforcementMode.
+                'enforcement_mode' => ['nullable', 'in:ENFORCED,EXEMPT'],
+                // Gate-to-PC exclusion (18-Aug-2026): EXCLUDED = no door punch needed here,
+                // REQUIRED = claw back an exclusion granted higher up. null = inherit.
+                // The from/until window is what makes "the reader is dead this week" safe:
+                // outside it the setting stops applying and the gate re-arms itself.
+                'gate_mode' => ['nullable', 'in:REQUIRED,EXCLUDED'],
+                'gate_mode_from' => ['nullable', 'date'],
+                'gate_mode_until' => ['nullable', 'date', 'after_or_equal:gate_mode_from'],
+                'gate_mode_reason' => ['nullable', 'string', 'max:255'],
+            ],
+            'designations' => $base + ['level' => ['nullable', 'integer', 'min:0'],
+                'tracking_mode' => ['nullable', 'in:FULL,NO_SCREENSHOTS,PRESENCE_ONLY,EXCLUDED']],
+            'shifts' => $base + [
+                'start_time' => ['nullable', 'date_format:H:i:s'],
+                'end_time' => ['nullable', 'date_format:H:i:s'],
+                // 13-Oct-2026: per-weekday timings that differ from the regular start/end.
+                'day_times' => ['nullable', 'array'],
+                'day_times.*.start' => ['nullable', 'date_format:H:i:s'],
+                'day_times.*.end' => ['nullable', 'date_format:H:i:s'],
+                'grace_minutes' => ['nullable', 'integer', 'min:0'],
+                'working_days' => ['nullable', 'array'],
+                // 09-Oct-2026 (Ejaz): every time rule lives on the shift only — per-type break
+                // limits (total = their sum) and the half-day minimum working hours.
+                'break_lunch_min' => ['nullable', 'integer', 'min:0', 'max:600'],
+                'break_tea_min' => ['nullable', 'integer', 'min:0', 'max:600'],
+                'break_other_min' => ['nullable', 'integer', 'min:0', 'max:600'],
+                'min_working_hours' => ['nullable', 'numeric', 'min:0', 'max:24'],
+                // 19-Aug-2026: minutes AFTER end_time at which an agent that never signed out is
+                // signed out by the server. null = never; 0 = at shift end.
+                // Capped at 12h so a typo cannot park a session open for a week.
+                'post_shift_auto_logout_minutes' => ['nullable', 'integer', 'min:0', 'max:720'],
+                // 26-Aug-2026: refuse AGENT sign-in outside [start_time, end_time + the
+                // minutes above]. Agent only — the admin console does not use this path.
+                'restrict_login_to_shift' => ['nullable', 'boolean'],
+                // 10-Oct-2026 (Ejaz): Extra Hours — minimum to record, "Still working?" interval, approval.
+                'extra_min_minutes' => ['nullable', 'integer', 'min:1', 'max:720'],
+                'still_working_every_min' => ['nullable', 'integer', 'min:5', 'max:240'],
+                'extra_needs_approval' => ['sometimes', 'boolean'],
+                // Enforcement at this level (27-Aug-2026, Ejaz). ENFORCED = these people's PCs
+                // apply the blocking rules; EXEMPT = they are outside enforcement; null =
+                // inherit from the level above. Resolved most-specific-wins in
+                // PolicyResolver::effectiveEnforcementMode(); see EnforcementMode.
+                'enforcement_mode' => ['nullable', 'in:ENFORCED,EXEMPT'],
+            ],
+            default => $base,
+        };
+    }
+
+    /**
+     * Stamp WHO granted a gate exclusion, server-side. A client cannot claim someone else
+     * authorised it, and clearing gate_mode clears the attribution with it. (18-Aug-2026:
+     * Ejaz — exclusions must be traceable to the admin who allowed them.)
+     */
+    private function stampGateGrantor(Request $request, array $data): array
+    {
+        $keys = ['gate_mode', 'gate_mode_from', 'gate_mode_until', 'gate_mode_reason'];
+
+        // Any touch of the exclusion — including a PUT that only moves the end date —
+        // re-attributes it. Otherwise extending someone else's expiring exclusion left
+        // the ORIGINAL admin's name on a decision they did not make.
+        if (! array_intersect($keys, array_keys($data))) {
+            return $data;
+        }
+
+        // Only an explicit gate_mode => null removes the exclusion (and with it the window
+        // and the attribution). A partial PUT that never mentions gate_mode must not.
+        if (array_key_exists('gate_mode', $data) && ! $data['gate_mode']) {
+            return array_merge($data, [
+                'gate_mode_from' => null,
+                'gate_mode_until' => null,
+                'gate_mode_reason' => null,
+                'gate_mode_by_user_id' => null,
+            ]);
+        }
+
+        $data['gate_mode_by_user_id'] = $request->user()?->id;
+
+        return $data;
+    }
+}

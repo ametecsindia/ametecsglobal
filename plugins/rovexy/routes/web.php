@@ -19,7 +19,7 @@ $agConsole = static function () {
 Route::get('/admin/{path?}', $agConsole)->where('path', '.*'); // real files (admin/assets/*) are served by the web server before Laravel
 
 // AMETECSGLOBAL one sign-in: AmetecsGlobal posts a signed hand-over (core/open.php); see AgSsoController.
-Route::post('/ag/sso', [\App\Http\Controllers\AgSsoController::class, 'enter'])->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\PreventRequestForgery::class]);
+Route::match(['get', 'post'], '/ag/sso', [\App\Http\Controllers\AgSsoController::class, 'enter'])->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\PreventRequestForgery::class]);
 
 // A company's console by path: /w/<slug>/admin (the only console address on the shared server).
 Route::get('/w/{slug}/admin/{path?}', $agConsole)->where(['slug' => '[a-z0-9][a-z0-9-]{1,38}[a-z0-9]', 'path' => '.*']);

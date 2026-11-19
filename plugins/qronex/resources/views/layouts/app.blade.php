@@ -31,6 +31,9 @@
       'Organisation' => [['Employees', 'portal.employees.index', 'portal.employees.*', 'users', 'manage-employees'], ['Offices & gates', 'portal.offices.index', 'portal.offices.*', 'building', 'manage-offices'], ['Users & roles', 'portal.users.index', 'portal.users.*', 'shield', 'manage-users']],
       'Settings' => [['Attendance policy', 'portal.policy.edit', 'portal.policy.*', 'sliders', 'manage-company'], ['API & webhooks', 'portal.api.index', 'portal.api.*', 'code', 'manage-company'], ['Company profile', 'portal.company.edit', 'portal.company.*', 'briefcase', 'manage-company'], ['Subscription & billing', 'portal.billing.index', 'portal.billing.*', 'card', 'manage-billing'], ['Help & support', 'portal.help.index', 'portal.help.*', 'help']],
   ];
+  if (\App\Services\AgBridge::managed()) {   // AmetecsGlobal: the licence and payments live in AmetecsGlobal, not here
+      foreach ($nav as $g => $items) { $nav[$g] = array_values(array_filter($items, fn ($i) => $i[1] !== 'portal.billing.index')); }
+  }
   $initials = collect(explode(' ', $u->name))->filter()->map(fn ($w) => mb_substr($w, 0, 1))->take(2)->join('');
 @endphp
 <div x-data="{open:false}" class="lg:flex">

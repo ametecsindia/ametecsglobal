@@ -1,0 +1,699 @@
+<?php
+
+use App\Http\Controllers\Api\ProductivityController;
+use App\Http\Controllers\Api\PublicApiController;
+use App\Http\Controllers\Api\FieldForceController;
+use App\Http\Controllers\Api\RoleController;
+use App\Http\Controllers\Api\IntegrationController;
+use App\Http\Controllers\Api\ActivityController;
+use App\Http\Controllers\Api\AgentStatusController;
+use App\Http\Controllers\Api\AttendanceAdminController;
+use App\Http\Controllers\Api\AttendanceController;
+use App\Http\Controllers\Api\HolidayController;
+use App\Http\Controllers\Api\MonthlyReportController;
+use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\BiometricController;
+use App\Http\Controllers\Api\BiometricDeviceController;
+use App\Http\Controllers\Api\BreakController;
+use App\Http\Controllers\Api\CompanyController;
+use App\Http\Controllers\Api\ComplianceController;
+use App\Http\Controllers\Api\ConsentController;
+use App\Http\Controllers\Api\DashboardController;
+use App\Http\Controllers\Api\DeviceController;
+use App\Http\Controllers\Api\DbMaintenanceController;
+use App\Http\Controllers\Api\DiagnosticsController;
+use App\Http\Controllers\Api\ExportController;
+use App\Http\Controllers\Api\LicenseController;
+use App\Http\Controllers\Api\LiveViewController;
+use App\Http\Controllers\Api\UpdateController;
+use App\Http\Controllers\Api\MeetingController;
+use App\Http\Controllers\Api\AgentMeetingController;
+use App\Http\Controllers\Api\AgentOverrideController;
+use App\Http\Controllers\Api\TamperController;
+use App\Http\Controllers\Api\TenantController;
+use App\Http\Controllers\Api\BreakReportController;
+use App\Http\Controllers\Api\OpsController;
+use App\Http\Controllers\Api\StorageConfigController;
+use App\Http\Controllers\Api\TenantBrandingController;
+use App\Http\Controllers\Api\ReportController;
+use App\Http\Controllers\Api\EmployeeController;
+use App\Http\Controllers\Api\GateExclusionController;
+use App\Http\Controllers\Api\OrgController;
+use App\Http\Controllers\Api\PolicyController;
+use App\Http\Controllers\Api\PolicyRuleController;
+use App\Http\Controllers\Api\EnforcementController;
+use App\Http\Controllers\Api\EnforcementDiagnosticsController;
+use App\Http\Controllers\Api\EnforcerEnrollmentController;
+use App\Http\Controllers\Api\EnforcerSyncController;
+use App\Http\Controllers\Api\PresenceController;
+use App\Http\Controllers\Api\ProvisionController;
+use App\Http\Controllers\Api\ScreenshotController;
+use App\Http\Controllers\Api\WebcamController;
+use App\Http\Controllers\Api\SyncController;
+use App\Http\Controllers\Api\UsageController;
+use App\Http\Controllers\Api\UserController;
+use Illuminate\Support\Facades\Route;
+
+/*
+|--------------------------------------------------------------------------
+| SmartEPT API routes — Milestone M1 (Server Foundation)
+|--------------------------------------------------------------------------
+| Auth & RBAC · Company/Org · Employee & Device · Policy Engine
+*/
+
+// ---- Public ----
+// Reachability probe for the agent's "Test connection" button (no data exposed).
+Route::get('ping', fn () => response()->json([
+    'app'         => 'SmartEPT',
+    'version'     => config('smartept.version', '1.0'),
+    'server_time' => now()->toIso8601String(),
+]));
+Route::post('auth/login', [AuthController::class, 'login'])->middleware('throttle:10,1');
+// 16-Nov-2026 (Google Play): "Delete my account" — only a valid session; works even when the licence has lapsed.
+Route::post('auth/delete-account', [AuthController::class, 'requestDeletion'])->middleware(['auth:sanctum', 'throttle:5,1']);
+// Forgot password (email OTP, 11-Aug-2026) — tight throttle: codes are 6 digits.
+Route::post('auth/forgot/request-otp', [AuthController::class, 'forgotRequestOtp'])->middleware('throttle:5,1');
+Route::post('auth/forgot/reset', [AuthController::class, 'forgotReset'])->middleware('throttle:10,1');
+// Cloud multi-tenancy (EPT-27): secret-signed provisioning + signed-ticket SSO from Central.
+Route::post('provision', [ProvisionController::class, 'provision'])->middleware('throttle:30,1');
+Route::post('provision/status', [ProvisionController::class, 'setStatus'])->middleware('throttle:60,1'); // Central suspend/enable push
+Route::post('auth/sso', [AuthController::class, 'sso'])->middleware('throttle:10,1');
+// 07-Nov-2026 (Ejaz): EPT QR Attendance app → portal sign-in for an approved phone while punched IN (no second login).
+Route::post('qronex/v1/portal-session', \App\Qronex\PortalSessionController::class)->middleware([\Ametecs\Qronex\Http\Middleware\DeviceToken::class, 'throttle:20,1']);
+// 07-Nov-2026 (Ejaz): "My day" card in the app — punches, agent sign-ins, Active/Idle/Away/Break for today (read-only).
+Route::get('qronex/v1/my-day', \App\Qronex\MyDayController::class)->middleware([\Ametecs\Qronex\Http\Middleware\DeviceToken::class, 'throttle:60,1']);
+// 07-Nov-2026 (Ejaz): employee's own photo from the app (tap the initials); admins see it in Attendance.
+Route::get('qronex/v1/photo', [\App\Qronex\PhotoController::class, 'show'])->middleware([\Ametecs\Qronex\Http\Middleware\DeviceToken::class, 'throttle:30,1']);
+Route::post('qronex/v1/photo', [\App\Qronex\PhotoController::class, 'store'])->middleware([\Ametecs\Qronex\Http\Middleware\DeviceToken::class, 'throttle:10,1']);
+Route::get('employee-photo/{employee}', [\App\Qronex\PhotoController::class, 'file'])->whereNumber('employee')->middleware(['signed', 'throttle:600,1'])->name('employee.photo');
+// 29-Oct-2026 (Altaf): SmartDCM Sign on — SmartDCM's server asks "still signed in?" / "sign out".
+// Public by necessity; protected by the per-company HMAC signature and a ±60 s timestamp.
+Route::post('sso/smartdcm/session', [\App\Http\Controllers\Api\SmartDcmSsoController::class, 'session'])->middleware('throttle:240,1');
+// Public branding for the per-client login page (admin.smartept.com/<slug>): name + logo only.
+Route::get('tenant-branding/{slug}', [TenantBrandingController::class, 'show'])->middleware('throttle:60,1');
+
+// Enforcement service machine enrolment. Unauthenticated BY NECESSITY — the machine has no
+// credential yet, which is what this is for. Guarded by: sha256 at rest, mandatory expiry,
+// mandatory use cap, revocable, company-scoped, throttled.
+Route::post('enforcer/enroll', [EnforcerEnrollmentController::class, 'enroll'])->middleware('throttle:20,1');
+
+// ---- Enforcement service sync (machine credential, ability 'enforcer') ----
+// Its OWN group, deliberately NOT inside the agent's: those require 'active-employee' and an
+// employee token, and the whole point of a machine credential is working with nobody signed in.
+// Also deliberately OUTSIDE 'licensed' — a lapsed invoice must not unblock WhatsApp on a bank's
+// floor. An endpoint that stops receiving policy keeps enforcing whatever it last applied.
+Route::prefix('enforcer')->middleware(['auth:sanctum', 'throttle:600,1'])->group(function () {
+    Route::post('heartbeat', [EnforcerSyncController::class, 'heartbeat']);
+    Route::get('policy', [EnforcerSyncController::class, 'policy']);
+    Route::post('audit', [EnforcerSyncController::class, 'storeAudit']);
+    // 03-Oct-2026: Endpoint Security (Defender) — its own call; never alters the heartbeat above.
+    Route::post('security/sync', [\App\Http\Controllers\Api\EndpointSecuritySyncController::class, 'sync']);
+    // 04-Oct-2026: PC Audit Log — software, USB/devices, downloads, files to USB, network shares.
+    Route::post('pc-audit/sync', [\App\Http\Controllers\Api\PcAuditController::class, 'serviceSync']);
+});
+
+// ---- Authenticated (any valid token) ----
+// 'licensed' (Ejaz, 14-Aug-2026 — finding 1.5): the licence now gates the WHOLE
+// console, not just agent ingestion. Expiry + grace over = the app stops, with a
+// rescue hole for the Licence screen so an admin can always enter a new key.
+// See EnsureLicensed for the exact allow-list.
+Route::middleware(['auth:sanctum', 'company.active', 'licensed'])->group(function () {
+    // QR attendance module (packages/qronex-module): one-time sign-in link from the console into /qronex. The module checks the role itself.
+    Route::get('qronex/sso-link', fn (\Illuminate\Http\Request $r) => \Ametecs\Qronex\Qronex::can($r->user(), 'view')
+        ? ['url' => \Ametecs\Qronex\Http\Controllers\Admin\SsoController::link($r->user()->id)]
+        : response()->json(['message' => 'You do not have access to QR Attendance.'], 403));
+
+    Route::get('auth/me', [AuthController::class, 'me']);
+    Route::post('auth/logout', [AuthController::class, 'logout']);
+    Route::post('auth/refresh', [AuthController::class, 'refresh']);
+    // Self-service: any role may change their own password (clears must_change_password).
+    Route::post('auth/change-password', [AuthController::class, 'changePassword']);
+
+    // ---- User account lifecycle (Release-1 item 1) ----
+    // Admin management of login accounts: create with one-time temp password,
+    // update role/status, reset password, soft-disable. Tenant-scoped in controller.
+    // List + password reset: also Branch Admin / Manager (scoped to their team in the controller).
+    Route::middleware('role:SUPER_ADMIN,COMPANY_ADMIN,HR_ADMIN,BRANCH_ADMIN,MANAGER')->group(function () {
+        Route::get('users', [UserController::class, 'index']);
+        Route::post('users/{user}/reset-password', [UserController::class, 'resetPassword']);
+    });
+    // Create / change role / delete a login: HR-level only.
+    Route::middleware('role:SUPER_ADMIN,COMPANY_ADMIN,HR_ADMIN')->group(function () {
+        Route::post('users', [UserController::class, 'store']);
+        Route::put('users/{user}', [UserController::class, 'update']);
+        Route::delete('users/{user}', [UserController::class, 'destroy']);
+    });
+
+    // Attendance VIEW: HR + Branch Admin / Manager / Team Lead (scoped to their reports in the controller).
+    Route::middleware('role:SUPER_ADMIN,COMPANY_ADMIN,HR_ADMIN,BRANCH_ADMIN,MANAGER,TEAM_LEADER,EMPLOYEE')->group(function () {
+        Route::get('attendance', [AttendanceAdminController::class, 'index']); // Employee Self-Service: own row only (scoped in controller)
+    });
+
+    // ---- Attendance completeness (Release-1 items 2+3) ----
+    // Holiday calendar + manual regularization: HR-level roles only, tenant-scoped.
+    // Holiday calendar VIEW: company-wide holidays, read-only for everyone incl. Employee.
+    Route::get('holidays', [HolidayController::class, 'index'])
+        ->middleware('role:SUPER_ADMIN,COMPANY_ADMIN,HR_ADMIN,BRANCH_ADMIN,MANAGER,TEAM_LEADER,COMPLIANCE_OFFICER,AUDITOR,EMPLOYEE');
+    Route::get('weekly-off', [HolidayController::class, 'weeklyOff']) // 13-Oct-2026: W.OFF schedule
+        ->middleware('role:SUPER_ADMIN,COMPANY_ADMIN,HR_ADMIN,BRANCH_ADMIN,MANAGER,TEAM_LEADER,COMPLIANCE_OFFICER,AUDITOR,EMPLOYEE');
+    Route::middleware('role:SUPER_ADMIN,COMPANY_ADMIN,HR_ADMIN')->group(function () {
+        Route::put('weekly-off', [HolidayController::class, 'saveWeeklyOff']);
+        Route::post('holidays', [HolidayController::class, 'store']);
+        Route::delete('holidays/{holiday}', [HolidayController::class, 'destroy']);
+
+
+        Route::post('attendance', [AttendanceAdminController::class, 'store']);
+        // 07-Nov-2026 (Ejaz): Attendance → Bulk upload (Excel or CSV) + its sample file.
+        Route::post('attendance/import', [\App\Http\Controllers\Api\AttendanceImportController::class, 'import']);
+        Route::get('attendance/import-template', [\App\Http\Controllers\Api\AttendanceImportController::class, 'template']);
+        Route::put('attendance/{attendance}', [AttendanceAdminController::class, 'update']);
+    });
+
+    // ---- Employee agent ----
+    // ---- Ops (R2-4): audit viewer + storage usage + backups ----
+    Route::get('audit-logs', [OpsController::class, 'auditLogs'])
+        ->middleware('role:SUPER_ADMIN,COMPANY_ADMIN,AUDITOR');
+    Route::middleware('role:SUPER_ADMIN,COMPANY_ADMIN')->group(function () {
+        Route::get('ops/storage-usage', [OpsController::class, 'storageUsage']);
+        // Per-client storage quota: any admin sees usage; only Super Admin sets it (buy more space).
+        Route::get('ops/storage-quota', [OpsController::class, 'storageQuota']);
+        Route::middleware('role:SUPER_ADMIN')->put('ops/storage-quota', [OpsController::class, 'updateStorageQuota']);
+        // Email / SMTP (11-Aug-2026): global relay = Super only; company relay = its admin.
+        Route::get('ops/mail-config', [\App\Http\Controllers\Api\MailConfigController::class, 'show']);
+        Route::middleware('role:SUPER_ADMIN')->put('ops/mail-config', [\App\Http\Controllers\Api\MailConfigController::class, 'saveGlobal']);
+        Route::put('ops/mail-config/company', [\App\Http\Controllers\Api\MailConfigController::class, 'saveCompany']);
+        Route::post('ops/mail-config/test', [\App\Http\Controllers\Api\MailConfigController::class, 'test']);
+        // 23-Sep-2026 Notifications: each company admin decides their own company's alert emails;
+        // the server error report is Super Admin only (enforced in the controller).
+        Route::get('ops/notify-prefs', [\App\Http\Controllers\Api\MailConfigController::class, 'notifyPrefs']);
+        Route::put('ops/notify-prefs', [\App\Http\Controllers\Api\MailConfigController::class, 'saveNotifyPrefs']);
+        Route::post('ops/notify-prefs/test-late-login', [\App\Http\Controllers\Api\MailConfigController::class, 'testLateLogin']); // 04-Nov-2026
+        Route::get('ops/mail-log', [\App\Http\Controllers\Api\MailConfigController::class, 'mailLog']);
+        Route::get('ops/storage-config', [StorageConfigController::class, 'show']);
+        // Cloud Storage (GCS) bucket = SHARED infrastructure across all cloud tenants,
+        // so only a Super Admin may change or test it. Company Admins can view only.
+        Route::middleware('role:SUPER_ADMIN')->group(function () {
+            Route::put('ops/storage-config', [StorageConfigController::class, 'save']);
+            Route::post('ops/storage-config/test', [StorageConfigController::class, 'test']);
+        });
+        Route::put('ops/storage-local', [StorageConfigController::class, 'saveLocal']);
+        Route::post('ops/storage-local/test', [StorageConfigController::class, 'testLocal']);
+        Route::get('ops/backups', [OpsController::class, 'backups']);
+        Route::post('ops/backup', [OpsController::class, 'runBackup']);
+        Route::post('ops/storage-cleanup', [OpsController::class, 'storageCleanup']); // 17-Jul bulk evidence/log cleanup
+        Route::get('ops/retention', [OpsController::class, 'retention']);              // 17-Jul auto-cleanup params
+        Route::put('ops/retention', [OpsController::class, 'updateRetention']);
+        Route::post('ops/purge-run', [OpsController::class, 'runPurge']);
+        Route::get('gate/policy', [OpsController::class, 'gatePolicy']);       // Gate-to-PC USP
+        Route::put('gate/policy', [OpsController::class, 'updateGatePolicy']);
+        Route::get('ops/agent-lock', [OpsController::class, 'agentLock']);   // agent exit/uninstall lock
+        Route::put('ops/agent-lock', [OpsController::class, 'updateAgentLock']);
+
+        // ---- Help → Troubleshooting: live System Health + in-app log viewer ----
+        // (Ametecs troubleshooting-in-app standard — non-technical self-service.)
+        Route::get('ops/diagnostics', [DiagnosticsController::class, 'checks']);
+        Route::get('ops/logs', [DiagnosticsController::class, 'logs']);
+
+        // ---- Danger Zone: SUPER ADMIN-only data clearing, e-mail-OTP gated (24-Jul) ----
+        Route::middleware('role:SUPER_ADMIN')->group(function () {
+            Route::get('ops/db-clear/summary', [DbMaintenanceController::class, 'summary']);
+            Route::post('ops/db-clear/request-code', [DbMaintenanceController::class, 'requestCode']);
+            Route::post('ops/db-clear/execute', [DbMaintenanceController::class, 'execute']);
+        });
+    });
+
+    // ---- Licence (R2-1): admin view/set key + force revalidation ----
+    Route::middleware('role:SUPER_ADMIN,COMPANY_ADMIN')->group(function () {
+        Route::get('license', [LicenseController::class, 'show']);
+        Route::post('license', [LicenseController::class, 'store'])->middleware('ag.managed');
+        Route::post('license/validate', [LicenseController::class, 'revalidate'])->middleware('ag.managed');
+        Route::post('license/import', [LicenseController::class, 'import'])->middleware('ag.managed');
+    });
+
+    // ---- Self-update (1-Sep-2026): the "Check for Update" button on the Licence
+    // screen. Same admins as the licence itself, same phone-home identity. The
+    // install step only STARTS the standalone updater — progress is polled from
+    // public/update-status.php, because the app is in maintenance mode by then.
+    Route::middleware('role:SUPER_ADMIN,COMPANY_ADMIN')->group(function () {
+        Route::get('update', [UpdateController::class, 'status']);
+        Route::post('update/check', [UpdateController::class, 'check']);
+        Route::post('update/download', [UpdateController::class, 'download']);
+        Route::post('update/install', [UpdateController::class, 'install']);
+    });
+
+    // ---- LiveView (Phase 4, 14-Sep-2026): now on its own permission slugs
+    // (2026_09_14_000100_seed_liveview_permissions.php), same shape as meeting.* above —
+    // superseding the Phase 3 POC's blanket role:SUPER_ADMIN,COMPANY_ADMIN gate.
+    // 18-Sep-2026: Standard/Enforcer/Commander — Live View is a Commander-only
+    // feature. 'stop' stays ungated (ending a session must always work, same
+    // reasoning as enforcement/disable below).
+    Route::post('liveview/session/start', [LiveViewController::class, 'start'])->middleware(['permission:liveview.start', 'feature:live_view']);
+    Route::post('liveview/session/{session}/stop', [LiveViewController::class, 'stop'])->middleware('permission:liveview.stop');
+    // 21-Sep-2026: the permission-based licence's own management endpoints —
+    // same gate as starting a session (whoever can start LiveView can decide
+    // who's eligible for it).
+    Route::get('liveview/permissions', [LiveViewController::class, 'permissions'])->middleware(['permission:liveview.start', 'feature:live_view']);
+    Route::post('liveview/permission', [LiveViewController::class, 'setPermission'])->middleware(['permission:liveview.start', 'feature:live_view']);
+
+    // 15-Oct-2026 (Ejaz): Screen Recording — Commander only (same plan gate as LiveView),
+    // seats from Central (features.recording_max_users). View = liveview.view, manage = liveview.start.
+    Route::get('screen-recording/access', [\App\Http\Controllers\Api\ScreenRecordingController::class, 'access']);
+    Route::get('screen-recording/settings', [\App\Http\Controllers\Api\ScreenRecordingController::class, 'settings'])->middleware(['permission:liveview.start', 'feature:live_view']);
+    Route::put('screen-recording/settings', [\App\Http\Controllers\Api\ScreenRecordingController::class, 'saveSettings'])->middleware(['permission:liveview.start', 'feature:live_view']);
+    Route::post('screen-recording/seat', [\App\Http\Controllers\Api\ScreenRecordingController::class, 'setSeat'])->middleware(['permission:liveview.start', 'feature:live_view']);
+    Route::post('screen-recording/record-now', [\App\Http\Controllers\Api\ScreenRecordingController::class, 'recordNow'])->middleware(['permission:liveview.start', 'feature:live_view']);
+    Route::post('screen-recording/cleanup-now', [\App\Http\Controllers\Api\ScreenRecordingController::class, 'cleanupNow'])->middleware(['permission:liveview.start', 'feature:live_view']);
+    Route::get('screen-recording/recordings', [\App\Http\Controllers\Api\ScreenRecordingController::class, 'index'])->middleware(['permission:liveview.view', 'feature:live_view']);
+    Route::get('screen-recording/recordings/{recording}/file', [\App\Http\Controllers\Api\ScreenRecordingController::class, 'file'])->middleware(['permission:liveview.view', 'feature:live_view']);
+    Route::get('screen-recording/download', [\App\Http\Controllers\Api\ScreenRecordingController::class, 'download'])->middleware(['permission:liveview.view', 'feature:live_view']); // 19-Oct-2026: From-To download (zip)
+    // 20-Oct-2026 (Ejaz): evidence packs (recording.evidence) and "Show original" when customer data is hidden (recording.unmask).
+    Route::post('screen-recording/unmask', [\App\Http\Controllers\Api\ScreenRecordingController::class, 'unmask'])->middleware(['permission:recording.unmask', 'feature:live_view']);
+    Route::get('screen-recording/evidence', [\App\Http\Controllers\Api\ScreenRecordingController::class, 'evidenceIndex'])->middleware(['permission:recording.evidence', 'feature:live_view']);
+    Route::post('screen-recording/evidence', [\App\Http\Controllers\Api\ScreenRecordingController::class, 'evidenceStore'])->middleware(['permission:recording.evidence', 'feature:live_view']);
+    Route::get('screen-recording/evidence/{evidence}', [\App\Http\Controllers\Api\ScreenRecordingController::class, 'evidenceShow'])->middleware(['permission:recording.evidence', 'feature:live_view']);
+    Route::get('screen-recording/evidence/{evidence}/download', [\App\Http\Controllers\Api\ScreenRecordingController::class, 'evidenceDownload'])->middleware(['permission:recording.evidence', 'feature:live_view']);
+    Route::post('screen-recording/evidence/{evidence}/verify', [\App\Http\Controllers\Api\ScreenRecordingController::class, 'evidenceVerify'])->middleware(['permission:recording.evidence', 'feature:live_view']);
+
+    // 'licensed' is inherited from the group above — no longer listed here.
+    Route::prefix('agent')->middleware(['active-employee', 'throttle:600,1'])->group(function () {
+        // Bootstrap (no consent gate — these establish identity + consent).
+        Route::post('register-device', [DeviceController::class, 'register']);
+        Route::get('policy', [PolicyController::class, 'agentBundle']);
+        Route::post('heartbeat', [DeviceController::class, 'heartbeat']);
+        // 10-Oct-2026 (Ejaz): "Yes, still working" on the after-shift question.
+        Route::post('still-working', [DeviceController::class, 'stillWorking']);
+        // Fast LiveView-only sibling to the heartbeat above (15-Sep-2026) — see
+        // LiveViewController::poll()'s docblock for why this exists separately.
+        Route::get('liveview/poll', [LiveViewController::class, 'poll']);
+        // 28-Sep-2026: chat with the admin (new messages are announced on liveview/poll).
+        Route::get('chat', [\App\Http\Controllers\Api\ChatController::class, 'agentIndex']);
+        Route::post('chat', [\App\Http\Controllers\Api\ChatController::class, 'agentSend']);
+        // 29-Sep-2026: the employee closed the chat popup — the conversation ends.
+        Route::delete('chat', [\App\Http\Controllers\Api\ChatController::class, 'agentClear']);
+        // Section 10: the agent's explicit sign-out (revokes this device's session).
+        Route::post('session-logout', [DeviceController::class, 'sessionLogout']);
+        Route::post('consent', [ConsentController::class, 'store']);
+        Route::get('consent/status', [ConsentController::class, 'status']);
+        Route::get('today', [AgentStatusController::class, 'today']);
+        // 07-Nov-2026 (Ejaz): "Attendance scanner" in the agent window — the QR display of the employee's office gate.
+        Route::get('qr-scanner', \App\Qronex\AgentScannerController::class)->middleware('throttle:20,1,qr-scanner'); // 08-Nov-2026: own counter. Without the prefix it shared the group's throttle:600 key, so every heartbeat/poll counted and it always replied 429 "Too Many Attempts."
+        Route::post('sync-batch', [SyncController::class, 'batch']);
+        // QA Phase 2 (A8): the agent reports exit/uninstall/service-stop tamper attempts.
+        // Outside the consent wall — a tamper attempt must be recordable regardless.
+        Route::post('tamper-attempt', [TamperController::class, 'report']);
+        // The agent asks, for the PC it runs on, for a one-hour single-use enrolment token so
+        // the enforcement service on that machine can enrol itself.
+        Route::post('enforcer-handoff', [EnforcerEnrollmentController::class, 'handoff']);
+        // 29-Oct-2026 (Altaf): SmartDCM Sign on — one-time ticket the agent opens SmartDCM with.
+        Route::post('smartdcm-ticket', [\App\Http\Controllers\Api\SmartDcmSsoController::class, 'ticket'])->middleware('throttle:10,1,smartdcm-ticket'); // 08-Nov-2026: own counter (same shared-key trap as qr-scanner)
+        // The endpoint reports what its policy stopped, or would have stopped (audit mode).
+        Route::post('enforcement/audit-event', [EnforcementController::class, 'storeAuditEvent']);
+        // Biometric Gate v1.1: PRE-consent by design — the wall shows before work
+        // starts, and it exposes only the caller's own punch state.
+        Route::get('gate-status', [AgentStatusController::class, 'gateStatus']);
+
+        // Tracking ingestion (M2 + M3) — gated by recorded consent where policy requires it.
+        // 'live-session' (26-Aug-2026): the device row is the authority on whether a session
+        // is live. Without it a closed session still accepted violations, activity and
+        // screenshots for as long as the agent held a token — the console read 0 active
+        // agents while the violations tab kept filling up.
+        Route::middleware(['live-session', 'tracking-mode', 'consent'])->group(function () {
+            Route::post('attendance-event', [AttendanceController::class, 'store']);
+            Route::post('activity-events', [ActivityController::class, 'activity']);
+            Route::post('idle-event', [ActivityController::class, 'idle']);
+            Route::post('break-event', [BreakController::class, 'store']);
+            // Section 2: put self into Meeting status (server-authorised).
+            Route::post('meeting-event', [AgentMeetingController::class, 'event']);
+
+            // M3 — presence (metadata only) + screenshots/webcam (policy-gated media).
+            Route::post('presence-event', [PresenceController::class, 'event']);
+            Route::post('webcam-event', [PresenceController::class, 'webcam']);
+            Route::post('screenshot-upload', [ScreenshotController::class, 'upload']);
+
+            // M4 — app/website usage + compliance events.
+            Route::post('app-usage', [UsageController::class, 'appUsage']);
+            Route::post('website-usage', [UsageController::class, 'websiteUsage']);
+            Route::post('compliance-event', [ComplianceController::class, 'store']);
+            // 04-Oct-2026: PC Audit Log — what was clicked (Enforcer + Commander; 403 otherwise).
+            Route::post('pc-audit/clicks', [\App\Http\Controllers\Api\PcAuditController::class, 'agentClicks']);
+            // 15-Oct-2026: Screen Recording — the agent's own config poll + segment upload.
+            Route::get('recording/config', [\App\Http\Controllers\Api\ScreenRecordingController::class, 'agentConfig']);
+            Route::post('recording/upload', [\App\Http\Controllers\Api\ScreenRecordingController::class, 'agentUpload']);
+        });
+    });
+
+    // ---- Monitoring reports (M3): screenshots + presence timelines ----
+    Route::get('reports/screenshots', [ScreenshotController::class, 'companyDay'])
+        ->middleware('permission:screenshot.view');
+    Route::get('reports/employee/{employee}/screenshots', [ScreenshotController::class, 'timeline'])
+        ->middleware('permission:screenshot.view');
+    Route::get('screenshots/{screenshot}/file', [ScreenshotController::class, 'file'])
+        ->middleware('permission:screenshot.view')
+        ->name('screenshots.file');
+
+    // ---- EPT25-05: webcam photo viewer (company-day wall + protected file) ----
+    Route::get('reports/webcam', [WebcamController::class, 'companyDay'])
+        ->middleware('permission:webcam.view');
+    Route::get('webcam/{webcam}/file', [WebcamController::class, 'file'])
+        ->middleware('permission:webcam.view')
+        ->name('webcam.file');
+    Route::get('reports/employee/{employee}/presence', [PresenceController::class, 'timeline'])
+        ->middleware('role:SUPER_ADMIN,COMPANY_ADMIN,BRANCH_ADMIN,MANAGER,TEAM_LEADER,COMPLIANCE_OFFICER,AUDITOR');
+
+    // ---- Usage + compliance reports (M4) ----
+    Route::middleware('permission:activity.view')->group(function () {
+        Route::get('reports/usage-summary', [UsageController::class, 'companySummary']); // 17-Jul all-employees default
+        Route::get('reports/time-utilization', [UsageController::class, 'timeUtilization']); // dashboard 'where the hours went'
+        Route::get('reports/productivity', [ProductivityController::class, 'report']); // 17-Jul all-employee day-wise productivity
+        Route::get('reports/productivity/detail', [ProductivityController::class, 'detail']); // 29-Sep "+" row: the day event by event
+        Route::post('reports/productivity/rebuild', [ProductivityController::class, 'rebuildSummaries']); // backfill missing daily summaries on demand
+        Route::get('reports/employee/{employee}/app-usage', [UsageController::class, 'appReport']);
+        Route::get('reports/employee/{employee}/website-usage', [UsageController::class, 'websiteReport']);
+        Route::get('reports/employee/{employee}/compliance', [ComplianceController::class, 'report']);
+    });
+    Route::get('dashboard/violations', [ComplianceController::class, 'feed'])
+        ->middleware('role:SUPER_ADMIN,COMPANY_ADMIN,BRANCH_ADMIN,MANAGER,TEAM_LEADER,COMPLIANCE_OFFICER,AUDITOR,EMPLOYEE');
+
+    // ---- Live dashboard + timeline (M5) ----
+    $mgr = 'role:SUPER_ADMIN,COMPANY_ADMIN,BRANCH_ADMIN,MANAGER,TEAM_LEADER,COMPLIANCE_OFFICER,AUDITOR,HR_ADMIN';
+    $mgrEmp = $mgr . ',EMPLOYEE'; // Employee Self-Service: dashboard is employee-scoped in the controller (own row only)
+    Route::get('dashboard/live-status', [DashboardController::class, 'liveStatus'])->middleware($mgrEmp);
+    Route::get('dashboard/summary', [DashboardController::class, 'summary'])->middleware($mgrEmp);
+    Route::get('dashboard/device-health', [DashboardController::class, 'deviceHealth'])->middleware($mgrEmp);
+    Route::get('reports/employee/{employee}/timeline', [ReportController::class, 'timeline'])->middleware($mgr);
+    // 28-Sep-2026: admin ↔ employee chat from the employee drawer (agent side: agent/chat below).
+    // 30-Sep-2026: unread employee replies (console toast/notification + LiveView chat badges).
+    Route::get('chat-unread', [\App\Http\Controllers\Api\ChatController::class, 'adminUnread'])->middleware($mgr);
+    // 07-Oct-2026: Popup Alerts chosen in Audit & Ops → Notifications (console polls; shown once).
+    Route::get('alert-popups', [\App\Http\Controllers\Api\AlertPopupController::class, 'index'])->middleware($mgr);
+    Route::get('chat/{employee}', [\App\Http\Controllers\Api\ChatController::class, 'adminIndex'])->middleware($mgr);
+    Route::post('chat/{employee}', [\App\Http\Controllers\Api\ChatController::class, 'adminSend'])->middleware($mgr);
+    // 29-Sep-2026: the admin closed the drawer / full-screen chat — the conversation ends.
+    Route::delete('chat/{employee}', [\App\Http\Controllers\Api\ChatController::class, 'adminClear'])->middleware($mgr);
+    // Section 3 & 14: break report (permitted/actual/excess/reason) + meeting report.
+    Route::get('reports/breaks', [BreakReportController::class, 'index'])->middleware($mgr);
+    Route::get('reports/meetings', [MeetingController::class, 'report'])->middleware($mgr);
+    Route::put('reports/breaks/{break}/review', [BreakReportController::class, 'review'])
+        ->middleware('role:SUPER_ADMIN,COMPANY_ADMIN,HR_ADMIN');
+    // Monthly payroll pack: per-employee counts + payable days for a month.
+    Route::get('reports/monthly-summary', [MonthlyReportController::class, 'summary'])->middleware($mgr);
+
+    // 03-Oct-2026: Endpoint Security (Enforcer + Commander only). Plan gate = EnsureEndpointSecurity
+    // (Standard → 403 FEATURE_NOT_AVAILABLE); access = "Endpoint Security" cards (CardAccess);
+    // legacy roles: Super/Company Admin. 'access' is ungated — the console uses it to show the nav.
+    Route::get('endpoint-security/access', [\App\Http\Controllers\Api\EndpointSecurityController::class, 'access']);
+    Route::prefix('endpoint-security')->middleware(['role:SUPER_ADMIN,COMPANY_ADMIN', \App\Http\Middleware\EnsureEndpointSecurity::class])->group(function () {
+        $es = \App\Http\Controllers\Api\EndpointSecurityController::class;
+        $cap = fn (string $c) => \App\Http\Middleware\EnsureEndpointSecurity::class . ':' . $c;
+        Route::get('overview', [$es, 'overview']);
+        Route::get('devices/{machine}', [$es, 'show']);
+        Route::get('devices/{machine}/threats', [$es, 'threats'])->middleware($cap('threat_history'));
+        Route::get('devices/{machine}/events', [$es, 'events'])->middleware($cap('events'));
+        Route::post('devices/{machine}/actions/{action}', [$es, 'action']); // capability checked per action
+        Route::get('commands', [$es, 'commands'])->middleware($cap('command_history'));
+        // 04-Oct-2026: the result of one scan / signature update ("View report").
+        Route::get('commands/{command}/report', [$es, 'commandReport']);
+        Route::get('policy', [$es, 'policy']);
+        Route::put('policy', [$es, 'savePolicy'])->middleware($cap('policies'));
+        // 04-Oct-2026: Company Compliance Report (all PCs, a period) — the console builds the PDF.
+        Route::get('compliance-report', [$es, 'complianceReport'])->middleware($cap('reports'));
+        Route::get('reports/{type}', [$es, 'report'])->middleware($cap('reports'));
+    });
+
+    // 04-Oct-2026: PC Audit Log (Enforcer + Commander) — per-PC logs + background all-PC report.
+    Route::prefix('pc-audit')->middleware(['role:SUPER_ADMIN,COMPANY_ADMIN', \App\Http\Middleware\EnsureEndpointSecurity::class . ':pc_audit'])->group(function () {
+        $pa = \App\Http\Controllers\Api\PcAuditController::class;
+        Route::get('devices', [$pa, 'devices']);
+        Route::get('devices/{uuid}', [$pa, 'show']);
+        Route::get('devices/{uuid}/csv', [$pa, 'csv']);
+        Route::get('reports', [$pa, 'reports']);
+        Route::post('reports', [$pa, 'startReport']);
+        Route::get('reports/{report}/download', [$pa, 'download']);
+    });
+
+    // 30-Sep-2026 (Ejaz): Reports → Schedule Report (automatic Productivity report emails).
+    // Governed by the "Report schedules" card (CardAccess); legacy roles: Reports & Exports access.
+    Route::get('report-schedules', [\App\Http\Controllers\Api\ReportScheduleController::class, 'index'])->middleware('permission:export.data');
+    Route::get('report-schedules/{schedule}/snapshot', [\App\Http\Controllers\Api\ReportScheduleController::class, 'snapshot'])->middleware('permission:export.data');
+    Route::get('whatsapp-config', [\App\Http\Controllers\Api\ReportScheduleController::class, 'whatsappShow'])->middleware('permission:export.data');
+    // WhatsApp connection holds a Meta access token: Super/Company Admin only (plus a matrix Edit tick).
+    Route::put('whatsapp-config', [\App\Http\Controllers\Api\ReportScheduleController::class, 'whatsappSave'])->middleware('role:SUPER_ADMIN,COMPANY_ADMIN');
+    Route::post('whatsapp-config/test', [\App\Http\Controllers\Api\ReportScheduleController::class, 'whatsappTest'])->middleware('role:SUPER_ADMIN,COMPANY_ADMIN');
+    Route::middleware('role:SUPER_ADMIN,COMPANY_ADMIN,HR_ADMIN,BRANCH_ADMIN,MANAGER')->group(function () {
+        Route::post('report-schedules', [\App\Http\Controllers\Api\ReportScheduleController::class, 'store']);
+        Route::put('report-schedules/{schedule}', [\App\Http\Controllers\Api\ReportScheduleController::class, 'update']);
+        Route::delete('report-schedules/{schedule}', [\App\Http\Controllers\Api\ReportScheduleController::class, 'destroy']);
+        Route::post('report-schedules/{schedule}/run', [\App\Http\Controllers\Api\ReportScheduleController::class, 'run']);
+    });
+
+    // 10-Oct-2026 (Ejaz): Reports → Extra Hours (work outside shift hours). View/export with
+    // Reports & Exports access; Approve / Reject for the same roles that manage report schedules.
+    Route::get('extra-hours', [\App\Http\Controllers\Api\ExtraHoursController::class, 'index'])->middleware('permission:export.data');
+    Route::get('export/extra-hours', [\App\Http\Controllers\Api\ExtraHoursController::class, 'export'])->middleware('permission:export.data');
+    Route::post('extra-hours/{id}/decision', [\App\Http\Controllers\Api\ExtraHoursController::class, 'decide'])
+        ->middleware('role:SUPER_ADMIN,COMPANY_ADMIN,HR_ADMIN,BRANCH_ADMIN,MANAGER')->whereNumber('id');
+
+    // ---- Exports (M5 + M6) — CSV ----
+    Route::middleware('permission:export.data')->group(function () {
+        Route::get('export/attendance', [ExportController::class, 'attendance']);
+        Route::get('export/productivity', [ExportController::class, 'productivity']);
+        Route::get('export/productivity-report', [ProductivityController::class, 'exportExcel']); // .xlsx — exact client template columns + Excel formats
+        Route::get('export/compliance', [ExportController::class, 'compliance']);
+        Route::get('export/daily-summary', [ExportController::class, 'dailySummary']);
+        Route::get('export/attendance-register', [MonthlyReportController::class, 'attendanceRegister']);
+        Route::get('export/attendance-day', [MonthlyReportController::class, 'attendanceDay']); // 10-Oct-2026: one-date Day report
+    });
+    // ---- QA Phase 6 (B14): audit-log export — its OWN permission (audit.export) ----
+    Route::get('export/audit-logs', [ExportController::class, 'auditLogs'])
+        ->middleware('permission:audit.export');
+
+    // ---- Biometric integration (M6) ----
+    Route::prefix('integrations/biometric')->middleware('role:SUPER_ADMIN,COMPANY_ADMIN,HR_ADMIN')->group(function () {
+        Route::post('logs', [BiometricController::class, 'pushLogs']);
+        Route::get('logs', [BiometricController::class, 'getLogs']);
+        Route::post('import', [BiometricController::class, 'import']);
+        Route::post('map-employee', [BiometricController::class, 'mapEmployee']);
+
+        // Section 9: full mapping CRUD — list, discover unmapped IDs, re-point, remove.
+        Route::get('mappings', [BiometricController::class, 'mappings']);
+        Route::get('unmapped', [BiometricController::class, 'unmapped']);
+        Route::put('mappings/{mapping}', [BiometricController::class, 'updateMapping']);
+        Route::delete('mappings/{mapping}', [BiometricController::class, 'deleteMapping']);
+
+        // Punch-device registry: physical readers AND cloud attendance APIs.
+        Route::get('devices', [BiometricDeviceController::class, 'index']);
+        Route::post('devices/test-connection', [BiometricDeviceController::class, 'testConnection']);
+        Route::post('devices/{device}/sync', [BiometricDeviceController::class, 'syncNow']);
+        // 23-Sep-2026: "Live auto-sync every N seconds" is stored server-side (was browser-only).
+        Route::get('live-sync', [BiometricDeviceController::class, 'liveSync']);
+        Route::put('live-sync', [BiometricDeviceController::class, 'saveLiveSync']);
+        Route::post('devices', [BiometricDeviceController::class, 'store']);
+        Route::put('devices/{device}', [BiometricDeviceController::class, 'update']);
+        Route::delete('devices/{device}', [BiometricDeviceController::class, 'destroy']);
+    });
+    Route::get('reports/biometric-mismatch', [BiometricController::class, 'mismatch'])
+        ->middleware('role:SUPER_ADMIN,COMPANY_ADMIN,HR_ADMIN,MANAGER,AUDITOR');
+
+    // ---- Meetings (Section 2) — QA Phase 4 (B5): granular permission gate ----
+    // Tenant isolation still comes from the Meeting model's company scope (route-model
+    // binding 404s a cross-tenant id); the permission decides WHICH action a role may take.
+    Route::get('meetings', [MeetingController::class, 'index'])->middleware('permission:meeting.view');
+    Route::post('meetings', [MeetingController::class, 'store'])->middleware('permission:meeting.schedule');
+    Route::get('meetings/joinable-now', [MeetingController::class, 'joinableNow'])->middleware('permission:meeting.view'); // EPT25-12 (before {meeting} binding)
+    Route::get('meetings/{meeting}', [MeetingController::class, 'show'])->middleware('permission:meeting.view');
+    Route::put('meetings/{meeting}', [MeetingController::class, 'update'])->middleware('permission:meeting.edit');
+    Route::post('meetings/{meeting}/cancel', [MeetingController::class, 'cancel'])->middleware('permission:meeting.cancel');
+    Route::post('meetings/{meeting}/end', [MeetingController::class, 'end'])->middleware('permission:meeting.cancel'); // organiser-only enforced in controller (Admin #9)
+    Route::get('meetings/{meeting}/participation', [MeetingController::class, 'participation'])->middleware('permission:meeting.reports');
+    Route::post('meetings/{meeting}/join', [MeetingController::class, 'join'])->middleware('permission:meeting.view');   // Part B §11 — single join fn
+    Route::post('meetings/{meeting}/leave', [MeetingController::class, 'leave'])->middleware('permission:meeting.view'); // Part B §17
+
+    // ---- QA Phase 5 (B10): violation → evidence (only the screenshots for that violation) ----
+    Route::get('violations/{event}/evidence', [ComplianceController::class, 'evidence'])
+        ->middleware('permission:evidence.view');
+
+    // ---- QA Phase 2 (A3): emergency biometric-gate override (admin, audited, never automatic) ----
+    Route::post('agent-override/gate', [AgentOverrideController::class, 'gate'])
+        ->middleware('role:SUPER_ADMIN,COMPANY_ADMIN,HR_ADMIN');
+
+    // ---- Tenants (12-Aug-2026): host/operator view of every company on this
+    // install — storage vs quota, devices vs seats, per-tenant licence health.
+    // Central stays the source of truth for the commercial side. Super only.
+    Route::middleware('role:SUPER_ADMIN')->group(function () {
+        Route::get('tenants', [TenantController::class, 'index']);
+        Route::post('tenants/{company}/license/validate', [TenantController::class, 'validateLicense']);
+    });
+
+    // ---- Companies (tenant provisioning + profile) ----
+    Route::get('companies', [CompanyController::class, 'index'])
+        ->middleware('role:SUPER_ADMIN,COMPANY_ADMIN,AUDITOR');
+    Route::get('companies/{company}', [CompanyController::class, 'show'])
+        ->middleware('role:SUPER_ADMIN,COMPANY_ADMIN,AUDITOR');
+    Route::post('companies', [CompanyController::class, 'store'])
+        ->middleware('role:SUPER_ADMIN');
+    Route::put('companies/{company}', [CompanyController::class, 'update'])
+        ->middleware('role:SUPER_ADMIN,COMPANY_ADMIN');
+
+    // ---- Organisation sub-entities: branches / departments / teams / designations / shifts ----
+    // Gate Exclusions (18-Aug-2026): read-only roll-up of every standing exception to
+    // Gate-to-PC across branches / departments / teams / employees / machines. Writes go
+    // through each resource's own endpoint, which keeps their permissions and audit trail.
+    Route::get('gate-exclusions', [GateExclusionController::class, 'index'])
+        ->middleware('role:SUPER_ADMIN,COMPANY_ADMIN,BRANCH_ADMIN,HR_ADMIN');
+
+    Route::get('org/{type}', [OrgController::class, 'index'])
+        ->middleware('role:SUPER_ADMIN,COMPANY_ADMIN,BRANCH_ADMIN,HR_ADMIN,MANAGER,AUDITOR');
+    Route::middleware('role:SUPER_ADMIN,COMPANY_ADMIN,BRANCH_ADMIN,HR_ADMIN')->group(function () {
+        Route::post('org/{type}', [OrgController::class, 'store'])->middleware('ag.managed');
+        Route::put('org/{type}/{id}', [OrgController::class, 'update']);
+        Route::delete('org/{type}/{id}', [OrgController::class, 'destroy'])->middleware('ag.managed');
+    });
+
+    // ---- R4 item 5: organisation roles + module-permission matrix ----
+    Route::middleware('role:SUPER_ADMIN,COMPANY_ADMIN')->group(function () {
+        Route::get('roles', [RoleController::class, 'index']);
+        Route::post('roles', [RoleController::class, 'store']);
+        Route::put('roles/{role}', [RoleController::class, 'update']);
+        Route::delete('roles/{role}', [RoleController::class, 'destroy']);
+        Route::put('roles/{role}/permissions', [RoleController::class, 'syncPermissions']);
+    });
+
+    // ---- Integrations (17-Jul): API keys + outbound targets (company-admin) ----
+    Route::middleware('role:SUPER_ADMIN,COMPANY_ADMIN')->group(function () {
+        Route::get('integrations/keys', [IntegrationController::class, 'keys']);
+        Route::post('integrations/keys', [IntegrationController::class, 'createKey']);
+        Route::post('integrations/keys/{apiKey}/revoke', [IntegrationController::class, 'revokeKey']);
+        Route::get('integrations/targets', [IntegrationController::class, 'targets']);
+        Route::post('integrations/targets', [IntegrationController::class, 'saveTarget']);
+        Route::put('integrations/targets/{target}', [IntegrationController::class, 'saveTarget']);
+        Route::delete('integrations/targets/{target}', [IntegrationController::class, 'deleteTarget']);
+        Route::post('integrations/targets/{target}/push', [IntegrationController::class, 'pushTarget']);
+        // 29-Oct-2026 (Altaf): SmartDCM Sign on (Organisation → SmartDCM Sign on card).
+        Route::get('integrations/smartdcm', [\App\Http\Controllers\Api\SmartDcmSsoController::class, 'show']);
+        Route::put('integrations/smartdcm', [\App\Http\Controllers\Api\SmartDcmSsoController::class, 'save']);
+    });
+
+    // ---- Employees ----
+    Route::get('employees', [EmployeeController::class, 'index'])
+        ->middleware('role:SUPER_ADMIN,COMPANY_ADMIN,BRANCH_ADMIN,HR_ADMIN,MANAGER,TEAM_LEADER,AUDITOR');
+    // Employee Archive (deleted-employee backups) — MUST precede employees/{employee}
+    // so the literal "archives" segment is not captured as a route-model-bound employee.
+    Route::middleware('role:SUPER_ADMIN,COMPANY_ADMIN,BRANCH_ADMIN,HR_ADMIN')->group(function () {
+        // 19-Aug-2026 (Ejaz): employee master export. Header is EXACTLY the bulk-import
+        // sample's columns so the file re-imports as-is. MUST precede employees/{employee}
+        // or "export" is captured as a route-model-bound employee.
+        Route::get('employees/export', [EmployeeController::class, 'export']);
+        Route::get('employees/archives', [EmployeeController::class, 'archives']);
+        Route::get('employees/archives/{archive}/download', [EmployeeController::class, 'downloadArchive']);
+        Route::post('employees/archives/{archive}/rebuild', [EmployeeController::class, 'rebuildArchive']); // Part C #22 — build a stuck/failed archive now
+        Route::post('employees/archives/{archive}/restore', [EmployeeController::class, 'restoreArchive']); // Part C #21 — restore a deleted employee
+    });
+    Route::get('employees/{employee}', [EmployeeController::class, 'show'])
+        ->middleware('role:SUPER_ADMIN,COMPANY_ADMIN,BRANCH_ADMIN,HR_ADMIN,MANAGER,TEAM_LEADER,AUDITOR');
+    Route::get('employees/{employee}/policy-trace', [EmployeeController::class, 'policyTrace']) // read-only: why each capability is on/off
+        ->middleware('role:SUPER_ADMIN,COMPANY_ADMIN,BRANCH_ADMIN,HR_ADMIN');
+    Route::get('employees/{employee}/gate-trace', [EmployeeController::class, 'gateTrace']) // read-only: why the Gate-to-PC wall is up (or not)
+        ->middleware('role:SUPER_ADMIN,COMPANY_ADMIN,BRANCH_ADMIN,HR_ADMIN');
+    Route::middleware('role:SUPER_ADMIN,COMPANY_ADMIN,BRANCH_ADMIN,HR_ADMIN')->group(function () {
+        Route::post('employees', [EmployeeController::class, 'store'])->middleware('ag.managed');
+        Route::post('employees/bulk-import', [EmployeeController::class, 'bulkImport'])->middleware('ag.managed'); // 17-Jul SmartPRS-style bulk onboarding
+        Route::put('employees/{employee}', [EmployeeController::class, 'update']);
+        Route::post('employees/{employee}/relieve', [EmployeeController::class, 'relieve'])->middleware('ag.managed'); // R2-3 offboarding
+        Route::delete('employees/{employee}', [EmployeeController::class, 'destroy'])->middleware('ag.managed');
+    });
+
+    // ---- Devices (admin view) ----
+    Route::get('devices', [DeviceController::class, 'index'])
+        ->middleware('role:SUPER_ADMIN,COMPANY_ADMIN,BRANCH_ADMIN,MANAGER,TEAM_LEADER,AUDITOR');
+
+    // R2-3 device management: unbind kills the agent token + frees the seat;
+    // rebind (admin approval) re-claims a seat and lets the agent register again.
+    // Force-logout: also Branch Admin / Manager (scoped to their reports in the controller).
+    Route::post('devices/{device}/force-logout', [DeviceController::class, 'forceLogout'])
+        ->middleware('role:SUPER_ADMIN,COMPANY_ADMIN,BRANCH_ADMIN,MANAGER');
+    Route::middleware('role:SUPER_ADMIN,COMPANY_ADMIN')->group(function () {
+        Route::post('devices/{device}/unbind', [DeviceController::class, 'unbind']);
+        Route::post('devices/{device}/rebind', [DeviceController::class, 'rebind']);
+        Route::put('devices/{device}/tracking-mode', [DeviceController::class, 'trackingMode']);
+        Route::put('devices/{device}/gate-mode', [DeviceController::class, 'gateMode']); // Gate-to-PC exclusion for one machine
+    });
+
+    // ---- Per-rule actions (Rules screen): its own controller because these decide which
+    // programs a company's PCs refuse to open, and PolicyController validates nothing by design.
+    // 18-Sep-2026: Standard/Enforcer/Commander — the Rules screen configures
+    // WHAT enforcement blocks, so it needs the 'enforcement' feature same as
+    // the Enforcement group below.
+    Route::middleware(['role:SUPER_ADMIN,COMPANY_ADMIN,COMPLIANCE_OFFICER', 'feature:enforcement'])->group(function () {
+        Route::get('policies/{type}/{policy}/rules', [PolicyRuleController::class, 'index']);
+        Route::put('policies/{type}/{policy}/rules', [PolicyRuleController::class, 'replace']);
+        // What File / Image / Camera protection can actually be enforced, per item.
+        // Declared BEFORE the {type}/{policy} pair above would ever be reached with
+        // these segments, and read-only, so it sits in the same permission group.
+        Route::get('policies/protection-capabilities', [PolicyRuleController::class, 'capabilities']);
+    });
+
+    // ---- Enforcement: on, off, and who is enforced and why ----
+    // 27-Aug-2026 (Ejaz): there is no learning period on a client installation. The application
+    // catalogue ships with the package, so a site has nothing left to discover; enforcement has
+    // two states and 'enable' is the way in. 'disable' is the kill switch and is never gated.
+    //
+    // start-audit and promote are kept and still routed — they are refused with an explanation
+    // while SMARTEPT_ENFORCEMENT_LEARNING is false, and work as they always did when it is true
+    // (our own lab, surveying an estate nobody knows). Removing the routes instead would turn
+    // an old cached console asset into a 404 nobody can interpret.
+    Route::middleware('role:SUPER_ADMIN,COMPANY_ADMIN,COMPLIANCE_OFFICER')->group(function () {
+        Route::get('enforcement/audit-report', [EnforcementController::class, 'auditReport']);
+        Route::get('enforcement/diagnostics', [EnforcementDiagnosticsController::class, 'index']);
+        // The kill switch — comment above always said this is never gated, but
+        // until 18-Sep-2026 nothing in this whole block carried 'feature:enforcement'
+        // either, so that was true by accident, not by design. Now that everything
+        // else below gets the real gate, 'disable' is pulled out here explicitly so
+        // it stays reachable on role alone: a downgraded company must always be able
+        // to turn OFF enforcement it's still running under an old policy.
+        Route::post('enforcement/disable', [EnforcementController::class, 'disable']);
+
+        // 18-Sep-2026 (Standard/Enforcer/Commander): everything that ARMS or
+        // CONFIGURES enforcement needs the plan feature — this is the gap that let
+        // a Standard-tier company toggle enforcement on and use Device Control.
+        Route::middleware('feature:enforcement')->group(function () {
+            // 27-Aug-2026: arm directly, no learning period (Ejaz). promote() is untouched and
+            // still refuses without a clean report — this is the deliberate operator path.
+            Route::post('enforcement/enable', [EnforcementController::class, 'enable']);
+            Route::post('enforcement/start-audit', [EnforcementController::class, 'startAudit']);
+            Route::post('enforcement/promote', [EnforcementController::class, 'promote']);
+            Route::post('enforcement/device-control', [EnforcementController::class, 'deviceControl']);
+            Route::post('enforcement/audit-event/{id}/resolve', [EnforcementController::class, 'resolveAuditEvent']);
+
+            // Enrolment admin: minting is the ONLY place an enrolment secret ever exists.
+            Route::get('enforcer/enrollment-tokens', [EnforcerEnrollmentController::class, 'tokens']);
+            Route::post('enforcer/enrollment-tokens', [EnforcerEnrollmentController::class, 'mint']);
+            Route::post('enforcer/enrollment-tokens/{id}/revoke', [EnforcerEnrollmentController::class, 'revoke']);
+            Route::get('enforcer/machines', [EnforcerEnrollmentController::class, 'machines']);
+            Route::post('enforcer/machines/{id}/revoke', [EnforcerEnrollmentController::class, 'revokeMachine']);
+        });
+    });
+
+    // ---- Policy Engine ----
+    Route::get('policies/{type}', [PolicyController::class, 'index'])
+        ->middleware('role:SUPER_ADMIN,COMPANY_ADMIN,COMPLIANCE_OFFICER,AUDITOR,EMPLOYEE');
+    Route::middleware('role:SUPER_ADMIN,COMPANY_ADMIN,COMPLIANCE_OFFICER')->group(function () {
+        Route::post('policies/assign', [PolicyController::class, 'assign']);
+        Route::post('policies/{type}', [PolicyController::class, 'store']);
+        Route::put('policies/{type}/{id}', [PolicyController::class, 'update']);
+        Route::delete('policies/{type}/{id}', [PolicyController::class, 'destroy']);
+    });
+});
+
+// ==== SmartEPT PUBLIC API v1 — API-key authenticated (integration hub, 17-Jul) ====
+Route::prefix('v1')->middleware('throttle:120,1')->group(function () {
+    Route::get('ping', [PublicApiController::class, 'ping'])->middleware('api-key');
+    Route::post('attendance/punches', [PublicApiController::class, 'ingestPunches'])->middleware('api-key:ingest');
+    Route::get('attendance', [PublicApiController::class, 'readAttendance'])->middleware('api-key:read');
+    // 16-Aug: roster discovery. Without it a bridge cannot learn employee codes or
+    // biometric ids on its own — the admin mapping endpoints need a session + a role,
+    // and 'unmapped' reads $request->user()->company_id, which is null under key auth.
+    Route::get('employees', [PublicApiController::class, 'employees'])->middleware('api-key:read');
+    // 6-Oct-2026: field-force location trail from the Caller mobile app (enforcement tracking).
+    Route::post('fieldforce/locations', [FieldForceController::class, 'ingest'])->middleware('api-key:ingest');
+    Route::get('fieldforce/locations', [FieldForceController::class, 'trail'])->middleware('api-key:read');
+});

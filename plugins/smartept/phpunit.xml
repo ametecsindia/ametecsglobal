@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="vendor/phpunit/phpunit/phpunit.xsd"
+         bootstrap="vendor/autoload.php"
+         colors="true"
+>
+    <testsuites>
+        <testsuite name="Unit">
+            <directory>tests/Unit</directory>
+        </testsuite>
+        <testsuite name="Feature">
+            <directory>tests/Feature</directory>
+        </testsuite>
+    </testsuites>
+    <!-- restrictDeprecations: only report deprecations triggered by OUR code (the <include>
+         below), not by vendor.
+
+         27-Aug-2026, PHP 8.5: `PDO::MYSQL_ATTR_SSL_CA` is deprecated and is referenced by
+         vendor\laravel\framework\config\database.php and config\database.php. Every one of the
+         ~330 tests printed four DEPR lines about it, which is not a finding — it is the same
+         framework notice 1,300 times — and it buried three real failures so thoroughly that
+         the run looked like a wall of red. Deprecations in OUR code still report. -->
+    <source restrictDeprecations="true">
+        <include>
+            <directory>app</directory>
+        </include>
+    </source>
+    <php>
+        <!-- 11-Nov-2026: the whole suite runs in one process; at PHP's default 128M it ran out in the QR ledger Excel export test and stopped the run. -->
+        <ini name="memory_limit" value="512M"/>
+        <env name="APP_ENV" value="testing" force="true"/>
+        <env name="APP_MAINTENANCE_DRIVER" value="file"/>
+        <env name="BCRYPT_ROUNDS" value="4"/>
+        <env name="CACHE_STORE" value="array"/>
+        <!-- CRITICAL: tests must NEVER touch the real MySQL database.
+             In-memory SQLite is created fresh per run and vanishes after.
+             force="true": a machine-level DB_CONNECTION env var (seen on Ejaz's
+             PC 12-Aug — PHPUnit env does NOT override OS vars by default) was
+             silently winning, giving "mysql + :memory:" and failing every test. -->
+        <env name="DB_CONNECTION" value="sqlite" force="true"/>
+        <env name="DB_DATABASE" value=":memory:" force="true"/>
+        <env name="DB_URL" value="" force="true"/>
+        <env name="MAIL_MAILER" value="array"/>
+        <env name="PULSE_ENABLED" value="false"/>
+        <env name="QUEUE_CONNECTION" value="sync"/>
+        <env name="SESSION_DRIVER" value="array"/>
+        <env name="TELESCOPE_ENABLED" value="false"/>
+    </php>
+</phpunit>

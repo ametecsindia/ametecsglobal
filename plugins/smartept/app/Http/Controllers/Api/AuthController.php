@@ -1,0 +1,403 @@
+<?php
+
+namespace App\Http\Controllers\Api;
+
+use App\Http\Controllers\Controller;
+use App\Models\User;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Validation\ValidationException;
+
+class AuthController extends Controller
+{
+    /** POST /api/auth/login */
+    public function login(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'email'       => ['required', 'email'],
+            'password'    => ['required', 'string'],
+            // Sent by the branded per-client login (admin.smartept.com/<slug>). When
+            // present, the account must belong to that workspace. Absent on /admin.
+            'tenant_slug' => ['nullable', 'string', 'max:40'],
+        ]);
+
+        $user = User::where('email', $data['email'])->first();
+
+        if (! $user || ! Hash::check($data['password'], $user->password)) {
+            throw ValidationException::withMessages([
+                'email' => ['These credentials do not match our records.'],
+            ]);
+        }
+
+        // Branded-URL lock: a login opened at /<slug> only accepts that company's people.
+        if (! empty($data['tenant_slug']) && optional($user->company)->slug !== $data['tenant_slug']) {
+            throw ValidationException::withMessages([
+                'email' => ['This workspace belongs to a different organisation. Please use your own workspace link.'],
+            ]);
+        }
+
+        if ($user->status === 'DISABLED') {
+            return response()->json([
+                'error' => ['code' => 'ACCOUNT_DISABLED', 'message' => 'This account is disabled.'],
+            ], 403);
+        }
+
+        // Hard cut-off: a suspended tenant (set from Central) cannot sign in.
+        if ($user->company_id && optional($user->company)->status === 'SUSPENDED') {
+            return response()->json([
+                'error' => ['code' => 'COMPANY_SUSPENDED',
+                    'message' => 'Your organisation\'s access has been suspended. Please contact Ametecs.'],
+            ], 403);
+        }
+
+        // Ejaz, 14-Aug-2026 (finding 1.5): once the licence has expired AND the
+        // grace period has run out, the client cannot keep working. Only a
+        // Super/Company Admin may still sign in — someone has to be able to get
+        // in and enter a new key. Fail-soft inside licenceBlock().
+        if ($why = $this->licenceBlock($user)) {
+            return response()->json([
+                'error' => ['code' => 'LICENSE_BLOCKED', 'message' => $why],
+            ], 403);
+        }
+
+        // Employee Self-Service: an EMPLOYEE-role login must be tied to an employee record,
+        // else scoped queries have nothing to return. Deny with a clear, safe message.
+        // Only affects the EMPLOYEE role — Admin/Manager/HR/etc. are never checked here.
+        if ($user->roleSlug() === 'EMPLOYEE' && ! $user->employee()->exists()) {
+            return response()->json([
+                'error' => ['code' => 'EMPLOYEE_NOT_LINKED',
+                    'message' => 'Your employee account is not properly linked. Please contact your administrator.'],
+            ], 403);
+        }
+
+        $user->forceFill(['last_login_at' => now()])->save();
+        $this->audit($request, 'LOGIN', User::class, $user->id, null, $user);
+
+        // Token abilities are derived from the role slug so tooling can inspect scope.
+        $abilities = ['role:' . ($user->roleSlug() ?? 'NONE')];
+        $token = $user->createToken('admin-web', $abilities)->plainTextToken;
+
+        return response()->json([
+            'token' => $token,
+            'user'  => $this->userPayload($user),
+        ]);
+    }
+
+    /**
+     * POST /api/auth/sso — one-click sign-in for a cloud tenant (EPT-27).
+     * Trades a SmartEPT Central-signed ticket (email.tid.exp, HMAC-signed with
+     * the shared SSO secret) for a normal Sanctum token — no password typed.
+     */
+    public function sso(Request $request): JsonResponse
+    {
+        $secret = (string) config('services.sso.secret');
+        abort_if($secret === '', 503, 'Single sign-on is not configured on this server.');
+
+        $ticket = (string) $request->input('ticket', '');
+        [$body, $sig] = array_pad(explode('.', $ticket, 2), 2, '');
+        abort_if($body === '' || $sig === '', 401, 'Malformed sign-in ticket.');
+        abort_unless(hash_equals(hash_hmac('sha256', $body, $secret), $sig), 401, 'Invalid sign-in ticket.');
+
+        $payload = json_decode(base64_decode(strtr($body, '-_', '+/')), true);
+        abort_unless(is_array($payload) && ! empty($payload['email']) && ! empty($payload['exp']), 401, 'Malformed sign-in ticket.');
+        abort_if((int) $payload['exp'] < time(), 401, 'This sign-in link has expired — open your console from the client portal again.');
+
+        $user = User::where('email', $payload['email'])->first();
+        abort_unless($user, 401, 'No matching account for this sign-in link.');
+        if ($user->status === 'DISABLED') {
+            return response()->json(['error' => ['code' => 'ACCOUNT_DISABLED', 'message' => 'This account is disabled.']], 403);
+        }
+        // Finding 1.5 — an SSO link is not a way around a dead licence.
+        if ($why = $this->licenceBlock($user)) {
+            return response()->json(['error' => ['code' => 'LICENSE_BLOCKED', 'message' => $why]], 403);
+        }
+
+        $user->forceFill(['last_login_at' => now()])->save();
+        $this->audit($request, 'SSO_LOGIN', User::class, $user->id, null, $user);
+
+        $abilities = ['role:' . ($user->roleSlug() ?? 'NONE')];
+        $token = $user->createToken('sso-web', $abilities)->plainTextToken;
+
+        return response()->json([
+            'token' => $token,
+            'user'  => $this->userPayload($user),
+        ]);
+    }
+
+    /**
+     * Finding 1.5 — may this person sign in on the current licence?
+     * Returns NULL to allow, or the message to show. Admins are never blocked
+     * here (they are the rescue route), and any internal fault fails soft.
+     */
+    private function licenceBlock(User $user): ?string
+    {
+        try {
+            if (! \App\Services\DevLicenceKey::enforcementOn()) {
+                return null;
+            }
+            // Admins are the rescue route and are never blocked at sign-in. (On the
+            // shared cloud install SUPER_ADMIN is Ametecs' own operator account.)
+            if (in_array($user->roleSlug(), ['SUPER_ADMIN', 'COMPANY_ADMIN'], true)) {
+                return null;
+            }
+
+            $licence = \App\Models\InstallationLicense::governing($user->company);
+            if ($licence->configured()) {
+                $licence = app(\App\Services\LicenseClient::class)->ensureFresh($licence);
+            }
+            if ($licence->operational()) {
+                return null;
+            }
+
+            return $licence->configured()
+                ? 'Your organisation\'s SmartEPT licence is not active (' . $licence->status . '). Your Company Admin needs to renew it before you can sign in.'
+                : 'The 7-day evaluation period has ended. Your Company Admin needs to enter the SmartEPT licence key before anyone can sign in.';
+        } catch (\Throwable $e) {
+            return null;
+        }
+    }
+
+    /** GET /api/auth/me */
+    public function me(Request $request): JsonResponse
+    {
+        return response()->json(['user' => $this->userPayload($request->user())]);
+    }
+
+    /** POST /api/auth/logout */
+    public function logout(Request $request): JsonResponse
+    {
+        $request->user()->currentAccessToken()->delete();
+        return response()->json(null, 204);
+    }
+
+    /**
+     * POST /api/auth/delete-account — 16-Nov-2026 (Ejaz, Google Play account-deletion policy): "Delete my account" in the
+     * SmartEPT Admin Console app (and the web page smartept.com/delete-account). The person confirms with their password;
+     * the request is recorded in the audit log and e-mailed to Ametecs support and the organisation's administrators,
+     * who delete the account and its data within 7 working days (privacy policy §4 and §8). The login is NOT removed on
+     * the spot — an organisation's records belong to the organisation, and a reviewer's tap must not wipe a demo — but
+     * every session of this login is signed out at once.
+     */
+    public function requestDeletion(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        $data = $request->validate(['password' => ['required', 'string'], 'reason' => ['nullable', 'string', 'max:500']]);
+        if (! Hash::check($data['password'], (string) $user->password)) {
+            throw ValidationException::withMessages(['password' => ['The password is not correct.']]);
+        }
+        $this->audit($request, 'ACCOUNT_DELETION_REQUESTED', User::class, $user->id, null, $user);
+
+        $company = $user->company?->name ?: 'SmartEPT';
+        $body = "Account deletion request\n\n"
+            . "Name: {$user->name}\nE-mail: {$user->email}\nOrganisation: {$company}\n"
+            . 'Requested: ' . now()->format('d M Y, h:i A') . " (server time)\n"
+            . 'Reason given: ' . (trim((string) ($data['reason'] ?? '')) ?: '—') . "\n\n"
+            . "Delete this login and its personal data within 7 working days, then confirm to the person by e-mail.\n"
+            . "Records the organisation or the law requires us to keep (audit trail, invoices) are kept as the privacy policy says.";
+        $to = User::query()->where('company_id', $user->company_id)->where('id', '!=', $user->id)
+            ->whereHas('role', fn ($q) => $q->whereIn('slug', ['COMPANY_ADMIN'])->orWhereIn('base_slug', ['COMPANY_ADMIN']))
+            ->pluck('email')->push('support@ametecsindia.com')->filter()->unique();
+        foreach ($to as $addr) {
+            try {
+                \App\Services\MailService::send($addr, "SmartEPT account deletion request: {$user->email}", $body, null, $user->company_id);
+            } catch (\Throwable $e) {
+                report($e);
+            }
+        }
+        $user->tokens()->delete();
+
+        return response()->json(['message' => 'Your request has been sent. Your organisation\'s administrator and Ametecs support '
+            . 'will delete your account and its data within 7 working days and confirm to you by e-mail. You have been signed out.']);
+    }
+
+    /** POST /api/auth/refresh — rotate the current token. */
+    public function refresh(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        $abilities = ['role:' . ($user->roleSlug() ?? 'NONE')];
+        $request->user()->currentAccessToken()->delete();
+        $token = $user->createToken('admin-web', $abilities)->plainTextToken;
+
+        return response()->json(['token' => $token]);
+    }
+
+    /**
+     * POST /api/auth/change-password — self-service (any authenticated role).
+     *
+     * Two flows share this endpoint:
+     *  - Voluntary change: the caller must supply and verify their CURRENT password.
+     *  - First-time / admin-reset set: a user still flagged must_change_password is
+     *    already authenticated (they just signed in with the temp password) and only
+     *    needs to choose their own. The current password is NOT required — the forced
+     *    "Set a new password" screen shows only New + Confirm, and requiring the temp
+     *    again is both redundant and the reason the old screen could not be completed.
+     *
+     * Either way it clears must_change_password and revokes every OTHER token, so a
+     * stolen old session dies while the device performing the change stays signed in
+     * (no second login).
+     */
+    public function changePassword(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        $forcedSet = (bool) $user->must_change_password;
+
+        $data = $request->validate([
+            // Optional (and unused) on the forced first-time set; still required + verified
+            // for a voluntary change so an idle session cannot silently reset the password.
+            'current_password' => [$forcedSet ? 'nullable' : 'required', 'string'],
+            'new_password'     => ['required', 'string', 'min:8', 'confirmed'],
+        ]);
+
+        if (! $forcedSet && ! Hash::check($data['current_password'] ?? '', $user->password)) {
+            throw ValidationException::withMessages([
+                'current_password' => ['The current password is incorrect.'],
+            ]);
+        }
+
+        $user->forceFill([
+            'password'             => $data['new_password'], // hashed by the model cast
+            'must_change_password' => false,
+        ])->save();
+
+        $user->tokens()
+            ->where('id', '!=', $user->currentAccessToken()->id)
+            ->delete();
+
+        $this->audit($request, $forcedSet ? 'SET_PASSWORD' : 'CHANGE_PASSWORD', User::class, $user->id);
+
+        return response()->json([
+            'message' => 'Password changed.',
+            // Lets the client drop the forced screen and continue without re-login.
+            'user'    => $this->userPayload($user->fresh()),
+        ]);
+    }
+
+    private function userPayload(User $user): array
+    {
+        $user->loadMissing('role', 'company');
+
+        // 18-Sep-2026: Standard/Enforcer/Commander — so the console can grey out
+        // a plan-gated screen (e.g. LiveView) for admins too, not just rely on
+        // the API 403ing after a click. Same governing() lookup EnsureFeature uses.
+        $licence = \App\Models\InstallationLicense::governing($user->company);
+
+        return [
+            'id'                   => $user->id,
+            'name'                 => $user->name,
+            'email'                => $user->email,
+            'company_id'           => $user->company_id,
+            'company'              => $user->company?->name,
+            'attendance_mode'      => $user->company?->attendance_mode ?? 'BIOMETRIC',
+            // 10-Nov-2026 (Ejaz): the Organisation configuration time zone — the Admin app (and any client) shows
+            // every time in it, never the phone's own zone.
+            'timezone'             => ($tz = $user->company?->timezone) && in_array($tz, timezone_identifiers_list(), true) ? $tz : config('app.timezone'),
+            'role'                 => $user->roleSlug(),
+            'base_role'            => $user->role?->base_slug,
+            'employee_id'          => $user->employee?->id,
+            'role_name'            => $user->role?->name,
+            'permissions'          => $user->permissionSlugs(),
+            // Lets UIs force the change-password screen after a temp-password login.
+            'must_change_password' => (bool) $user->must_change_password,
+            'plan_tier'            => $licence->tier(),
+            'plan_features'        => $licence->bundle['features'] ?? [],
+            // 30-Sep-2026: what the server's feature gate actually allows (EnsureFeature /
+            // hasFeature), so the console shows exactly the screens the plan permits.
+            'plan_access'          => ['enforcement' => $licence->hasFeature('enforcement'), 'live_view' => $licence->hasFeature('live_view')],
+        ];
+    }
+
+    // ---------- Forgot password (email OTP) — Ejaz, 11-Aug-2026 ----------
+
+    /**
+     * POST /api/auth/forgot/request-otp {email, tenant_slug?}
+     * Always answers with the same neutral message (no account enumeration).
+     * The 6-digit code goes out via the user's COMPANY SMTP, falling back to
+     * the global Settings SMTP, then .env (MailService resolution).
+     */
+    public function forgotRequestOtp(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'email'       => ['required', 'email'],
+            'tenant_slug' => ['nullable', 'string', 'max:40'],
+        ]);
+
+        $user = \App\Models\User::where('email', $data['email'])->first();
+
+        // Branded-URL lock, same as login: only that workspace's people.
+        if ($user && ! empty($data['tenant_slug']) && optional($user->company)->slug !== $data['tenant_slug']) {
+            $user = null;
+        }
+
+        if ($user && $user->status !== 'DISABLED') {
+            // Resend cooldown (Ejaz, 12-Aug-2026): one code per 60s per account.
+            // Silent skip (same neutral reply) so account existence never leaks;
+            // the login card's countdown keeps honest users from hitting this.
+            $recent = \App\Models\PasswordOtp::where('email', $user->email)
+                ->where('created_at', '>', now()->subSeconds(60))->exists();
+            if ($recent) {
+                return response()->json(['ok' => true,
+                    'message' => 'If that email has a SmartEPT account, a 6-digit reset code is on its way. It is valid for 10 minutes.']);
+            }
+
+            $otp = (string) random_int(100000, 999999);
+            \App\Models\PasswordOtp::where('email', $user->email)->delete();
+            \App\Models\PasswordOtp::create([
+                'email'      => $user->email,
+                'otp_hash'   => Hash::make($otp),
+                'expires_at' => now()->addMinutes(10),
+            ]);
+
+            \App\Services\MailService::send(
+                $user->email,
+                'SmartEPT — your password reset code',
+                "Hello {$user->name},\n\n"
+                . "Your SmartEPT password reset code is: {$otp}\n\n"
+                . "It is valid for 10 minutes. If you did not request this, you can ignore this email — your password stays unchanged.\n\n"
+                . '— SmartEPT',
+                'PASSWORD_RESET_OTP',
+                $user->company_id
+            );
+
+            $this->audit($request, 'PASSWORD_RESET_REQUESTED', \App\Models\User::class, $user->id, null, $user);
+        }
+
+        return response()->json(['ok' => true,
+            'message' => 'If that email has a SmartEPT account, a 6-digit reset code is on its way. It is valid for 10 minutes.']);
+    }
+
+    /** POST /api/auth/forgot/reset {email, otp, password} — verify the code, set the new password. */
+    public function forgotReset(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'email'    => ['required', 'email'],
+            'otp'      => ['required', 'digits:6'],
+            'password' => ['required', 'string', 'min:8', 'max:190'],
+        ]);
+
+        $row = \App\Models\PasswordOtp::where('email', $data['email'])->latest('id')->first();
+
+        if (! $row || $row->expires_at->isPast() || $row->attempts >= 5) {
+            return response()->json(['message' => 'That code has expired — request a new one.'], 422);
+        }
+
+        if (! Hash::check($data['otp'], $row->otp_hash)) {
+            $row->increment('attempts');
+
+            return response()->json(['message' => 'That code is not correct.'], 422);
+        }
+
+        $user = \App\Models\User::where('email', $data['email'])->first();
+        if (! $user || $user->status === 'DISABLED') {
+            return response()->json(['message' => 'This account cannot be reset — contact your administrator.'], 422);
+        }
+
+        // 'hashed' cast hashes exactly once — never pre-hash here.
+        $user->forceFill(['password' => $data['password'], 'must_change_password' => false])->save();
+        \App\Models\PasswordOtp::where('email', $user->email)->delete();
+
+        $this->audit($request, 'PASSWORD_RESET_COMPLETED', \App\Models\User::class, $user->id, null, $user);
+
+        return response()->json(['ok' => true, 'message' => 'Password changed — sign in with your new password.']);
+    }
+}

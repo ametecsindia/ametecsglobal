@@ -1,0 +1,178 @@
+#!/usr/bin/env bash
+# =============================================================================
+#  SmartEPT Admin Server — Linux installer (Ubuntu/Debian/RHEL-family)
+#  Run from the unzipped package folder:   sudo bash install-linux.sh
+#  © 2026 Ametecs India Private Limited. All rights reserved.
+# =============================================================================
+set -e
+cd "$(dirname "$0")"
+APP_DIR="$(pwd)"
+
+echo "============================================================"
+echo "  SmartEPT Admin Server — Linux install"
+echo "  Folder: $APP_DIR"
+echo "============================================================"
+
+# --- 1) PHP present + right version -----------------------------------------
+if ! command -v php >/dev/null 2>&1; then
+  echo "[ERROR] PHP not found. Install PHP 8.2+ first, e.g.:"
+  echo "  Ubuntu/Debian: sudo apt install php8.3-cli php8.3-mysql php8.3-mbstring php8.3-curl php8.3-zip php8.3-gd php8.3-xml"
+  echo "  RHEL/Alma:     sudo dnf install php php-cli php-mysqlnd php-mbstring php-gd php-zip php-xml"
+  exit 1
+fi
+PHPV=$(php -r 'echo PHP_VERSION;')
+php -r 'exit(version_compare(PHP_VERSION, "8.2.0", ">=") ? 0 : 1);' || {
+  echo "[ERROR] PHP $PHPV found — SmartEPT needs PHP 8.2 or newer."; exit 1; }
+echo "[ok] PHP $PHPV"
+
+# --- 2) required extensions ---------------------------------------------------
+MISSING=""
+for ext in pdo_mysql openssl mbstring curl zip gd fileinfo; do
+  php -m | grep -qi "^$ext$" || MISSING="$MISSING $ext"
+done
+if [ -n "$MISSING" ]; then
+  echo "[ERROR] Missing PHP extensions:$MISSING"
+  echo "  Ubuntu/Debian: sudo apt install $(for e in $MISSING; do printf 'php8.3-%s ' "${e/pdo_mysql/mysql}"; done)"
+  exit 1
+fi
+echo "[ok] all required PHP extensions present"
+
+# --- 3) environment + database (shared helper: MySQL, auto-creates the DB) ---
+php deployment/install-helper.php
+php artisan key:generate --force
+php artisan migrate --force
+# SmartPRS2 rule: CLIENT servers get roles only — never the demo seeder.
+php artisan db:seed --class='Database\Seeders\RolePermissionSeeder' --force
+php artisan storage:link >/dev/null 2>&1 || true
+chmod -R ug+rw storage bootstrap/cache 2>/dev/null || true
+echo "[ok] application installed"
+
+# --- 3b) provision the client workspace (SmartPRS2 client:provision, as-is) ---
+echo
+echo "Create your company's admin login (clean workspace — no demo data):"
+read -r -p "  Company name: " CP_COMPANY
+read -r -p "  Admin email:  " CP_EMAIL
+read -r -s -p "  Admin password (min 8 chars): " CP_PASS; echo
+php artisan smartept:client-provision --company="$CP_COMPANY" --email="$CP_EMAIL" --password="$CP_PASS" \
+  || { echo "[ERROR] Provisioning failed — fix the input above and re-run: php artisan smartept:client-provision ..."; exit 1; }
+
+# --- 4) auto-start service (systemd) -----------------------------------------
+if [ "$(id -u)" = "0" ] && command -v systemctl >/dev/null 2>&1; then
+  cat > /etc/systemd/system/smartept-admin.service <<UNIT
+[Unit]
+Description=SmartEPT Admin Server (on-premises)
+After=network.target mysql.service mariadb.service
+
+[Service]
+WorkingDirectory=$APP_DIR
+ExecStart=$(command -v php) artisan serve --host=0.0.0.0 --port=8080
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+  systemctl daemon-reload
+  systemctl enable --now smartept-admin
+  echo "[ok] service 'smartept-admin' installed and started (survives reboot)"
+else
+  echo "[note] Not root or no systemd — start manually with:  bash START-SMARTEPT.sh"
+fi
+
+# --- 5) background scheduler (cron, every minute) ----------------------------
+# 2-Sep-2026. Everything the product does in the background runs through
+# `artisan schedule:run`: post-shift auto sign-out, meeting auto-close, biometric
+# auto-sync, the nightly attendance sheet, licence phone-home, backups, retention
+# purge. This was a manual step in INSTALL-GUIDE.md and it was being skipped, so
+# all of them were dead while every screen still looked correct. Idempotent: the
+# grep -v drops any previous line before re-adding it.
+if command -v crontab >/dev/null 2>&1; then
+  ( crontab -l 2>/dev/null | grep -v '# smartept-scheduler' ; \
+    echo "* * * * * cd $APP_DIR && $(command -v php) artisan schedule:run >/dev/null 2>&1 # smartept-scheduler" ) \
+    | crontab - \
+    && echo "[ok] background scheduler registered in cron (every minute)" \
+    || echo "[WARN] could not write crontab — background jobs will NOT run until it is added"
+else
+  echo "[WARN] cron not found. Background jobs (auto sign-out, biometric sync, nightly"
+  echo "       attendance) will NOT run. Add this to a scheduler yourself:"
+  echo "       * * * * * cd $APP_DIR && php artisan schedule:run >/dev/null 2>&1"
+fi
+
+# --- 6) LiveView relay (systemd) ---------------------------------------------
+# 14-Sep-2026, rebuilt as a real production step (no Node.js dependency) 15-Sep-2026:
+# relay/dist/smartept-relay-linux is a SELF-CONTAINED compiled binary (built with
+# `npm run build` from relay/server.js — see relay/package.json), so this server needs
+# no Node.js/npm at all, not even to run it as a service. Same "install once, invisible
+# forever" contract as smartept-admin above. The shared secret is copied straight from
+# the .env APP_KEY this install just generated. A missing binary is a note, not a
+# failure — LiveView is optional, everything else in SmartEPT works without it.
+if [ -f relay/dist/smartept-relay-linux ]; then
+  chmod +x relay/dist/smartept-relay-linux
+  grep '^APP_KEY=' .env | cut -d= -f2- > relay/relay-secret.txt
+  cp relay/relay-secret.txt relay/dist/relay-secret.txt  # the compiled relay reads the copy next to itself
+
+  # HTTPS for LiveView (optional - only needed if this site's admin console is
+  # opened over https://). 18-Sep-2026: browsers refuse an insecure ws:// socket
+  # from an https:// page. Rather than every client hand-editing a reverse-proxy
+  # config, the relay speaks TLS itself when told which certificate to use -
+  # asked ONCE, here. Blank = skip = plain ws:// (today's behaviour, unchanged).
+  echo
+  echo "HTTPS for LiveView (optional - blank skips it, relay stays on ws://):"
+  if [ -f relay/relay-tls-cert-path.txt ]; then
+    echo "  Already configured - press Enter on both lines below to keep it."
+  fi
+  read -r -p "  Certificate file for this site's HTTPS (blank = skip): " RELAY_TLS_CERT
+  if [ -n "$RELAY_TLS_CERT" ] && [ -f "$RELAY_TLS_CERT" ]; then
+    read -r -p "  Matching private key file: " RELAY_TLS_KEY
+    if [ -n "$RELAY_TLS_KEY" ] && [ -f "$RELAY_TLS_KEY" ]; then
+      echo "$RELAY_TLS_CERT" > relay/relay-tls-cert-path.txt
+      echo "$RELAY_TLS_CERT" > relay/dist/relay-tls-cert-path.txt
+      echo "$RELAY_TLS_KEY" > relay/relay-tls-key-path.txt
+      echo "$RELAY_TLS_KEY" > relay/dist/relay-tls-key-path.txt
+      echo "[ok] LiveView will use wss:// - same certificate as the main site."
+    else
+      echo "[WARN] Key file not found - LiveView will use ws:// for now."
+    fi
+  elif [ -n "$RELAY_TLS_CERT" ]; then
+    echo "[WARN] Certificate file not found - LiveView will use ws:// for now."
+  elif [ -f relay/relay-tls-cert-path.txt ]; then
+    echo "[ok] Keeping the existing certificate - still wss://."
+  else
+    echo "[ok] Skipped - LiveView uses ws:// (fine for http:// / LAN-only sites)."
+  fi
+
+  if [ "$(id -u)" = "0" ] && command -v systemctl >/dev/null 2>&1; then
+    cat > /etc/systemd/system/smartept-relay.service <<UNIT
+[Unit]
+Description=SmartEPT LiveView relay
+After=network.target
+
+[Service]
+WorkingDirectory=$APP_DIR/relay
+ExecStart=$APP_DIR/relay/dist/smartept-relay-linux
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+    systemctl daemon-reload
+    systemctl enable --now smartept-relay
+    echo "[ok] LiveView relay installed as service 'smartept-relay' (survives reboot)"
+  else
+    echo "[note] Not root or no systemd — start the relay manually with:  ./relay/dist/smartept-relay-linux"
+  fi
+else
+  echo "[note] relay/dist/smartept-relay-linux not found — LiveView will not be available."
+fi
+
+IP=$(hostname -I 2>/dev/null | awk '{print $1}')
+echo "============================================================"
+echo "  DONE. SmartEPT console:  http://${IP:-localhost}:8080/admin"
+echo "  1) Sign in with the admin email + password you just chose."
+echo "  2) 7-day evaluation starts now, full features."
+echo "  3) To license: open http://${IP:-localhost}:8080/activate — copy the"
+echo "     machine fingerprint, send it to Ametecs, upload the .lic you receive."
+echo "     Activation is instant and fully offline."
+echo "  Help: sales@ametecsindia.com · WhatsApp 90000 98877"
+echo "============================================================"

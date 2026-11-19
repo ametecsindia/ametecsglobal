@@ -498,6 +498,41 @@
           "text": "AgCentral"
         }
       ]
+    },
+    {
+      "name": "SmartEPT",
+      "source": "https://github.com/ametecsindia/SmartEPT_Admin (main @b1fddc4)",
+      "target": "plugins/smartept",
+      "_note": "Laravel 11 console + agent API. One sign-in (console ?sso= ticket), licence from Super Admin (no SmartEPT Central), branches/teams/employees one way: app/Services/AgBridge.php + core/open.php?app=smartept. Agent punches into AmetecsGlobal attendance: core/attendance/public/smartept.php. Agents use <server>/AmetecsGlobal/plugins/smartept/public/<company slug>. Left out of this copy: _cloudsync, relay/node_modules, relay/dist, relay secret files.",
+      "install": [
+        "tools/ag-install.php"
+      ],
+      "database": {
+        "migrations": "database/migrations",
+        "commands": [
+          "artisan migrate --force"
+        ]
+      },
+      "mustContain": [
+        {
+          "files": [
+            "routes\\web.php"
+          ],
+          "text": "AgSsoController"
+        },
+        {
+          "files": [
+            "app\\Models\\InstallationLicense.php"
+          ],
+          "text": "AgBridge::licence"
+        },
+        {
+          "files": [
+            "public\\index.php"
+          ],
+          "text": "$agBase"
+        }
+      ]
     }
   ],
   "git": {

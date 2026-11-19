@@ -15,7 +15,7 @@ use SmartPRS\Surface\Database;
 use SmartPRS\Surface\Session;
 use SmartPRS\Surface\SqlStore;
 
-const AG_OPEN = ['rovexy' => '../plugins/rovexy/public/ag/sso', 'qronex' => '../plugins/qronex/public/ag/sso'];   // each Laravel app's hand-over address
+const AG_OPEN = ['rovexy' => '../plugins/rovexy/public/ag/sso', 'qronex' => '../plugins/qronex/public/ag/sso', 'smartept' => '../plugins/smartept/public/ag/sso'];   // each Laravel app's hand-over address
 
 session_name('AMETECSGLOBAL');
 $pdo = Database::connect(AG_BASE . '/.env');
@@ -70,11 +70,6 @@ $body = rtrim(strtr(base64_encode((string) json_encode([
 ])), '+/', '-_'), '=');
 $token = $body . '.' . hash_hmac('sha256', $body, trim((string) file_get_contents($keyFile)));
 AmetecsData::log((string) ($user['email'] ?? ''), 'Opened ' . (AmetecsAccess::plugins()[$app]['name'] ?? $app), $tid);
-?><!doctype html>
-<html><head><meta charset="utf-8"><title>Opening…</title></head>
-<body style="background:#0b0b0d;color:#c9a24c;font:15px Inter,system-ui,sans-serif;display:grid;place-items:center;height:100vh;margin:0">
-<form method="post" action="<?= htmlspecialchars(AG_OPEN[$app]) ?>"><input type="hidden" name="t" value="<?= htmlspecialchars($token) ?>">
-<noscript><button>Continue</button></noscript></form>
-<p>Opening <?= htmlspecialchars((string) (AmetecsAccess::plugins()[$app]['name'] ?? $app)) ?>…</p>
-<script>document.forms[0].submit()</script>
-</body></html>
+// Straight into the app (owner, 19 Nov 2026: no "Opening…" page): a one-time 60-second hand-over in the address.
+header('Location: ' . AG_OPEN[$app] . '?t=' . rawurlencode($token), true, 302);
+exit;

@@ -1,0 +1,73 @@
+<?php
+
+// CROSS-APP DB POISONING FIX (Ejaz, 13-Aug-2026): this console and SmartEPT
+// Central share one Apache/PHP-FPM worker pool (Laragon local AND the live
+// VPS). Laravel's env loader uses putenv(), which PERSISTS in a worker across
+// requests — so a worker that just served the OTHER app keeps its DB_DATABASE
+// and, because dotenv loading is immutable, this app then silently runs on the
+// WRONG DATABASE (the July "agent/screenshots broken — wrong DB" incident, and
+// Central's licence-validate 500 on 13-Aug, were both this). Disabling putenv
+// makes every request read .env fresh — full isolation. Same line in both repos.
+\Illuminate\Support\Env::disablePutenv();
+
+use Illuminate\Foundation\Application;
+use Illuminate\Foundation\Configuration\Exceptions;
+use Illuminate\Foundation\Configuration\Middleware;
+use Illuminate\Http\Request;
+use Illuminate\Auth\AuthenticationException;
+
+return Application::configure(basePath: dirname(__DIR__))
+    ->withRouting(
+        web: __DIR__ . '/../routes/web.php',
+        api: __DIR__ . '/../routes/api.php',
+        commands: __DIR__ . '/../routes/console.php',
+        health: '/up',
+    )
+    ->withMiddleware(function (Middleware $middleware) {
+        // Named middleware used by SmartEPT routes.
+        $middleware->alias([
+            'role'       => \App\Http\Middleware\EnsureRole::class,
+            'company.active' => \App\Http\Middleware\EnsureCompanyActive::class,
+            'permission' => \App\Http\Middleware\EnsurePermission::class,
+            'consent'    => \App\Http\Middleware\EnsureConsent::class,
+            'tracking-mode' => \App\Http\Middleware\EnforceTrackingMode::class,
+            'licensed'   => \App\Http\Middleware\EnsureLicensed::class,
+            'ag.managed' => \App\Http\Middleware\AgManaged::class,   // AmetecsGlobal: licence and organisation are central
+            // 18-Sep-2026: Standard/Enforcer/Commander plan-feature gate, stacks
+            // (AND) with role:/permission: — see EnsureFeature's own docblock.
+            'feature'    => \App\Http\Middleware\EnsureFeature::class,
+            'active-employee' => \App\Http\Middleware\EnsureActiveEmployment::class,
+            // 26-Aug-2026: refuse tracking ingestion from a device whose session has ended.
+            'live-session' => \App\Http\Middleware\EnsureLiveDeviceSession::class,
+            'api-key'    => \App\Http\Middleware\ApiKeyAuth::class,
+            // 08-Nov-2026: every throttle:N,M counts per action and per caller, never per office address — see the class.
+            'throttle'   => \App\Http\Middleware\ThrottlePerCaller::class,
+        ]);
+
+        // Every API request is forced to HTTPS in production (config-gated for Laragon local).
+        $middleware->api(prepend: [
+            \App\Http\Middleware\ForceHttps::class,
+            // 23-Sep-2026: every API request runs on the signed-in company's Organisation-tab
+            // timezone, including on a multi-company server — see the class docblock.
+            \App\Http\Middleware\ApplyCompanyTimezone::class,
+        ]);
+    })
+    ->withExceptions(function (Exceptions $exceptions) {
+        // 08-Nov-2026: a rate limit says what happened in words ("HTTP 429" / "Too Many Attempts." told nobody anything).
+        $exceptions->render(function (\Illuminate\Http\Exceptions\ThrottleRequestsException $e, Request $request) {
+            if ($request->is('api/*')) {
+                $wait = (int) ($e->getHeaders()['Retry-After'] ?? 60);
+                $msg = 'Too many attempts — please wait ' . max(1, $wait) . ' seconds and try again.';
+
+                return response()->json(['message' => $msg, 'error' => ['code' => 'TOO_MANY_ATTEMPTS', 'message' => $msg]], 429, $e->getHeaders());
+            }
+        });
+        // Return JSON 401 for unauthenticated API calls instead of redirecting to a login route.
+        $exceptions->render(function (AuthenticationException $e, Request $request) {
+            if ($request->is('api/*')) {
+                return response()->json([
+                    'error' => ['code' => 'UNAUTHENTICATED', 'message' => 'Authentication required.'],
+                ], 401);
+            }
+        });
+    })->create();

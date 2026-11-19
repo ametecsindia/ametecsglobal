@@ -45,7 +45,7 @@ final class AmetecsAccess
     /** The apps AmetecsGlobal starts with. Super Admin -> Apps edits these and adds more (core/apps.json - shared code, synced through GitHub like the screens). */
     public const STARTER_APPS = [
         'smartprs3' => ['name' => 'SmartPRS 3', 'what' => 'HRM · Payroll · Attendance · Compliance', 'unit' => 'employees', 'open' => '../plugins/smartprs3/public/app.php', 'color' => '#F97316'],
-        'smartept'  => ['name' => 'SmartEPT', 'what' => 'Employee productivity tracking', 'unit' => 'users', 'open' => null, 'color' => '#2563EB'],
+        'smartept'  => ['name' => 'SmartEPT', 'what' => 'Employee productivity tracking', 'unit' => 'users', 'open' => 'open.php?app=smartept', 'color' => '#2563EB'],
         'smartdcm'  => ['name' => 'SmartDCM', 'what' => 'Debt collection management', 'unit' => 'agents', 'open' => null, 'color' => '#0F766E'],
         'leadger'   => ['name' => 'LeadGER', 'what' => 'Lead management', 'unit' => 'users', 'open' => null, 'color' => '#7C3AED'],
         'rovexy'    => ['name' => 'ROVEXY', 'what' => 'Field force · Calling · Visits', 'unit' => 'users', 'open' => 'open.php?app=rovexy', 'color' => '#DB2777'],

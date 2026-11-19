@@ -9,7 +9,7 @@ use App\Http\Middleware\EnsureRole;
 use Illuminate\Support\Facades\Route;
 
 /* AmetecsGlobal one sign-in: AmetecsGlobal posts a signed hand-over (core/open.php?app=qronex); see AgSsoController. */
-Route::post('ag/sso', [\App\Http\Controllers\AgSsoController::class, 'enter'])->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\PreventRequestForgery::class, \Illuminate\Foundation\Http\Middleware\ValidateCsrfToken::class])->middleware('throttle:30,1');
+Route::match(['get', 'post'], 'ag/sso', [\App\Http\Controllers\AgSsoController::class, 'enter'])->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\PreventRequestForgery::class, \Illuminate\Foundation\Http\Middleware\ValidateCsrfToken::class])->middleware('throttle:30,1');
 
 /* Public website */
 Route::get('/', [\App\Http\Controllers\SiteController::class, 'home'])->name('home');

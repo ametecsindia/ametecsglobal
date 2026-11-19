@@ -18,13 +18,18 @@ final class AgSsoController extends Controller
         if ($p === null) {
             return response('This link has expired. Go back to AmetecsGlobal and open QRONEX again.', 403);
         }
+        $first = !\App\Models\Tenant::query()->where('ag_tenant', (string) $p['tid'])->exists();
         $t = AgBridge::workspace($p);
         AgBridge::licence($t);
-        try {
-            AgBridge::sync($t, (array) ($p['off'] ?? []));
-        } catch (\Throwable $x) {
-            report($x);   // the portal still opens; the copy is tried again next time
-        }
+        $copy = static function () use ($t, $p): void {
+            try {
+                AgBridge::sync($t, (array) ($p['off'] ?? []));
+            } catch (\Throwable $x) {
+                report($x);   // the portal still opens; the copy is tried again next time
+            }
+        };
+        // first open: copy now so the screens have people; later opens: copy after the page is sent, so it opens at once
+        $first ? $copy() : app()->terminating($copy);
         $u = AgBridge::admin($t, $p);
         AuditLog::create(['tenant_id' => $t->id, 'user_id' => $u->id, 'action' => 'auth.login', 'subject' => $u->email, 'meta' => ['via' => 'ametecsglobal'], 'ip' => $r->ip()]);
         Auth::login($u);

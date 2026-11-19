@@ -1,0 +1,80 @@
+# Laravel / PHP
+
+/.phpunit.cache
+/node_modules
+/public/build
+/public/hot
+/public/storage
+/storage/*.key
+/storage/pail
+/vendor
+
+# Environment / local configuration
+
+.env
+.env.backup
+.env.production
+/auth.json
+
+# IDE / editor
+
+.phpactor.json
+.phpunit.result.cache
+Homestead.json
+Homestead.yaml
+npm-debug.log
+yarn-error.log
+/.fleet
+/.idea
+/.nova
+/.vscode
+/.zed
+
+# Scratch / FUSE mount artifacts (Cowork device bridge)
+
+_to_delete/
+.fuse_hidden*
+/individual
+
+# Developer licence toggle
+
+# Machine-bound, never committed, never shipped
+
+/licence-off.key
+
+# Local licence
+
+# Machine-bound, never committed, never shipped
+
+/license.lic
+
+# Local development / generated output
+
+/Claude outputs/
+/_cloudsync/
+/database/*.sqlite
+/database/*.sqlite.*
+
+# LiveView relay (05-Oct-2026): the SOURCE is tracked (server.js, package.json,
+# .env.example, daemon/relay-watchdog.vbs); secrets, builds and runtime files never are.
+/relay/node_modules/
+/relay/dist/
+/relay/relay-secret.txt
+/relay/relay-status.txt
+/relay/relay-tls-*.txt
+/relay/daemon/*.log
+/relay/daemon/*.exe
+/relay/daemon/*.exe.config
+/relay/daemon/*.xml
+/relay/pkg
+/relay/Error!
+/relay/smartept-relay@*
+
+# Generated reports (PC Audit "Run audit for all PCs" CSVs)
+/storage/app/pc-audit/
+
+# Local Windows shortcuts
+
+# Uncomment if .lnk files are only developer-local
+
+# *.lnk
