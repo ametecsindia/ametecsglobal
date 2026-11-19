@@ -28,7 +28,7 @@ $set = static function (string $k, string $v) use (&$env): void {
     $env = preg_match('/^' . $k . '=.*$/m', $env) ? preg_replace('/^' . $k . '=.*$/m', str_replace(['\\', '$'], ['\\\\', '\\$'], $line), $env) : rtrim($env) . "\n" . $line . "\n";
 };
 
-$db = 'rovexy';
+$db = 'rovexy';   // its own database: never one a stand-alone copy of the app on this PC may already use
 $user = 'rovexy';
 $pass = $get('DB_USERNAME') === $user && $get('DB_PASSWORD') !== '' ? $get('DB_PASSWORD') : bin2hex(random_bytes(12));
 // MySQL's administrator: Laragon's default (root, no password); also tried: "root" as the password, then SmartPRS3's migrator.
@@ -57,9 +57,15 @@ foreach ($ready ? [] : array_unique([[(string) $opt['root-user'], (string) $opt[
     }
 }
 if ($root === null && !$ready) {
-    throw new RuntimeException('MySQL would not let it create the rovexy database (' . implode(' | ', $why) . '). MySQL root has a password on this PC: open Laragon > Terminal and run  cd plugins\\rovexy  then  php tools/ag-install.php --root-password=YOUR_ROOT_PASSWORD');
+    throw new RuntimeException('MySQL would not let it create the ' . $db . ' database (' . implode(' | ', $why) . '). MySQL root has a password on this PC: open Laragon > Terminal and run  cd plugins\\rovexy  then  php tools/ag-install.php --root-password=YOUR_ROOT_PASSWORD');
 }
 if (!$ready) {
+    // Never take over a database or account that something else on this PC already uses (19 Nov 2026: a stand-alone
+    // QRONEX shared "qronex"). An empty database of ours from an interrupted run is fine.
+    $has = $root->query("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = " . $root->quote($db))->fetchColumn();
+    if ((int) $has > 0 && $get('DB_DATABASE') !== $db) {
+        throw new RuntimeException("MySQL already has a database called $db with tables in it, not made by this set-up. Rename or remove it first (it was left untouched).");
+    }
     $root->exec("CREATE DATABASE IF NOT EXISTS `$db` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
     foreach (['localhost', '127.0.0.1'] as $h) {
         $root->exec("CREATE USER IF NOT EXISTS '$user'@'$h' IDENTIFIED BY " . $root->quote($pass));
