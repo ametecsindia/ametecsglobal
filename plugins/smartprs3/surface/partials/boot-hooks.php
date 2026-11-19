@@ -102,6 +102,8 @@ try {
     $hookUser = $session->user();
     $hookTenant = (string) ($hookUser['tenant_id'] ?? '');
 
+    // Inside AmetecsGlobal the licence is AmetecsGlobal Super Admin's (core/gate.php), never SmartPRS3's own subscription rows.
+    $hookInAg = is_file(__DIR__ . '/../../../../core/gate.php');
     if ($hookUser !== null && $hookTenant !== '' && !$licence->isOnPrem() && $pdo !== null) {
         $t = $platform->find('tenants', $hookTenant);
 
@@ -130,7 +132,7 @@ try {
         $locked = $sub !== null && $end !== '' && (in_array((string) ($sub['status'] ?? ''), ['cancelled', 'suspended'], true)
             || date('Y-m-d') > date('Y-m-d', strtotime($end . ' +' . $grace . ' days')));
 
-        if ($locked) {
+        if ($locked && !$hookInAg) {
             if (!isAdministrator((string) ($hookUser['role'] ?? ''))) {
                 $hookOut('This workspace is suspended (subscription expired). Please contact your administrator to renew.');
             }

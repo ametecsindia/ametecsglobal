@@ -218,7 +218,7 @@ final class AmetecsReleases
     public static function platformVersion(string $app): string
     {
         $root = self::pluginRoot($app);
-        $v = $root === null ? null : json_decode((string) @file_get_contents($root . '/config/version.json'), true);
+        $v = $root === null ? null : json_decode((string) (@file_get_contents($root . '/config/version.json') ?: @file_get_contents($root . '/version.json')), true);   // ROVEXY keeps it at its root
         if (is_array($v) && trim((string) ($v['version'] ?? '')) !== '') {
             return trim((string) $v['version']);
         }

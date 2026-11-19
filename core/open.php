@@ -15,7 +15,7 @@ use SmartPRS\Surface\Database;
 use SmartPRS\Surface\Session;
 use SmartPRS\Surface\SqlStore;
 
-const AG_OPEN = ['rovexy' => '../plugins/rovexy/public/ag/sso'];   // ponytail: one app so far; the next one adds a line
+const AG_OPEN = ['rovexy' => '../plugins/rovexy/public/ag/sso', 'qronex' => '../plugins/qronex/public/ag/sso'];   // each Laravel app's hand-over address
 
 session_name('AMETECSGLOBAL');
 $pdo = Database::connect(AG_BASE . '/.env');
@@ -32,8 +32,15 @@ if (AmetecsAccess::state($tid, $app) !== 'on') {
     header('Location: ./?blocked=' . rawurlencode($app));
     exit;
 }
+if (!AmetecsLicences::installed(AmetecsLicences::row($tid, $app)) || AmetecsLicences::maintenance($tid, $app)) {   // enabled but not downloaded yet (owner, 19 Nov 2026)
+    $_SESSION['flash_problem'] = (AmetecsAccess::plugins()[$app]['name'] ?? $app) . (AmetecsLicences::maintenance($tid, $app)
+        ? ' is in maintenance mode while it is being installed or updated. Try again in a minute.'
+        : ' is enabled for your company but not installed yet. Click Download on it in My applications.');
+    header('Location: ./?v=apps');
+    exit;
+}
 if (strtolower((string) ($user['role'] ?? '')) === 'employee') {
-    $_SESSION['flash_problem'] = 'The ROVEXY console is for administrators. Employees use the ROVEXY mobile app.';
+    $_SESSION['flash_problem'] = (AmetecsAccess::plugins()[$app]['name'] ?? $app) . ' is for administrators. Employees use its mobile app.';
     header('Location: ./');
     exit;
 }

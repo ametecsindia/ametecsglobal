@@ -116,6 +116,10 @@ final class Licensing
         if ($cid === null) {
             return null;
         }
+        // AmetecsGlobal client: the licence is whatever its Super Admin says, read live (AgBridge).
+        if (($ag = \App\Services\AgBridge::liveLicence($this->current->get())) !== null) {
+            return $ag;
+        }
         $l = Licence::query()->where('company_id', $cid)->where('status', '!=', 'superseded')->with('plan:id,name')->latest('id')->first();
         return $l ? ['key' => $l->key, 'kind' => $l->kind, 'plan' => $l->plan?->name ?? ucfirst($l->kind), 'max_users' => $l->max_users, 'features' => $l->features ?? [], 'c2c_users' => $l->c2c_users, 'maps' => (bool) ($l->maps_enabled ?? true),
             'status' => $l->status, 'expires_at' => $l->expires_at?->toAtomString(), 'grace_days' => $l->grace_days] : null;

@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useUnread, type Unread } from './lib/unread';
 import { askDesktopNotify, chime, desktopNotify, soundPref } from './lib/sound';
 import { useAuth } from './lib/auth';
-import { get, orgFilter, post, put, setOrgFilter, type Org } from './lib/api';
+import { AG_MANAGED, ROOT, agLock, get, orgFilter, post, put, setOrgFilter, type Org } from './lib/api';
 import { disconnectRealtime } from './lib/realtime';
 import { ErrorBox, Field, Icon, Initials, LogoPlaceholder, Modal, Notice, useAction } from './components/ui';
 import { LoginPage } from './pages/Login';
@@ -262,7 +262,7 @@ export function App() {
   // Licence ending / ended / suspended: one line on every page until it is renewed.
   const [licenceMsg, setLicenceMsg] = useState<string | null>(null);
   const [, setOrgTick] = useState(0);   // bumped by the Branch / Team / Employee filter → pages remount and reload
-  useEffect(() => { if (me) get<{ message: string | null }>('/licence').then((l) => setLicenceMsg(l.message), () => setLicenceMsg(null)); }, [me]);
+  useEffect(() => { if (me) get<{ message: string | null; state?: string }>('/licence').then((l) => { if (AG_MANAGED && l.state && !['active', 'grace', 'unrestricted'].includes(l.state)) agLock(); setLicenceMsg(l.message); }, () => setLicenceMsg(null)); }, [me]);
   if (loading) return <p className="muted" style={{ padding: 24 }}>Loading…</p>;
   if (!me) return <LoginPage />;
 
@@ -271,7 +271,7 @@ export function App() {
     disconnectRealtime();
     setMe(null);
   };
-  const items = NAV.filter((n) => !n.perm || can(n.perm));
+  const items = NAV.filter((n) => (!n.perm || can(n.perm)) && !(AG_MANAGED && n.to === '/licence'));
   const orgKey = JSON.stringify(orgFilter());
   const name = branding?.display_name ?? me.company.name;
   return (
@@ -281,7 +281,7 @@ export function App() {
       <main className="main">
         <TopBar items={items} me={me} logout={logout} pendingPhones={pendingPhones} />
         <OrgBar onChange={() => setOrgTick((n) => n + 1)} />
-        {licenceMsg && <div className="alert warn" role="status" style={{ margin: '0 24px 12px' }}>{licenceMsg} <Link to="/licence">Plan & licence</Link></div>}
+        {licenceMsg && <div className="alert warn" role="status" style={{ margin: '0 24px 12px' }}>{licenceMsg} {AG_MANAGED ? <a href={ROOT.replace(/\/plugins\/rovexy\/public$/, '') + '/core/?v=licences'} target="_top">Licences &amp; plans in AmetecsGlobal</a> : <Link to="/licence">Plan & licence</Link>}</div>}
         <Routes key={orgKey}>
           <Route path="/" element={<OverviewPage />} />
           <Route path="/portfolio-reports" element={<PortfolioReportsPage />} />
@@ -313,7 +313,7 @@ export function App() {
           <Route path="/screen" element={<MediaPage kind="screen" />} />
           <Route path="/camera" element={<MediaPage kind="camera" />} />
           <Route path="/chat" element={<ChatPage />} />
-          <Route path="/licence" element={<LicencePage />} />
+          <Route path="/licence" element={AG_MANAGED ? <AgLicence /> : <LicencePage />} />
           <Route path="/reports" element={<ReportsPage />} />
           <Route path="/recording-export" element={<RecordingExportPage />} />
           <Route path="/recording-formats" element={<RecordingFormatsPage />} />
@@ -351,4 +351,11 @@ function ChangePassword({ onClose }: { onClose: () => void }) {
       )}
     </Modal>
   );
+}
+
+/** AmetecsGlobal: the licence lives in AmetecsGlobal (Licences & plans), not in ROVEXY. */
+function AgLicence() {
+  const url = ROOT.replace(/\/plugins\/rovexy\/public$/, '') + '/core/?v=licences';
+  useEffect(() => { window.top!.location.href = url; }, [url]);
+  return <p className="muted" style={{ padding: 24 }}>Your ROVEXY licence is managed in AmetecsGlobal. <a href={url} target="_top">Open Licences &amp; plans</a></p>;
 }

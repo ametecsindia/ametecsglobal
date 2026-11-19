@@ -40,6 +40,8 @@ return Application::configure(basePath: dirname(__DIR__))
             'platform' => \App\Http\Middleware\PlatformAccess::class,
             'feature' => \App\Http\Middleware\RequireFeature::class,
             'central' => \App\Http\Middleware\CentralOnly::class,
+            'ag.locked' => \App\Http\Middleware\AgLocked::class,     // AmetecsGlobal: console stops while the licence is not active
+            'ag.managed' => \App\Http\Middleware\AgManaged::class,   // AmetecsGlobal: licences only in its Super Admin
         ]);
         // Company resolution must precede authentication (users are tenant-scoped), and device/work-session
         // authentication must precede rate limiting so limits are keyed per device/user rather than shared.

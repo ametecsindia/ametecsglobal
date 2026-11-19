@@ -36,23 +36,36 @@ $sp = (string) @file_get_contents($dir . '/../smartprs3/.env');
 $spGet = static fn (string $k): string => preg_match('/^' . $k . '=("?)([^"#\r\n]*)\1/m', $sp, $m) ? trim($m[2]) : '';
 $root = null;
 $why = [];
-foreach (array_unique([[(string) $opt['root-user'], (string) $opt['root-password']], ['root', 'root'], [$spGet('DB_MIGRATION_USERNAME'), $spGet('DB_MIGRATION_PASSWORD')]], SORT_REGULAR) as [$u, $pw]) {
+// Already set up on this PC (its own account works): nothing needs MySQL's administrator - a later sync just confirms it.
+$ready = false;
+if ($get('DB_DATABASE') === $db && $get('DB_USERNAME') === $user && $get('DB_PASSWORD') !== '') {
+    try {
+        new PDO('mysql:host=127.0.0.1;port=' . ($get('DB_PORT') ?: '3306') . ';dbname=' . $db, $user, $get('DB_PASSWORD'));
+        $ready = true;
+    } catch (\PDOException) {
+    }
+}
+foreach ($ready ? [] : array_unique([[(string) $opt['root-user'], (string) $opt['root-password']], ['root', 'root'], [$spGet('DB_MIGRATION_USERNAME'), $spGet('DB_MIGRATION_PASSWORD')]], SORT_REGULAR) as [$u, $pw]) {
     if ($u === '') { continue; }
     try {
         $root = new PDO('mysql:host=127.0.0.1;port=' . ($get('DB_PORT') ?: '3306'), $u, $pw, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+        $root->exec("CREATE DATABASE IF NOT EXISTS `$db` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");   // must be allowed to make it
         break;
     } catch (\PDOException $x) {
-        $why[] = $u . ': ' . $x->getMessage();
+        $why[] = $u . ': ' . preg_replace('/^SQLSTATE\[\w+\]:? ?(\[\d+\] )?/', '', $x->getMessage());
+        $root = null;
     }
 }
-if ($root === null) {
-    throw new RuntimeException('could not sign in to MySQL (' . implode(' | ', $why) . '). If root has a password: php tools/ag-install.php --root-password=YOURPASSWORD');
+if ($root === null && !$ready) {
+    throw new RuntimeException('MySQL would not let it create the rovexy database (' . implode(' | ', $why) . '). MySQL root has a password on this PC: open Laragon > Terminal and run  cd plugins\\rovexy  then  php tools/ag-install.php --root-password=YOUR_ROOT_PASSWORD');
 }
-$root->exec("CREATE DATABASE IF NOT EXISTS `$db` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
-foreach (['localhost', '127.0.0.1'] as $h) {
-    $root->exec("CREATE USER IF NOT EXISTS '$user'@'$h' IDENTIFIED BY " . $root->quote($pass));
-    $root->exec("ALTER USER '$user'@'$h' IDENTIFIED BY " . $root->quote($pass));
-    $root->exec("GRANT ALL PRIVILEGES ON `$db`.* TO '$user'@'$h'");
+if (!$ready) {
+    $root->exec("CREATE DATABASE IF NOT EXISTS `$db` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
+    foreach (['localhost', '127.0.0.1'] as $h) {
+        $root->exec("CREATE USER IF NOT EXISTS '$user'@'$h' IDENTIFIED BY " . $root->quote($pass));
+        $root->exec("ALTER USER '$user'@'$h' IDENTIFIED BY " . $root->quote($pass));
+        $root->exec("GRANT ALL PRIVILEGES ON `$db`.* TO '$user'@'$h'");
+    }
 }
 
 $url = (string) ($opt['url'] ?? 'http://localhost/AmetecsGlobal/plugins/rovexy/public');
@@ -69,4 +82,8 @@ foreach ([
 }
 $get('APP_KEY') === '' && $set('APP_KEY', 'base64:' . base64_encode(random_bytes(32)));
 file_put_contents($envFile, $env);
+passthru(escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg($dir . '/artisan') . ' migrate --force', $rc);   // its tables, now, in this database
+if ($rc !== 0) {
+    throw new RuntimeException('the database is ready but creating its tables failed (see above).');
+}
 echo "ROVEXY: database '$db' and this PC's .env are ready.\n";

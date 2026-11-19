@@ -1,0 +1,96 @@
+/* QRONEX UI (Tailwind v3). Rebuild after changing Blade classes:
+   npx tailwindcss@3.4.16 -c tailwind.qronex.config.js -i resources/css/qronex.css -o public/css/qronex.css --minify */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@font-face{font-family:"Schibsted Grotesk";font-style:normal;font-weight:400 900;font-display:swap;src:url(/fonts/schibsted-grotesk.woff2) format("woff2")}
+@font-face{font-family:"Schibsted Grotesk";font-style:italic;font-weight:400 900;font-display:swap;src:url(/fonts/schibsted-grotesk-italic.woff2) format("woff2")}
+
+@layer base {
+  html{@apply font-sans;font-feature-settings:"ss01","cv11";-webkit-font-smoothing:antialiased}
+  h1,h2,h3{@apply tracking-tight text-navy}
+  .num{font-variant-numeric:tabular-nums}
+  :focus-visible{@apply outline-none ring-2 ring-teal/60 ring-offset-1}
+}
+
+@layer components {
+  .is-platform .nav a.on{@apply bg-scan/10 text-scan}
+  .is-platform .nav a.on::before{@apply bg-scan}
+  .is-platform .nav a:hover{@apply bg-white/5}
+  .input{@apply w-full rounded-lg border border-slate-300 px-3 py-2 text-sm bg-white shadow-sm transition focus:border-teal focus:ring-2 focus:ring-teal/20 outline-none placeholder:text-slate-400}
+  .label{@apply block text-xs font-semibold text-slate-600 mb-1}
+  .btn{@apply inline-flex items-center justify-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-semibold bg-teal text-white shadow-sm transition hover:bg-[#08716a] active:scale-[.98] disabled:opacity-60 disabled:cursor-not-allowed}
+  .btn-ghost{@apply inline-flex items-center justify-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-semibold border border-slate-300 bg-white text-navy shadow-sm transition hover:bg-slate-50 hover:border-slate-400 active:scale-[.98] disabled:opacity-60}
+  .btn-sm{@apply px-2.5 py-1 text-xs}
+  .btn-danger{@apply bg-red-600 hover:bg-red-700}
+  .is-busy{@apply relative text-transparent pointer-events-none}
+  .is-busy::after{content:"";@apply absolute inset-0 m-auto h-4 w-4 rounded-full border-2 border-current border-t-transparent animate-spin;color:#94A3B8}
+  .btn.is-busy::after{color:#fff}
+  /* grid columns may shrink below their content, so wide tables scroll inside their card instead of widening the page */
+  main .grid > *{min-width:0}
+  .card{@apply min-w-0 bg-white rounded-2xl border border-slate-200/80 p-5 shadow-[0_1px_0_rgba(8,26,51,.04),0_8px_24px_-16px_rgba(8,26,51,.18)]}
+  .card-h{@apply flex items-center justify-between gap-3 mb-4}
+  .card-t{@apply font-bold text-navy text-[15px] tracking-tight}
+  .tbl{@apply w-full text-sm}
+  /* phones: tables keep readable columns and scroll sideways inside their card instead of squeezing text into tall stacks */
+  @media (max-width: 767px){ .overflow-x-auto > .tbl, .overflow-x-auto .tbl:not(.max-w-lg){min-width:640px} }
+  .tbl th{@apply text-left text-xs font-semibold text-slate-500 border-b border-slate-200 px-3 py-3 whitespace-nowrap bg-paper}
+  .tbl td{@apply border-b border-slate-100 px-3 py-2.5 align-top}
+  .tbl tr:hover td{@apply bg-slate-50/70}
+  .chip{@apply inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold}
+  .nav a{@apply relative flex items-center gap-3 rounded-lg px-3 py-2 text-[14px] text-slate-300 transition hover:bg-white/5 hover:text-white}
+  .nav a.on{@apply bg-white/10 text-white font-semibold}
+  .nav a.on::before{content:"";@apply absolute -left-3 top-1.5 bottom-1.5 w-1 rounded-r bg-teal-2}
+  .tabs{@apply inline-flex flex-wrap gap-1 rounded-xl bg-slate-100 p-1}
+  .tabs a{@apply rounded-lg px-3 py-1.5 text-sm font-medium text-slate-600 hover:text-navy}
+  .tabs a.on{@apply bg-white text-navy shadow-sm}
+  .code{@apply font-mono tracking-widest font-bold text-navy}
+  [x-cloak]{display:none}
+  .auth-bg{background:radial-gradient(1200px 600px at 10% -10%,#173A64 0,transparent 60%),radial-gradient(900px 500px at 110% 110%,#0A8278 0,transparent 55%),#0E2747}
+  .fade-in{animation:qx-fade .35s ease-out both}
+  .stat{animation:qx-rise .45s ease-out both}
+  .bar{transform-box:fill-box;transform-origin:bottom;animation:qx-grow .6s cubic-bezier(.2,.8,.2,1) both}
+  .loading-bar{@apply fixed top-0 left-0 h-0.5 z-[60] bg-teal-2 w-0 opacity-0}
+  .is-loading .loading-bar{@apply opacity-100;animation:qx-load 8s cubic-bezier(.1,.7,.2,1) forwards}
+  @media (prefers-reduced-motion: reduce){.fade-in,.stat,.bar,.is-loading .loading-bar{animation:none}}
+}
+/* —— public website —— */
+@layer components {
+  .site-wrap{@apply max-w-[1180px] mx-auto px-5 sm:px-8}
+  .site-h2{@apply text-3xl sm:text-[2.6rem] leading-[1.05] font-extrabold tracking-tightest text-navy max-w-[20ch]}
+  .site-lede{@apply text-lg text-slate-600 max-w-[60ch] leading-relaxed}
+  .site-btn{@apply inline-flex items-center justify-center gap-2 rounded-full px-6 py-3 text-[15px] font-semibold bg-teal text-white transition hover:bg-[#08716a] focus-visible:ring-2 focus-visible:ring-teal-glow}
+  .site-btn-line{@apply inline-flex items-center justify-center gap-2 rounded-full px-6 py-3 text-[15px] font-semibold border border-current transition hover:bg-white/10}
+  .ring-tick{animation:qx-ring 3s linear infinite;transform-origin:50% 50%;transform:rotate(-90deg)}
+  .punch-in{animation:qx-punch .6s cubic-bezier(.2,.9,.3,1.2) 3.2s both}
+  .scanline{animation:qx-scan 3s ease-in-out infinite}
+  .hs-ring{animation:qx-ring 3s linear infinite;transform-origin:50% 50%;transform:rotate(-90deg)}
+  .hs-beam{transition:opacity .4s;animation:hs-beam 1.3s ease-in-out infinite}
+  .hs-phone{animation:hs-float 6s ease-in-out infinite}
+  .hs-card{animation:hs-float 7s ease-in-out infinite reverse}
+  .js .reveal{opacity:0;transform:translateY(18px);transition:opacity .7s ease,transform .7s cubic-bezier(.2,.7,.2,1)}
+  .js .reveal.in{opacity:1;transform:none}
+  .feat-dot{animation:feat-travel 6s cubic-bezier(.6,0,.4,1) infinite}
+  .feat-bar{animation:qx-load-r 3s linear infinite}
+  .feat-check{animation:feat-tick 3s ease infinite both}
+  .feat-event{animation:feat-send 3s ease-in-out infinite}
+  .feat-target{animation:feat-hit 3s ease infinite both}
+  .input[aria-invalid=true]{@apply border-red-400 ring-2 ring-red-100}
+  .qx-pop{animation:qx-punch .5s cubic-bezier(.2,.9,.3,1.3) both}
+  @media (prefers-reduced-motion: reduce){.ring-tick,.punch-in,.scanline,.qx-pop,.hs-ring,.hs-beam,.hs-phone,.hs-card,.reveal,.feat-dot,.feat-bar,.feat-check,.feat-event,.feat-target{animation:none!important;transition:none!important;opacity:1!important;transform:none!important}}
+}
+@keyframes qx-ring{from{stroke-dashoffset:0}to{stroke-dashoffset:302}}
+@keyframes qx-punch{from{opacity:0;transform:translateY(16px) scale(.96)}to{opacity:1;transform:none}}
+@keyframes qx-scan{0%,100%{top:8%}50%{top:88%}}
+@keyframes qx-fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+@keyframes qx-rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@keyframes qx-grow{from{transform:scaleY(0)}to{transform:scaleY(1)}}
+@keyframes qx-load{from{width:0}to{width:90%}}
+@keyframes hs-beam{0%,100%{opacity:.55}50%{opacity:1}}
+@keyframes hs-float{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
+@keyframes feat-travel{0%{left:0;opacity:0}8%{opacity:1}92%{opacity:1}100%{left:100%;opacity:0}}
+@keyframes qx-load-r{from{width:100%}to{width:0}}
+@keyframes feat-tick{0%,10%{opacity:.25;transform:translateX(6px)}25%,85%{opacity:1;transform:none}100%{opacity:.25}}
+@keyframes feat-send{0%,15%{transform:translateX(-6px);opacity:.6}40%,100%{transform:none;opacity:1}}
+@keyframes feat-hit{0%,20%{background:rgba(255,255,255,.06)}30%{background:rgba(20,184,166,.45)}60%,100%{background:rgba(255,255,255,.1)}}

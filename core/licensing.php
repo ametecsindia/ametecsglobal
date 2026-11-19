@@ -47,7 +47,163 @@ final class AmetecsLicences
             self::$ready = false;
         }
         self::$ready && self::importJson();
+        self::$ready && self::backfillInstalled();
         return self::$ready;
+    }
+
+    /**
+     * DOWNLOAD FIRST (owner, 19 Nov 2026): a cloud app Super Admin enables (or the client buys) shows "Download" in My
+     * applications; Download installs it into the client's account (activated_at = when). On-premise licences are installed
+     * on the client's own server (their activation is the licence-server check-in), so they count as installed here.
+     */
+    public static function installed(?array $r): bool
+    {
+        return $r !== null && ($r['deployment'] === 'onprem' || !empty($r['activated_at']));
+    }
+
+
+    /**
+     * THE INSTALL, STEP BY STEP (owner, 19 Nov 2026: "first complete download from super admin then install - maintenance
+     * mode"). 1 download: the newest published package of the app from Super Admin -> Updates & releases (checked against
+     * its SHA-256), else the build already on this server. 2 install: the app is in MAINTENANCE MODE (it does not open)
+     * while its set-up hook runs. 3 activate: the licence is activated and the app opens. Progress per client and app in
+     * core/data/installs/ so a closed browser can carry on where it stopped.
+     */
+    private static function stateFile(string $tenant, string $app): string
+    {
+        return __DIR__ . '/data/installs/' . preg_replace('/[^0-9]/', '', $tenant) . '-' . preg_replace('/[^a-z0-9]/', '', $app) . '.json';
+    }
+
+    public static function installState(string $tenant, string $app): ?array
+    {
+        $f = self::stateFile($tenant, $app);
+        $j = is_file($f) ? json_decode((string) file_get_contents($f), true) : null;
+        return is_array($j) ? $j : null;
+    }
+
+    /** True while an install is under way: the app shows "maintenance mode" and does not open. */
+    public static function maintenance(string $tenant, string $app): bool
+    {
+        return self::installState($tenant, $app) !== null;
+    }
+
+    /** @return array{ok: bool, phase?: string, message: string, version?: string, pct?: int} */
+    public static function installStep(string $tenant, string $app, string $step): array
+    {
+        $r = self::row($tenant, $app);
+        if ($r === null || self::stateOf($r) !== 'on') {
+            return ['ok' => false, 'message' => 'That application is not enabled for your company.'];
+        }
+        if (self::installed($r) && $step !== 'activate') {
+            return ['ok' => true, 'phase' => 'done', 'message' => 'Already installed.', 'pct' => 100];
+        }
+        $f = self::stateFile($tenant, $app);
+        @mkdir(dirname($f), 0775, true);
+        $st = self::installState($tenant, $app) ?? [];
+        $save = static function (array $s) use ($f): void { file_put_contents($f, json_encode($s), LOCK_EX); };
+        if ($step === 'download') {
+            $rel = null;
+            foreach (AmetecsReleases::offerFor($tenant, $app, '')['updates'] as $u) {
+                if ($u['kind'] === 'full' && AmetecsReleases::stateOf($u) === 'published') { $rel = $u; break; }
+            }
+            if ($rel !== null) {
+                $file = AmetecsReleases::path($rel);
+                if (!is_file($file) || !hash_equals((string) $rel['sha256'], (string) hash_file('sha256', $file))) {
+                    return ['ok' => false, 'message' => 'The package for version ' . $rel['version'] . ' is missing or damaged on the Ametecs server. Contact Ametecs.'];
+                }
+                AmetecsReleases::event($rel, $app, $tenant, 'downloaded', '', (string) $rel['version'], 'cloud install from My applications', (string) $r['id']);
+            }
+            $root = AmetecsReleases::pluginRoot($app);
+            $ver = $rel !== null ? (string) $rel['version'] : (AmetecsReleases::platformVersion($app)
+                ?: (string) (json_decode((string) @file_get_contents((string) $root . '/version.json'), true)['version'] ?? ''));
+            $save(['phase' => 'downloaded', 'version' => $ver, 'release' => $rel['id'] ?? null, 'at' => self::now()]);
+            return ['ok' => true, 'phase' => 'downloaded', 'version' => $ver, 'pct' => 35,
+                'message' => 'Downloaded ' . ($ver !== '' ? 'version ' . $ver . ' ' : '') . ($rel !== null ? 'from Ametecs (package checked)' : 'from Ametecs') . '.'];
+        }
+        if ($step === 'install') {
+            if (!in_array($st['phase'] ?? '', ['downloaded', 'installing'], true)) {
+                return ['ok' => false, 'message' => 'Download it first.'];
+            }
+            $save(['phase' => 'installing'] + $st);   // maintenance mode on
+            $hook = __DIR__ . '/../plugins/' . preg_replace('/[^a-z0-9]/', '', $app) . '/ag-install-tenant.php';
+            is_file($hook) && (require $hook)(self::pdo(), $tenant);
+            $save(['phase' => 'installed'] + $st);
+            return ['ok' => true, 'phase' => 'installed', 'pct' => 75, 'message' => 'Installed and set up for your company.'];
+        }
+        if ($step === 'activate') {
+            if (!self::installed($r)) {
+                if (($st['phase'] ?? '') !== 'installed') {
+                    return ['ok' => false, 'message' => 'Install it first.'];
+                }
+                self::put($tenant, $app, ['activated_at' => self::now()] + (($st['version'] ?? '') !== '' ? ['app_version' => $st['version']] : []), 'Downloaded and installed by the client');
+            }
+            @unlink($f);   // maintenance mode off
+            return ['ok' => true, 'phase' => 'done', 'pct' => 100, 'message' => 'Licence activated. Ready to open.'];
+        }
+        return ['ok' => false, 'message' => 'Unknown step.'];
+    }
+
+    /**
+     * SELF UPDATE (owner, 19 Nov 2026: "i want to self update"): the client's administrator updates a cloud app from My
+     * applications - 1 download: the newest published release Super Admin lets clients download (SHA-256 checked);
+     * 2 install: MAINTENANCE MODE for the app while Ametecs' cloud copy is updated (backup + roll-back on failure, database
+     * changes run). The cloud copy is shared, so every client of this server moves to the new version.
+     * @return array{ok: bool, phase?: string, message: string, version?: string, pct?: int}
+     */
+    public static function updateStep(string $tenant, string $app, string $step): array
+    {
+        $r = self::row($tenant, $app);
+        if ($r === null || self::stateOf($r) !== 'on' || $r['deployment'] !== 'cloud' || !self::installed($r)) {
+            return ['ok' => false, 'message' => 'Only an installed cloud application with an active licence updates here.'];
+        }
+        $cur = AmetecsReleases::platformVersion($app);
+        $rel = AmetecsReleases::offerFor($tenant, $app, $cur)['updates'][0] ?? null;
+        $f = self::stateFile($tenant, $app);
+        if ($rel === null) {
+            @unlink($f);
+            return ['ok' => true, 'phase' => 'done', 'pct' => 100, 'version' => $cur, 'message' => 'Already on the newest version (' . $cur . ').'];
+        }
+        if (empty($rel['downloadable'])) {
+            return ['ok' => false, 'message' => 'Ametecs installs this update for you. Contact Ametecs to have it installed now.'];
+        }
+        if (AmetecsReleases::payment($rel, $tenant) === 'required') {
+            return ['ok' => false, 'message' => 'This upgrade is paid. Pay it under Payments & invoices first.'];
+        }
+        @mkdir(dirname($f), 0775, true);
+        if ($step === 'download') {
+            $file = AmetecsReleases::path($rel);
+            if (!is_file($file) || !hash_equals((string) $rel['sha256'], (string) hash_file('sha256', $file))) {
+                return ['ok' => false, 'message' => 'The ' . $rel['version'] . ' package is missing or damaged on the Ametecs server. Contact Ametecs.'];
+            }
+            AmetecsReleases::event($rel, $app, $tenant, 'downloaded', $cur, (string) $rel['version'], 'self update from My applications', (string) $r['id']);
+            file_put_contents($f, json_encode(['phase' => 'update-downloaded', 'version' => $rel['version'], 'at' => self::now()]), LOCK_EX);
+            return ['ok' => true, 'phase' => 'downloaded', 'pct' => 40, 'version' => (string) $rel['version'], 'message' => 'Downloaded ' . $rel['version'] . ' from Ametecs (package checked).'];
+        }
+        if ($step === 'install') {
+            file_put_contents($f, json_encode(['phase' => 'installing', 'version' => $rel['version'], 'at' => self::now()]), LOCK_EX);   // maintenance mode on
+            try {
+                $res = AmetecsReleases::installOnPlatform($rel);
+            } finally {
+                @unlink($f);   // maintenance mode off, installed or put back
+            }
+            if (!$res['ok']) {
+                return ['ok' => false, 'message' => 'Not updated: ' . $res['message'] . ' Your ' . $cur . ' keeps running.'];
+            }
+            self::put($tenant, $app, ['app_version' => (string) $rel['version']], 'Updated by the client to ' . $rel['version']);
+            return ['ok' => true, 'phase' => 'done', 'pct' => 100, 'version' => (string) $rel['version'], 'message' => $res['message']];
+        }
+        return ['ok' => false, 'message' => 'Unknown step.'];
+    }
+
+    /** Apps already in use when "Download first" arrived (19 Nov 2026) stay installed: once per PC. */
+    private static function backfillInstalled(): void
+    {
+        $mark = __DIR__ . '/data/installed-backfill.done';
+        if (is_file($mark)) {
+            return;
+        }
+        self::pdo()->exec("UPDATE ag_licences SET activated_at = COALESCE(updated_at, created_at, NOW()) WHERE deployment = 'cloud' AND activated_at IS NULL AND status <> 'cancelled'");
+        @file_put_contents($mark, date('c'));
     }
 
     private static function now(): string
@@ -123,6 +279,7 @@ final class AmetecsLicences
         $allowed = ['deployment', 'plan', 'status', 'seats', 'starts_on', 'valid_until', 'price', 'currency', 'auto_renew', 'key_hash', 'key_enc',
             'fingerprint', 'server_name', 'server_os', 'app_version', 'activated_at', 'last_seen_at', 'notes'];
         $set = array_intersect_key($set, array_flip($allowed));
+        in_array($set['status'] ?? '', ['suspended', 'cancelled'], true) && self::revokeCodes($tenant, $app);   // a deactivation also withdraws codes not used yet
         $old = self::row($tenant, $app);
         $pdo = self::pdo();
         $now = self::now();
@@ -243,6 +400,148 @@ final class AmetecsLicences
         openssl_sign($b64, $sig, $priv, OPENSSL_ALGO_SHA256);
         self::event($r, 'Issued a .lic file', 'locked to ' . ($fingerprint !== '' ? substr($fingerprint, 0, 16) . '...' : 'no server'));
         return $b64 . '.' . rtrim(strtr(base64_encode((string) $sig), '+/', '-_'), '=');
+    }
+
+    /** Check a .lic file a client holds against this licence (signature, product, client, key, server, end date). @return array{0: bool, 1: string} */
+    public static function verifyLic(array $r, string $tok): array
+    {
+        $p = explode('.', trim($tok));
+        $d = static fn (string $s) => base64_decode(strtr($s, '-_', '+/'));
+        $pub = count($p) === 2 ? openssl_pkey_get_public(\SmartPRS\Surface\Licence::PUBLIC_KEY) : false;
+        if ($pub === false || openssl_verify($p[0], (string) $d($p[1]), $pub, OPENSSL_ALGO_SHA256) !== 1) {
+            return [false, 'Not a genuine Ametecs licence file: the signature does not match (wrong file, or it was edited).'];
+        }
+        $j = json_decode((string) $d($p[0]), true) ?: [];
+        $bound = trim((string) ($r['fingerprint'] ?? ''));
+        $why = match (true) {
+            ($j['product'] ?? '') !== $r['app'] => 'it is for another application (' . ($j['product'] ?? '?') . ')',
+            (int) ($j['tenant'] ?? 0) !== (int) $r['tenant_id'] => 'it was issued to another company',
+            !hash_equals(self::keyOf($r), (string) ($j['key'] ?? '')) => 'it carries an old licence key - ask Ametecs for a new file',
+            $bound !== '' && !hash_equals($bound, (string) ($j['fingerprint'] ?? '')) => 'it is locked to a different server than the one bound to this licence',
+            !empty($j['expires_at']) && (string) $j['expires_at'] < date('Y-m-d') => 'it ended on ' . $j['expires_at'],
+            default => '',
+        };
+        return $why !== '' ? [false, 'Genuine Ametecs file, but ' . $why . '.']
+            : [true, 'Genuine Ametecs licence: ' . (int) ($j['seats'] ?? 0) . ' seats, ' . (empty($j['expires_at']) ? 'no end date' : 'valid till ' . $j['expires_at']) . ', locked to server ' . substr((string) ($j['fingerprint'] ?? '-'), 0, 12) . '..., issued ' . substr((string) ($j['issued_at'] ?? ''), 0, 10) . '.'];
+    }
+
+    // ------------------------------------------------------------------ licence codes (LC) and .lic activation by the client
+    // (owner, 19 Nov 2026: "enter an approved LC, upload a valid .lic, or pay" - Super Admin creates and approves, the client only applies.)
+
+    private static function codeFile(): string
+    {
+        return __DIR__ . '/data/licence-codes.json';
+    }
+
+    private static function codes(): array
+    {
+        return json_decode((string) @file_get_contents(self::codeFile()), true) ?: [];
+    }
+
+    private static function saveCodes(array $all): void
+    {
+        @mkdir(dirname(self::codeFile()), 0775, true);
+        file_put_contents(self::codeFile(), json_encode(array_values($all), JSON_PRETTY_PRINT), LOCK_EX);   // ponytail: one JSON file; a table when codes run into thousands
+    }
+
+    /** Super Admin: a one-time code carrying the approved terms. Shown once; stored hashed. */
+    public static function issueCode(array $r, array $terms, int $validDays = 30): string
+    {
+        $code = 'LC' . substr(self::newKey(), 2);
+        $all = self::codes();
+        $all[] = ['hash' => self::hashKey($code), 'tail' => substr($code, -4), 'tenant' => (string) $r['tenant_id'], 'app' => (string) $r['app'], 'licence' => (string) $r['id'],
+            'terms' => array_intersect_key($terms, array_flip(['plan', 'seats', 'valid_until', 'starts_on'])), 'reactivate' => in_array($r['status'], ['suspended', 'cancelled'], true),
+            'issued_at' => self::now(), 'issued_by' => self::$actor, 'use_by' => date('Y-m-d', strtotime('+' . max(1, $validDays) . ' days')), 'used_at' => null, 'used_by' => null, 'revoked_at' => null];
+        self::saveCodes($all);
+        self::event($r, 'Issued a licence code', '…' . substr($code, -4) . ': ' . ($terms['seats'] ?? '') . ' seats till ' . ($terms['valid_until'] ?? '') . ', use by ' . date('d M Y', strtotime('+' . $validDays . ' days')));
+        return $code;
+    }
+
+    /** Codes of one licence, newest first, with a state: waiting | used | revoked | lapsed. */
+    public static function codesOf(string $tenant, string $app): array
+    {
+        $out = [];
+        foreach (self::codes() as $c) {
+            if ($c['tenant'] === $tenant && $c['app'] === $app) {
+                $c['state'] = $c['used_at'] ? 'used' : ($c['revoked_at'] ? 'revoked' : ($c['use_by'] < date('Y-m-d') ? 'lapsed' : 'waiting'));
+                $out[] = $c;
+            }
+        }
+        return array_reverse($out);
+    }
+
+    public static function revokeCodes(string $tenant, string $app, ?string $tail = null): int
+    {
+        $n = 0;
+        $all = self::codes();
+        foreach ($all as &$c) {
+            if ($c['tenant'] === $tenant && $c['app'] === $app && !$c['used_at'] && !$c['revoked_at'] && ($tail === null || $c['tail'] === $tail)) {
+                $c['revoked_at'] = self::now();
+                $n++;
+            }
+        }
+        unset($c);
+        $n > 0 && self::saveCodes($all);
+        return $n;
+    }
+
+    /** Client: apply a licence code. The code says which app; it must be this company's, unused, not revoked and not lapsed. @return array{0: bool, 1: string, 2?: string} */
+    public static function redeemCode(string $tenant, string $code, string $by): array
+    {
+        $h = self::hashKey($code);
+        $all = self::codes();
+        foreach ($all as $i => $c) {
+            if (!hash_equals($c['hash'], $h)) {
+                continue;
+            }
+            $r = self::row($tenant, (string) $c['app']);
+            $why = match (true) {
+                $c['tenant'] !== $tenant || $r === null => 'This licence code is not for your company.',
+                (bool) $c['used_at'] => 'This licence code was already used on ' . date('d M Y', (int) strtotime((string) $c['used_at'])) . '.',
+                (bool) $c['revoked_at'] => 'This licence code was withdrawn by Ametecs.',
+                $c['use_by'] < date('Y-m-d') => 'This licence code lapsed on ' . date('d M Y', (int) strtotime($c['use_by'])) . '. Ask Ametecs for a new one.',
+                in_array($r['status'], ['suspended', 'cancelled'], true) && !$c['reactivate'] => 'This licence was deactivated by Ametecs. Contact Ametecs.',
+                default => '',
+            };
+            if ($why !== '') {
+                return [false, $why];
+            }
+            $actor = self::$actor;
+            self::$actor = $by;
+            self::put($tenant, (string) $c['app'], $c['terms'] + ['status' => 'active'], 'Activated with licence code …' . $c['tail']);
+            self::$actor = $actor;
+            $all[$i]['used_at'] = self::now();
+            $all[$i]['used_by'] = $by;
+            self::saveCodes($all);
+            return [true, 'Licence activated: ' . ($c['terms']['seats'] ?? $r['seats']) . ' seats, valid till ' . date('d M Y', (int) strtotime((string) ($c['terms']['valid_until'] ?? $r['valid_until']))) . '.', (string) $c['app']];
+        }
+        return [false, 'That licence code is not valid. Check it, or ask Ametecs.'];
+    }
+
+    /** Client: upload a .lic and apply it. Never reduces what the licence already has; never lifts a Super Admin deactivation. */
+    public static function activateLic(array $r, string $tok, string $by): array
+    {
+        if (in_array($r['status'], ['suspended', 'cancelled'], true)) {
+            return [false, 'This licence was deactivated by Ametecs. A licence file cannot reopen it - contact Ametecs.'];
+        }
+        if (self::keyOf($r) === '') {
+            return [false, 'There is no licence key on this licence, so no .lic file can match it. Use a licence code or pay online.'];
+        }
+        [$ok, $msg] = self::verifyLic($r, $tok);
+        if (!$ok) {
+            return [false, $msg];
+        }
+        $j = json_decode((string) base64_decode(strtr(explode('.', trim($tok))[0], '-_', '+/')), true) ?: [];
+        // ponytail: an older genuine file can't shorten anything (max of dates); replay of a file issued before a Super Admin
+        // shortening would re-extend - add an issued_at check against Super Admin's last date change if that ever matters
+        $until = max((string) ($r['valid_until'] ?? ''), (string) ($j['expires_at'] ?? ''));
+        $set = ['valid_until' => $until !== '' ? $until : null, 'seats' => max((int) $r['seats'], (int) ($j['seats'] ?? 0)), 'status' => 'active']
+            + (isset(self::PLANS[$j['kind'] ?? '']) ? ['plan' => (string) $j['kind']] : []);
+        $actor = self::$actor;
+        self::$actor = $by;
+        self::put((string) $r['tenant_id'], (string) $r['app'], $set, 'Activated with a .lic file issued ' . substr((string) ($j['issued_at'] ?? ''), 0, 10));
+        self::$actor = $actor;
+        return [true, $msg . ' Applied.'];
     }
 
     /**

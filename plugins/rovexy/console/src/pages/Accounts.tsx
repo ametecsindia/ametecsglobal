@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { NavLink, Navigate, Route, Routes } from 'react-router-dom';
-import { del, download, get, openPrint, post, put, qs, setOnUnauthorized } from '../lib/api';
+import { ROOT, del, download, get, openPrint, post, put, qs, setOnUnauthorized } from '../lib/api';
 import { Badge, Card, ErrorBox, Field, Icon, Kpi, Modal, Notice, Page, Pager, Table, Toaster, toast, useAction, useAsync } from '../components/ui';
 import { MyProfile, StaffSignIn, type MfaPending, type StaffMe } from './StaffAuth';
 
@@ -49,7 +49,7 @@ export function AccountsApp() {
   return (
     <div className="shell acc">
       <aside className="sidebar">
-        <div className="brand"><img src="../brand/rovexy-mark-dark.svg" alt="ROVEXY" width="36" height="40" style={{ flex: 'none', background: 'none', padding: 0 }} /><span className="lbl">ROVEXY · Accounts</span></div>
+        <div className="brand"><img src={`${ROOT}/brand/rovexy-mark-dark.svg`} alt="ROVEXY" width="36" height="40" style={{ flex: 'none', background: 'none', padding: 0 }} /><span className="lbl">ROVEXY · Accounts</span></div>
         <nav className="nav" aria-label="Accounts">
           {MENU.map((i) => <NavLink key={i.to} to={i.to} end={i.to === '/'} className="top"><Icon name={i.icon} size={19} /><span className="lbl">{i.label}</span></NavLink>)}
           {me.role === 'super' && <a className="top" href="/super"><Icon name="chevron_left" size={19} /><span className="lbl">Super Admin</span></a>}

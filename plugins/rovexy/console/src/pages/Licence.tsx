@@ -173,6 +173,7 @@ function Purchase({ x, reload }: { x: any; reload: () => Promise<void> }) {
   return <>
     <ErrorBox error={a.error} />
     {done && <Notice tone="ok">{done}</Notice>}
+    {x.managed_by && <Notice tone="info">This licence is managed by Ametecs in {x.managed_by}. To renew, add users or change the plan, contact Ametecs.</Notice>}
     {x.shop_error && <Notice tone="warn">Online purchase is not available right now: {x.shop_error}</Notice>}
     {open && <Card title="Payment in progress">
       <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>

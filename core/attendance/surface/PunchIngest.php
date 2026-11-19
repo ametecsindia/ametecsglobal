@@ -167,7 +167,7 @@ final class PunchIngest
     /** Device punches only — SmartEPT and the field-force app are not the biometric device. */
     private function deviceAllowed(string $code, string $source): bool
     {
-        if (in_array($source, [SmartEpt::SOURCE, 'caller'], true)) {
+        if (in_array($source, [SmartEpt::SOURCE, 'caller', 'qronex'], true)) {   // qronex: already verified there (approved phone, rotating QR, geofence)
             return true;
         }
 

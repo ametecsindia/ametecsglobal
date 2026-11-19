@@ -8,8 +8,12 @@ export class ApiError extends Error {
 }
 
 // The company's workspace: from the address /w/<slug>/admin, else the build setting (on-premises builds).
-// AmetecsGlobal: the server may live in a sub-folder; the page tells us which (window.__ROOT__, set by routes/web.php).
-export const ROOT: string = ((window as any).__ROOT__ as string | undefined) ?? '';
+// AmetecsGlobal: the server may live in a sub-folder; the page tells us which (<meta name="ag-root">, set by routes/web.php).
+/** AmetecsGlobal manages the licence (routes/web.php adds <meta name="ag-managed">): no Plan & licence page here. */
+export const AG_MANAGED = !!document.querySelector('meta[name="ag-managed"]');
+export const ROOT: string = document.querySelector<HTMLMetaElement>('meta[name="ag-root"]')?.content ?? '';
+/** AmetecsGlobal: the licence is not active - go to its licence page there (enter a code, upload a .lic or pay). */
+export const agLock = () => { window.top!.location.href = ROOT.replace(/\/plugins\/rovexy\/public$/, '') + '/core/?v=licences&app=rovexy&lock=1#lp'; };
 const pathWorkspace = /^\/w\/([a-z0-9][a-z0-9-]{1,38}[a-z0-9])\/admin(?:\/|$)/.exec(location.pathname.slice(ROOT.length))?.[1];
 let workspace = pathWorkspace ?? (import.meta.env.VITE_WORKSPACE as string | undefined) ?? undefined;
 export const currentWorkspace = (): string | undefined => workspace;
@@ -79,6 +83,7 @@ export async function api<T = any>(method: string, path: string, body?: unknown)
     const msg = res.status === 401 ? serverMsg ?? friendly('session_expired') : (data && (data.message as string)) || friendly(code);
     if (res.status === 419) csrfReady = null;
     if (res.status === 401 && onUnauthorized && !path.startsWith('/auth/')) onUnauthorized();
+    if (res.status === 402 && code === 'licence_locked' && AG_MANAGED) agLock();
     throw new ApiError(res.status, code, msg, data);
   }
   return data as T;

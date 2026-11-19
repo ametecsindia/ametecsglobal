@@ -32,7 +32,18 @@ final class LicenceController extends Controller
         'superseded' => 'Trial replaced by a paid package', 'edited' => 'Changed by ROVEXY', 'amc_renewed' => 'Updates & support (AMC) renewed', 'activated' => 'Activated on a server',
         'calling_changed' => 'Click2Call users changed'];
 
+    /** Inside AmetecsGlobal the page only shows the licence: nothing here can buy, renew or change it (Super Admin does). */
     public function show(Licensing $lic, CurrentCompany $ctx, LicenceClient $client)
+    {
+        $res = $this->showLicence($lic, $ctx, $client);
+        if (\App\Services\AgBridge::managed()) {
+            $res->setData(['can_renew' => false, 'can_add_users' => false, 'can_amc' => false, 'plans' => [], 'open_order' => null, 'shop_error' => null,
+                'managed_by' => 'AmetecsGlobal'] + $res->getData(true));
+        }
+        return $res;
+    }
+
+    private function showLicence(Licensing $lic, CurrentCompany $ctx, LicenceClient $client)
     {
         if (LicenceClient::isClient()) {
             $client->ensureFresh();

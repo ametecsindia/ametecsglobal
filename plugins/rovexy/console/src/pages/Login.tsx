@@ -35,8 +35,8 @@ export function AuthShell({ eyebrow, title, accent, points, children }: {
   return (
     <div className="lb">
       <aside className="lb-brand">
-        <img className="lb-wm" src="../brand/rovexy-r.svg" alt="" aria-hidden="true" />
-        <img className="lb-logo" src="../brand/rovexy-logo-dark.svg" alt="ROVEXY — Your Workforce. In Motion." width="700" height="204" />
+        <img className="lb-wm" src={`${ROOT}/brand/rovexy-r.svg`} alt="" aria-hidden="true" />
+        <img className="lb-logo" src={`${ROOT}/brand/rovexy-logo-dark.svg`} alt="ROVEXY — Your Workforce. In Motion." width="700" height="204" />
         <div className="lb-pitch">
           <h2>{title}<br /><span>{accent}</span></h2>
           <ul>{points.map((p) => <li key={p}><b aria-hidden="true">✓</b>{p}</li>)}</ul>
@@ -45,7 +45,7 @@ export function AuthShell({ eyebrow, title, accent, points, children }: {
       </aside>
       <main className="lb-form">
         <div className="lb-in">
-          <img className="lb-logo-sm" src="../brand/rovexy-logo.svg" alt="ROVEXY" width="700" height="204" />
+          <img className="lb-logo-sm" src={`${ROOT}/brand/rovexy-logo.svg`} alt="ROVEXY" width="700" height="204" />
           <div className="lb-tag">{eyebrow}</div>
           {children}
           <p className="lb-note"><i aria-hidden="true" />Protected connection · every sign-in is recorded</p>

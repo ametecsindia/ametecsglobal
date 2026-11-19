@@ -368,6 +368,28 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && $pdo !== null) {
             AmetecsData::log($meEmail, 'Changed ' . $an . ' licence', $tid);
             $back($to, 'Licence saved.');
         }
+        // UNDO AN ONLINE PURCHASE (owner, 19 Nov 2026, option B): a client's payment applies Super Admin's prices at once;
+        // Super Admin can put the licence back to how it was before that payment (the money is refunded separately).
+        if ($do === 'licence-undo') {
+            $ev = null;
+            foreach (AmetecsLicences::events((string) $lic['id']) as $e) {
+                (string) $e['id'] === (string) ($_POST['event'] ?? '') && $ev = $e;
+            }
+            if ($ev === null || !preg_match('/paid |bought online/i', (string) $ev['action'])) {
+                $back($to, null, 'Only an online purchase can be undone here.');
+            }
+            preg_match_all('/(\w+) (.*?) -> (.*?)(?:, |$)/', (string) $ev['detail'], $mm, PREG_SET_ORDER);
+            $set = [];
+            foreach ($mm as [, $k, $was]) {
+                in_array($k, ['plan', 'status', 'seats', 'valid_until', 'price', 'currency'], true) && $set[$k] = $was === '(empty)' ? null : $was;
+            }
+            if ($set === []) {
+                $back($to, null, 'Nothing to put back for that entry.');
+            }
+            AmetecsLicences::put($tid, $app, $set, 'Undid: ' . $ev['action']);
+            AmetecsData::log($meEmail, 'Undid an online purchase on ' . $an, $tid, (string) $ev['action']);
+            $back($to, 'Put back as it was before that payment. Refund the money from Payments & invoices if needed.');
+        }
         if ($do === 'licence-status') {
             $act = (string) ($_POST['to'] ?? '');
             ($_POST['back'] ?? '') === 'licences' && $to = '?p=licences';
@@ -375,20 +397,21 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && $pdo !== null) {
             $set = match ($act) {
                 'active' => ['status' => 'active'],
                 'suspended' => ['status' => 'suspended'],
-                'cancelled' => ['status' => 'cancelled', 'auto_renew' => 0],
+                'cancelled' => ['status' => 'cancelled', 'auto_renew' => 0] + ($lic['deployment'] === 'cloud' ? ['activated_at' => null] : []),   // cloud: uninstalled too - buying again means Download again
                 'renew' => ($n = AmetecsLicences::nextUntil($lic)) === null ? null : ['valid_until' => $n, 'status' => $lic['status'] === 'cancelled' ? 'active' : $lic['status']],
                 'unbind' => ['fingerprint' => null, 'activated_at' => null],
+                'uninstall' => $lic['deployment'] === 'cloud' ? ['activated_at' => null] : null,   // the client downloads and installs it again
                 default => null,
             };
             if ($set === null) {
                 $back($to, null, $act === 'renew' ? 'A perpetual licence does not renew - change the plan or the date instead.' : 'Unknown action.');
             }
-            $label = ['active' => 'Activated', 'suspended' => 'Suspended', 'cancelled' => 'Cancelled', 'renew' => 'Renewed', 'unbind' => 'Released from its server'][$act];
+            $label = ['active' => 'Activated', 'suspended' => 'Suspended', 'cancelled' => 'Cancelled', 'renew' => 'Renewed', 'unbind' => 'Released from its server', 'uninstall' => 'Uninstalled (client downloads it again)'][$act];
             AmetecsLicences::put($tid, $app, $set, $label);
             AmetecsData::log($meEmail, $label . ' ' . $an . ' licence', $tid, $act === 'renew' ? 'valid till ' . $set['valid_until'] : '');
             $back($to, ['active' => 'Licence is active: the client can open ' . $an . '.', 'suspended' => 'Licence suspended: ' . $an . ' no longer opens for this client. Nothing was deleted.',
                 'cancelled' => 'Licence cancelled. Its history and the client\'s data are kept; Activate brings it back.', 'renew' => 'Renewed till ' . date('d M Y', (int) strtotime((string) ($set['valid_until'] ?? ''))) . '.',
-                'unbind' => 'The licence is free to activate on a new server.'][$act]);
+                'unbind' => 'The licence is free to activate on a new server.', 'uninstall' => 'Uninstalled. The client sees Download again; their data is kept.'][$act]);
         }
         // PLUGINS FOR THIS CLIENT (Phase 6): give free / take back, block, allow or stop downloads.
         if ($do === 'licence-plugin') {
@@ -408,6 +431,21 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && $pdo !== null) {
             AmetecsPlugins::put($tid, $pp['latest'], $set[0], $set[1]);
             AmetecsData::log($meEmail, $an . ' plugin ' . $pp['title'] . ': ' . $set[2], $tid);
             $back($to . '#plugins', $pp['title'] . ': ' . $set[2] . '.');
+        }
+        if ($do === 'licence-code') {   // a licence code (LC) the client enters to apply these approved terms (owner, 19 Nov 2026)
+            $cu = (string) ($_POST['valid_until'] ?? ''); $cs = (int) ($_POST['seats'] ?? 0); $cp = (string) ($_POST['plan'] ?? '');
+            if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $cu) || $cs < 1 || !isset(AmetecsLicences::PLANS[$cp])) {
+                $back($to . '#codes', null, 'Choose the plan, seats and valid-till date for the code.');
+            }
+            $code = AmetecsLicences::issueCode($lic, ['plan' => $cp, 'seats' => $cs, 'valid_until' => $cu], max(1, min(365, (int) ($_POST['days'] ?? 30))));
+            AmetecsData::log($meEmail, 'Issued a ' . $an . ' licence code', $tid, $cs . ' seats till ' . $cu);
+            $_SESSION['reveal_code'] = ['id' => $id, 'code' => $code];
+            $back($to . '#codes', 'Licence code issued. Send it to the client: they enter it on Licences & plans and it applies straight away.');
+        }
+        if ($do === 'licence-code-revoke') {
+            $n = AmetecsLicences::revokeCodes($tid, $app, (string) ($_POST['tail'] ?? ''));
+            AmetecsLicences::event($lic, 'Withdrew a licence code', '…' . ($_POST['tail'] ?? ''));
+            $back($to . '#codes', $n > 0 ? 'Code withdrawn: it no longer works.' : 'That code was already used, withdrawn or lapsed.');
         }
         if ($do === 'licence-key') {
             $key = AmetecsLicences::issueKey($tid, $app);
@@ -982,7 +1020,7 @@ main{max-width:1560px;padding:16px 26px 20px}
 @media (max-width:1100px){.kstrip{grid-template-columns:repeat(3,1fr)}.dgrid2{grid-template-columns:1fr}}
 .cn b{white-space:nowrap}.mxt td:last-child,.mxt th:last-child{padding-right:16px;white-space:nowrap}.mxt th.ac{padding-left:4px;padding-right:4px}.mxt th:first-child{width:30%}
 </style>
-<link rel="stylesheet" href="assets/shell.css?v=21"><link rel="stylesheet" href="assets/super.css?v=13"><link rel="stylesheet" href="assets/theme-gold.css?v=3"><link rel="stylesheet" href="assets/theme-sa-light.css?v=6"><link rel="stylesheet" href="assets/theme-alt.css?v=11"></head><body>
+<link rel="stylesheet" href="assets/shell.css?v=26"><link rel="stylesheet" href="assets/super.css?v=13"><link rel="stylesheet" href="assets/theme-gold.css?v=3"><link rel="stylesheet" href="assets/theme-sa-light.css?v=6"><link rel="stylesheet" href="assets/theme-alt.css?v=11"></head><body>
 <?php
 $myName = trim((string) ($me['name'] ?? '')) ?: ucfirst((string) strtok($meEmail, '@'));
 $myIni = strtoupper(implode('', array_map(static fn (string $w): string => mb_substr($w, 0, 1), array_slice(preg_split('/[\s._-]+/', $myName) ?: ['S'], 0, 2))));
@@ -1498,7 +1536,7 @@ $myIni = strtoupper(implode('', array_map(static fn (string $w): string => mb_su
   <div class="phero"><div class="row" style="margin-bottom:6px"><a href="?p=licences" class="muted">← Licences</a><?php if ($lt !== null): ?><span class="muted">·</span><a href="?p=client&id=<?= (int) $lt['id'] ?>" class="muted"><?= ag_h($lt['name']) ?></a><?php endif; ?></div>
   <div class="row"><h1><?= ag_h($lp['name']) ?> · <?= ag_h($lt['name'] ?? '#' . $lc['tenant_id']) ?></h1><span class="pill <?= $sc ?>"><?= $lc['status'] === 'cancelled' ? 'Cancelled' : $sl ?></span>
     <span class="pill grey"><?= $lc['deployment'] === 'onprem' ? '<i class="fas fa-server"></i> On-premise' : '<i class="fas fa-cloud"></i> Cloud' ?></span></div>
-  <p class="sub"><?= ag_h(AmetecsLicences::PLANS[$lc['plan']] ?? '') ?> plan · <?= (int) $lc['seats'] ?> <?= ag_h($lp['unit']) ?> · valid till <?= $d($lc['valid_until'] ?? null) ?><?= ($lc['price'] ?? null) !== null ? ' · ' . ag_h($lc['currency']) . ' ' . number_format((float) $lc['price'], 2) : '' ?></p></div>
+  <p class="sub"><?= ag_h(AmetecsLicences::PLANS[$lc['plan']] ?? '') ?> plan · <?= (int) $lc['seats'] ?> <?= ag_h($lp['unit']) ?> · valid till <?= $d($lc['valid_until'] ?? null) ?><?= ($lc['price'] ?? null) !== null ? ' · ' . ag_h($lc['currency']) . ' ' . number_format((float) $lc['price'], 2) : '' ?><?= $lc['deployment'] === 'cloud' ? (AmetecsLicences::installed($lc) ? ' · <i class="fas fa-circle-check" style="color:#15803d"></i> installed by the client' . (!empty($lc['activated_at']) ? ' ' . ag_h(date('d M Y', (int) strtotime((string) $lc['activated_at']))) : '') : ' · <i class="fas fa-download" style="color:#b45309"></i> waiting for the client to download') : '' ?></p></div>
 
   <div class="pg2"><div class="pgm"><form method="post" class="box"><?= $csrf() ?><input type="hidden" name="do" value="licence-save"><input type="hidden" name="id" value="<?= $lid ?>">
     <div class="hd"><h2><i class="fas fa-file-signature"></i>Licence terms</h2></div><div class="bd grid2">
@@ -1529,15 +1567,34 @@ $myIni = strtoupper(implode('', array_map(static fn (string $w): string => mb_su
   <?php endif; ?>
 
   <div class="box"><div class="hd"><h2><i class="fas fa-clock-rotate-left"></i>Licence history</h2></div><table><tr><th>When</th><th>Who</th><th>What</th><th>Detail</th></tr>
-  <?php foreach (AmetecsLicences::events((string) $lid) as $e): ?><tr><td style="white-space:nowrap"><?= ag_h($e['created_at']) ?></td><td><?= ag_h($e['by_who']) ?></td><td><?= ag_h($e['action']) ?></td><td class="muted" style="font-size:12.5px"><?= ag_h($e['detail']) ?></td></tr><?php endforeach; ?></table></div>
+  <?php foreach (AmetecsLicences::events((string) $lid) as $e): ?><tr><td style="white-space:nowrap"><?= ag_h($e['created_at']) ?></td><td><?= ag_h($e['by_who']) ?></td><td><?= ag_h($e['action']) ?></td><td class="muted" style="font-size:12.5px"><?= ag_h($e['detail']) ?><?php if (preg_match('/paid |bought online/i', (string) $e['action'])): ?> <form method="post" class="inline" onsubmit="return confirm('Put this licence back to how it was before this payment?')"><?= $csrf() ?><input type="hidden" name="do" value="licence-undo"><input type="hidden" name="id" value="<?= $lid ?>"><input type="hidden" name="event" value="<?= (int) $e['id'] ?>"><button class="btn ghost" style="padding:2px 8px;font-size:12px"><i class="fas fa-rotate-left"></i> Undo</button></form><?php endif; ?></td></tr><?php endforeach; ?></table></div>
 
 </div><aside class="pgs"><div class="box"><div class="hd"><h2><i class="fas fa-bolt"></i>Actions</h2></div><div class="bd row">
     <?= $lc['status'] !== 'active' ? $btn('active', '<i class="fas fa-play"></i> Activate', 'navy') : '' ?>
     <?= $lc['plan'] !== 'perpetual' ? $btn('renew', '<i class="fas fa-rotate"></i> Renew ' . ['monthly' => '1 month', 'yearly' => '1 year', 'trial' => '14 days'][$lc['plan']], 'gold', 'Extend this licence by one period?') : '' ?>
     <?= $lc['status'] === 'active' ? $btn('suspended', '<i class="fas fa-pause"></i> Suspend', 'danger', 'Suspend this licence? The app stops opening for this client; nothing is deleted.') : '' ?>
+    <?= $lc['deployment'] === 'cloud' && AmetecsLicences::installed($lc) ? $btn('uninstall', '<i class="fas fa-box-archive"></i> Uninstall', 'ghost', 'Uninstall this app for the client? They see Download again; their data is kept.') : '' ?>
     <?= $lc['status'] !== 'cancelled' ? $btn('cancelled', '<i class="fas fa-ban"></i> Cancel', 'danger', 'Cancel this licence? The client loses the app; history and data are kept.') : '' ?>
     <?php if ((float) ($lc['price'] ?? 0) > 0 && $lc['plan'] !== 'perpetual' && AmetecsBilling::ready()): ?><form method="post" class="inline"><?= $csrf() ?><input type="hidden" name="do" value="invoice-new"><input type="hidden" name="licence" value="<?= $lid ?>"><button class="btn ghost"><i class="fas fa-file-invoice"></i> Raise renewal invoice</button></form><?php endif; ?>
     <span class="muted"><b>Suspend</b> = temporary stop (e.g. unpaid). <b>Cancel</b> = the client no longer takes this app. Neither deletes anything; Activate undoes both.</span></div></div>
+
+  <?php $rc = $_SESSION['reveal_code'] ?? null; unset($_SESSION['reveal_code']); $codesL = AmetecsLicences::codesOf((string) $lc['tenant_id'], (string) $lc['app']); $nu = AmetecsLicences::nextUntil($lc) ?? date('Y-m-d', strtotime('+1 year')); ?>
+  <div class="box" id="codes"><div class="hd"><h2><i class="fas fa-ticket"></i>Licence codes (LC)</h2></div><div class="bd">
+    <?php if (is_array($rc) && (string) $rc['id'] === (string) $lid): ?><div class="reveal"><b><i class="fas fa-key"></i> Shown once — copy it now.</b> Licence code: <code><?= ag_h($rc['code']) ?></code></div><?php endif; ?>
+    <form method="post" class="row"><?= $csrf() ?><input type="hidden" name="do" value="licence-code"><input type="hidden" name="id" value="<?= $lid ?>">
+      <label>Plan <select name="plan"><?php foreach (AmetecsLicences::PLANS as $pk => $pn): ?><option value="<?= $pk ?>"<?= $pk === $lc['plan'] ? ' selected' : '' ?>><?= $pn ?></option><?php endforeach; ?></select></label>
+      <label>Seats <input type="number" name="seats" min="1" value="<?= max(1, (int) $lc['seats']) ?>" style="width:90px"></label>
+      <label>Valid till <input type="date" name="valid_until" value="<?= ag_h($nu) ?>"></label>
+      <label>Code works for <input type="number" name="days" min="1" max="365" value="30" style="width:70px"> days</label>
+      <button class="btn gold"><i class="fas fa-ticket"></i>Issue licence code</button></form>
+    <p class="muted" style="font-size:12.5px;margin:10px 0">The client enters the code on Licences &amp; plans; these terms apply at once and the app opens again. One use only. Suspending or cancelling the licence withdraws unused codes.</p>
+    <?php if ($codesL !== []): ?><table class="tbl"><tr><th>Code</th><th>Terms</th><th>Issued</th><th>State</th><th></th></tr><?php foreach (array_slice($codesL, 0, 12) as $cc): ?>
+      <tr><td><code>LC-…<?= ag_h($cc['tail']) ?></code></td><td><?= ag_h(($cc['terms']['plan'] ?? '') . ' · ' . ($cc['terms']['seats'] ?? '') . ' seats · till ' . ($cc['terms']['valid_until'] ?? '')) ?></td>
+        <td><?= ag_h(substr((string) $cc['issued_at'], 0, 16)) ?> <span class="muted"><?= ag_h((string) $cc['issued_by']) ?></span></td>
+        <td><span class="pill <?= ['waiting' => 'amber', 'used' => 'green', 'revoked' => 'grey', 'lapsed' => 'grey'][$cc['state']] ?>"><?= ag_h(ucfirst($cc['state'])) ?></span><?= $cc['state'] === 'used' ? ' <span class="muted">' . ag_h(substr((string) $cc['used_at'], 0, 16) . ' ' . $cc['used_by']) . '</span>' : ($cc['state'] === 'waiting' ? ' <span class="muted">use by ' . ag_h($cc['use_by']) . '</span>' : '') ?></td>
+        <td><?php if ($cc['state'] === 'waiting'): ?><form method="post" class="inline" onsubmit="return confirm('Withdraw this code?')"><?= $csrf() ?><input type="hidden" name="do" value="licence-code-revoke"><input type="hidden" name="id" value="<?= $lid ?>"><input type="hidden" name="tail" value="<?= ag_h($cc['tail']) ?>"><button class="btn ghost">Withdraw</button></form><?php endif; ?></td></tr>
+    <?php endforeach; ?></table><?php endif; ?>
+  </div></div>
 
   <?php if ($lc['deployment'] === 'onprem'): $haveKey = trim((string) ($lc['key_hash'] ?? '')) !== ''; ?>
   <div class="box"><div class="hd"><h2><i class="fas fa-server"></i>On-premise installation</h2></div><div class="bd">
@@ -1595,7 +1652,7 @@ $myIni = strtoupper(implode('', array_map(static fn (string $w): string => mb_su
         $hasBackup = ($root = AmetecsReleases::pluginRoot($c)) !== null && is_file($root . '/storage/updates/history.json');
         $state = $pv === '' ? ['off', 'Not on this server'] : ($newest !== null && version_compare($newest['version'], $pv, '>') ? ['amber', 'Update available'] : ['green', 'Up to date']); ?>
     <div class="vc" style="--c:<?= ag_h((string) $p['color']) ?>"><div class="vh"><?= $mk($c, $p) ?><b><?= ag_h($p['name']) ?></b><span class="vs <?= $state[0] ?>"><?= $state[1] ?></span></div>
-      <div class="vv"><div><small>Running</small><b><?= $pv !== '' ? ag_h($pv) : '—' ?></b></div><i class="fas fa-arrow-right"></i><div><small>Newest</small><b><?= $newest !== null ? '<a href="?p=release&id=' . (int) $newest['id'] . '">' . ag_h($newest['version']) . '</a>' : '—' ?></b></div></div>
+      <div class="vv"><div><small>Running</small><b><?= $pv !== '' ? ag_h($pv) : '—' ?></b></div><i class="fas fa-arrow-right"></i><div><small>Newest</small><b><?= $newest !== null ? '<a href="?p=release&id=' . (int) $newest['id'] . '">' . ag_h($newest['version']) . '</a>' : ($pv !== '' ? ag_h($pv) : '—') ?></b></div></div>
       <div class="vf"><span><i class="fas fa-server"></i><?= $behind ?> on-premise behind</span><?php if ($hasBackup): ?><form method="post" class="inline" onsubmit="return confirm('Roll back the last install of <?= ag_h($p['name']) ?> on the cloud server?')"><?= $csrf() ?><input type="hidden" name="do" value="release-rollback"><input type="hidden" name="app" value="<?= ag_h($c) ?>"><button class="lnk"><i class="fas fa-rotate-left"></i>Roll back</button></form><?php endif; ?></div></div>
   <?php endforeach; ?></div>
 

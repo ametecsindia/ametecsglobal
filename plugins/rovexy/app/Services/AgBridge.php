@@ -30,6 +30,48 @@ final class AgBridge
         return dirname(base_path(), 2);
     }
 
+    /** True when this ROVEXY runs inside AmetecsGlobal: then every licence comes from AmetecsGlobal Super Admin only. */
+    public static function managed(): bool
+    {
+        return is_file(self::agRoot() . '/core/open.php');
+    }
+
+    /**
+     * THE LICENCE, LIVE FROM AMETECSGLOBAL SUPER ADMIN (ag_licences + the client's status), in the shape Licensing reads.
+     * Suspend, cancel, renew or change seats in Super Admin and ROVEXY follows within a minute - console and phones alike.
+     * Null when this workspace is not an AmetecsGlobal client, or AmetecsGlobal's database cannot be read just now
+     * (then the copy saved at the last sign-in applies).
+     */
+    public static function liveLicence(Company $c): ?array
+    {
+        $tid = (string) $c->setting('ag_tenant');
+        if ($tid === '') {
+            return null;
+        }
+        // ponytail: 60-second cache per workspace; a Super Admin change reaches ROVEXY within a minute
+        return \Illuminate\Support\Facades\Cache::remember('ag-licence:' . $c->id, 60, static function () use ($tid): ?array {
+            try {
+                $ag = self::agPdo();
+                $q = $ag->prepare("SELECT l.status, l.seats, l.valid_until, l.plan, t.status_code FROM tenants t
+                    LEFT JOIN ag_licences l ON l.tenant_id = t.id AND l.app = 'rovexy' WHERE t.id = ?");
+                $q->execute([$tid]);
+                $r = $q->fetch();
+            } catch (\Throwable $x) {
+                report($x);
+                return null;
+            }
+            $status = match (true) {
+                $r === false || $r['status'] === null || $r['status'] === 'cancelled' => 'licence_revoked',
+                $r['status'] === 'suspended' || in_array((string) $r['status_code'], ['suspended', 'closed'], true) => 'licence_suspended',
+                default => 'active',
+            };
+            return ['key' => 'AG-' . $tid, 'kind' => 'package', 'plan' => ucfirst((string) ($r['plan'] ?? '') ?: 'AmetecsGlobal'), 'max_users' => (int) ($r['seats'] ?? 0),
+                'features' => array_keys(Licensing::FEATURES), 'c2c_users' => null, 'maps' => true, 'status' => $status,
+                'expires_at' => ($r['valid_until'] ?? '') ? (new \DateTimeImmutable($r['valid_until'] . ' 23:59:59', new \DateTimeZone('Asia/Kolkata')))->format(DATE_ATOM) : null,
+                'grace_days' => 0];
+        });
+    }
+
     /** The signed hand-over, or null if it is forged, old or already used. */
     public static function verify(string $token): ?array
     {
@@ -62,7 +104,7 @@ final class AgBridge
         return $c;
     }
 
-    /** Seats and expiry from AmetecsGlobal. Call inside the company. */
+    /** Seats and expiry from AmetecsGlobal, saved as the fallback copy (liveLicence is what applies). Call inside the company. */
     public static function licence(Company $c, array $p): void
     {
         $status = ($p['state'] ?? 'on') === 'on' || ($p['state'] ?? '') === 'expired' ? 'active' : 'suspended';
@@ -72,6 +114,7 @@ final class AgBridge
             'max_users' => max(0, (int) ($p['seats'] ?? 0)), 'features' => array_keys(Licensing::FEATURES), 'grace_days' => 0,
             'expires_at' => ($p['until'] ?? '') !== '' ? $p['until'] . ' 23:59:59' : null,
         ]);
+        \Illuminate\Support\Facades\Cache::forget('ag-licence:' . $c->id);
         app(Licensing::class)->forget();
     }
 

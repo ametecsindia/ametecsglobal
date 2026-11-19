@@ -544,7 +544,10 @@ table{width:100%;border-collapse:collapse;margin-bottom:18px}th{background:#1410
         }
         if ($inv['purpose'] === 'plan' && is_array($n = json_decode((string) $inv['notes'], true)) && isset($n['app'], $n['plan'], $n['seats'])) {
             if ($what === 'paid') {
-                AmetecsLicences::put($tid, (string) $n['app'], ['plan' => $n['plan'], 'seats' => (int) $n['seats'], 'price' => number_format((float) $n['price'], 2, '.', ''), 'currency' => 'INR',
+                $was = AmetecsLicences::row($tid, (string) $n['app']);
+                // a new (or cancelled) app bought online: active at once, then the client clicks Download to install it
+                $fresh = $was === null || $was['status'] === 'cancelled' ? ['activated_at' => null, 'deployment' => $was['deployment'] ?? 'cloud'] : [];
+                AmetecsLicences::put($tid, (string) $n['app'], $fresh + ['plan' => $n['plan'], 'seats' => (int) $n['seats'], 'price' => number_format((float) $n['price'], 2, '.', ''), 'currency' => 'INR',
                     'status' => 'active', 'valid_until' => (new DateTimeImmutable(AmetecsAccess::today()))->modify($n['plan'] === 'yearly' ? '+1 year' : '+1 month')->format('Y-m-d')], 'Plan bought online (' . $inv['number'] . ')');
             } elseif (($l = AmetecsLicences::row($tid, (string) $n['app'])) !== null) {
                 AmetecsLicences::event($l, 'Plan payment refunded', 'invoice ' . $inv['number'] . ' - set the plan, seats and date back by hand if needed');

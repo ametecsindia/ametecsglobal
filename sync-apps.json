@@ -409,6 +409,12 @@
             "surface\\EmployeeImport.php"
           ],
           "text": "AmetecsGlobal: email ID required (it is the login)"
+        },
+        {
+          "files": [
+            "surface\\partials\\boot-hooks.php"
+          ],
+          "text": "$hookInAg"
         }
       ],
       "database": {
@@ -448,7 +454,48 @@
           "files": [
             "console\\src\\lib\\api.ts"
           ],
-          "text": "window as any).__ROOT__"
+          "text": "meta[name=\"ag-root\"]"
+        },
+        {
+          "files": [
+            "app\\Services\\Platform\\Licensing.php"
+          ],
+          "text": "AgBridge::liveLicence"
+        }
+      ]
+    },
+    {
+      "name": "QRONEX",
+      "source": "https://github.com/ametecsindia/QRONEX (main @762a387)",
+      "target": "plugins/qronex",
+      "_note": "Laravel 13, Blade portal. One sign-in, licence, seats, branches->offices and employees: app/Services/AgBridge.php + core/open.php?app=qronex. Punches into AmetecsGlobal attendance: core/attendance/qronex-pull.php. Served at /AmetecsGlobal/plugins/qronex/public.",
+      "install": [
+        "tools/ag-install.php"
+      ],
+      "database": {
+        "migrations": "database/migrations",
+        "commands": [
+          "artisan migrate --force"
+        ]
+      },
+      "mustContain": [
+        {
+          "files": [
+            "routes\\web.php"
+          ],
+          "text": "AgSsoController"
+        },
+        {
+          "files": [
+            "app\\Models\\Tenant.php"
+          ],
+          "text": "AgBridge::live"
+        },
+        {
+          "files": [
+            "bootstrap\\app.php"
+          ],
+          "text": "AgCentral"
         }
       ]
     }

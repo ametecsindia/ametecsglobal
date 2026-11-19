@@ -11,7 +11,9 @@ $agConsole = static function () {
     $index = public_path('admin/index.html');
     abort_unless(is_file($index), 404, 'Admin UI not built. Run: cd console && npm run build');
     $root = rtrim(request()->getBasePath(), '/');
-    $html = str_replace('<head>', '<head><base href="' . e($root) . '/admin/"><script>window.__ROOT__=' . json_encode($root) . '</script>', (string) file_get_contents($index));
+    // No inline script and no <base>: the Content-Security-Policy (SecurityHeaders) forbids both. A <meta> carries the folder.
+    $html = str_replace(['<head>', '"./assets/', '"../brand/', '"../favicon.ico"'],
+        ['<head><meta name="ag-root" content="' . e($root) . '">' . (\App\Services\AgBridge::managed() ? '<meta name="ag-managed" content="1">' : ''), '"' . $root . '/admin/assets/', '"' . $root . '/brand/', '"' . $root . '/favicon.ico"'], (string) file_get_contents($index));
     return response($html, 200, ['Content-Type' => 'text/html; charset=UTF-8', 'Cache-Control' => 'no-store']);
 };
 Route::get('/admin/{path?}', $agConsole)->where('path', '.*'); // real files (admin/assets/*) are served by the web server before Laravel

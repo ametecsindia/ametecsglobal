@@ -224,7 +224,7 @@ Route::prefix('admin')->middleware('company')->group(function () {
         Route::put('auth/password', [Admin\AuthController::class, 'password'])->middleware('throttle:admin-login');
     });
 
-    Route::middleware(['auth:web', 'mfa'])->group(function () {
+    Route::middleware(['auth:web', 'mfa', 'ag.locked'])->group(function () {
         Route::get('overview', [Admin\OverviewController::class, 'show']);
         Route::get('reports/portfolio', [Admin\PortfolioReportController::class, 'show'])->middleware('perm:calls.view');
         Route::get('reports/portfolio.csv', [Admin\PortfolioReportController::class, 'export'])->middleware('perm:reports.export');
@@ -341,16 +341,16 @@ Route::prefix('admin')->middleware('company')->group(function () {
 
         // ROVEXY plan & licence (12 Oct 2026): every admin can see it; renewing needs settings.storage (admins have it).
         Route::get('licence', [Admin\LicenceController::class, 'show']);
-        Route::post('licence/renew', [Admin\LicenceController::class, 'renew'])->middleware('perm:settings.storage');
-        Route::get('licence/quote', [Admin\LicenceController::class, 'quote'])->middleware('perm:settings.storage');
-        Route::post('licence/key', [Admin\LicenceController::class, 'saveKey'])->middleware(['perm:settings.storage', 'throttle:10,1']);
-        Route::post('licence/check', [Admin\LicenceController::class, 'checkNow'])->middleware(['perm:settings.storage', 'throttle:10,1']);
-        Route::post('licence/file', [Admin\LicenceController::class, 'uploadFile'])->middleware(['perm:settings.storage', 'throttle:10,1']);
-        Route::get('licence/update', [Admin\UpdateController::class, 'show'])->middleware('perm:settings.storage');
-        Route::post('licence/update/check', [Admin\UpdateController::class, 'check'])->middleware(['perm:settings.storage', 'throttle:10,1']);
-        Route::post('licence/update/download', [Admin\UpdateController::class, 'download'])->middleware(['perm:settings.storage', 'throttle:5,1']);
-        Route::post('licence/update/install', [Admin\UpdateController::class, 'install'])->middleware(['perm:settings.storage', 'throttle:5,1']);
-        Route::post('licence/orders/{number}/cancel', [Admin\LicenceController::class, 'cancel'])->middleware('perm:settings.storage');
+        Route::post('licence/renew', [Admin\LicenceController::class, 'renew'])->middleware(['ag.managed', 'perm:settings.storage']);
+        Route::get('licence/quote', [Admin\LicenceController::class, 'quote'])->middleware(['ag.managed', 'perm:settings.storage']);
+        Route::post('licence/key', [Admin\LicenceController::class, 'saveKey'])->middleware(['ag.managed', 'perm:settings.storage', 'throttle:10,1']);
+        Route::post('licence/check', [Admin\LicenceController::class, 'checkNow'])->middleware(['ag.managed', 'perm:settings.storage', 'throttle:10,1']);
+        Route::post('licence/file', [Admin\LicenceController::class, 'uploadFile'])->middleware(['ag.managed', 'perm:settings.storage', 'throttle:10,1']);
+        Route::get('licence/update', [Admin\UpdateController::class, 'show'])->middleware(['ag.managed', 'perm:settings.storage']);
+        Route::post('licence/update/check', [Admin\UpdateController::class, 'check'])->middleware(['ag.managed', 'perm:settings.storage', 'throttle:10,1']);
+        Route::post('licence/update/download', [Admin\UpdateController::class, 'download'])->middleware(['ag.managed', 'perm:settings.storage', 'throttle:5,1']);
+        Route::post('licence/update/install', [Admin\UpdateController::class, 'install'])->middleware(['ag.managed', 'perm:settings.storage', 'throttle:5,1']);
+        Route::post('licence/orders/{number}/cancel', [Admin\LicenceController::class, 'cancel'])->middleware(['ag.managed', 'perm:settings.storage']);
         Route::get('branding', [Admin\SettingsController::class, 'branding']);
         Route::post('branding', [Admin\SettingsController::class, 'saveBranding'])->middleware('perm:branding.manage');
         Route::get('storage/estimate', [Admin\SettingsController::class, 'estimate'])->middleware('perm:settings.storage');

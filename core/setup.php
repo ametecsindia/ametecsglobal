@@ -106,7 +106,7 @@ final class AmetecsSetup
         }
         // Hidden by the server's own CSS, so nothing depends on the script below running: every way to add, import,
         // edit or bulk-upload employees inside the app (the Directory stays view and reports only).
-        return '<style>.topbar a[href="index.php"],#add-employment,#add-employee-link,.dir-empty-acts,'
+        return '<style>.topbar a[href="index.php"],a[href*="r=my-subscription"],a[href*="r=sys-updates"],#add-employment,#add-employee-link,.dir-empty-acts,'
             . 'a[href*="#add-employment"],a[href*="add=1"],a[href*="r=employee-import"],a[href*="edit="][href*="r=employees"],'
             . 'form:has(input[name=action][value="employee-import-sample"]),form:has(input[name=action][value="employee-status"]),'
             . 'form:has(input[name=action][value="employee-delete"]),form:has(input[name=action][value="employee-delete-cancel"]){display:none!important}'

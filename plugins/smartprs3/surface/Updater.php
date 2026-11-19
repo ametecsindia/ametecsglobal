@@ -49,7 +49,8 @@ final class Updater
 
     public function runningVersion(): string
     {
-        $v = json_decode((string) @file_get_contents($this->root . '/config/version.json'), true);
+        // AmetecsGlobal: other plugins (ROVEXY) keep version.json at their root.
+        $v = json_decode((string) (@file_get_contents($this->root . '/config/version.json') ?: @file_get_contents($this->root . '/version.json')), true);
 
         return is_array($v) ? (string) ($v['version'] ?? '') : '';
     }
@@ -227,7 +228,7 @@ final class Updater
             $data = $z->getFromIndex($i);
             $tmp = $target . '.upd-' . bin2hex(random_bytes(4));
 
-            if ($data === false || @file_put_contents($tmp, $data) === false || !@rename($tmp, $target)) {
+            if ($data === false || @file_put_contents($tmp, $data) === false || !self::replace($tmp, $target)) {
                 @unlink($tmp);
                 $z->close();
                 $this->restore($backupPath, $created);
@@ -245,7 +246,9 @@ final class Updater
         // MIGRATIONS (pending only, never --fresh), then the application account's grants.
         $log = "Installed {$written} file(s); backup " . basename($backupPath) . "\n";
         // Apps without SmartPRS3's migration tool (other AmetecsGlobal plugins) have no database step here.
-        $migrated = is_file($this->root . '/tools/db/migrate.php') ? $this->runTool('tools/db/migrate.php') : ['ok' => true, 'log' => "\n(no database migrations for this app)\n"];
+        $migrated = is_file($this->root . '/tools/db/migrate.php') ? $this->runTool('tools/db/migrate.php')
+            : (is_file($this->root . '/artisan') ? $this->runTool('artisan migrate --force')   // Laravel plugins (ROVEXY)
+            : ['ok' => true, 'log' => "\n(no database migrations for this app)\n"]);
         $log .= $migrated['log'];
 
         if ($migrated['ok'] && is_file($this->root . '/tools/db/grant-application-account.php')) {
@@ -262,6 +265,25 @@ final class Updater
 
         return ['ok' => true, 'version' => $version, 'from' => $from, 'log' => $log,
             'message' => "Updated {$from} → {$version}." . ($migrated['ok'] ? '' : ' The files are installed but the database migration did not finish — see the log below.')];
+    }
+
+    /**
+     * Put $tmp in place of $target. On Windows rename() over a file that the web server is reading at that moment
+     * (e.g. public/index.php while the app is open in a browser) fails for a moment: retry, then copy over it.
+     */
+    private static function replace(string $tmp, string $target): bool
+    {
+        for ($try = 0; $try < 5; $try++) {
+            if (@rename($tmp, $target)) {
+                return true;
+            }
+            usleep(200000);
+        }
+        if (@copy($tmp, $target)) {
+            @unlink($tmp);
+            return true;
+        }
+        return false;
     }
 
     /** @param list<string> $created files the failed install added (removed again) */
@@ -285,7 +307,10 @@ final class Updater
         $env = Database::env($this->root . '/.env');
         $candidates = array_filter([(string) ($env['SMARTPRS_PHP_CLI'] ?? ''), PHP_BINDIR . '/php', PHP_BINDIR . '/php.exe', '/usr/bin/php', '/usr/local/bin/php']);
 
-        foreach (glob('C:/laragon/bin/php/*/php.exe') ?: [] as $c) {
+        // Laragon keeps several PHPs (7.4, 8.3 ...): the one matching the running PHP first, then the newest.
+        $lg = glob('C:/laragon/bin/php/*/php.exe') ?: [];
+        usort($lg, static fn ($a, $b) => (int) !str_contains(basename(dirname($a)), 'php-' . PHP_MAJOR_VERSION . '.' . PHP_MINOR_VERSION . '.') <=> (int) !str_contains(basename(dirname($b)), 'php-' . PHP_MAJOR_VERSION . '.' . PHP_MINOR_VERSION . '.') ?: strnatcmp(basename(dirname($b)), basename(dirname($a))));
+        foreach ($lg as $c) {
             $candidates[] = $c;
         }
 

@@ -41,7 +41,9 @@ if (!$superConsole) {
         $GLOBALS['ametecs_tenant'] = (string) ($session->user()['tenant_id'] ?? '');
         $agScreen = AmetecsSetup::screenOf((string) ($_GET['r'] ?? ''), (string) ($_GET['k'] ?? ''), $_GET);
         $agKind = AmetecsSetup::kind($agScreen);   // 'master' | 'shared' | '' (an ordinary app screen)
-        $agOn = AmetecsAccess::state($GLOBALS['ametecs_tenant'], 'smartprs3') === 'on';
+        $agOn = AmetecsAccess::state($GLOBALS['ametecs_tenant'], 'smartprs3') === 'on'
+            && AmetecsLicences::installed(AmetecsLicences::row($GLOBALS['ametecs_tenant'], 'smartprs3'))
+            && !AmetecsLicences::maintenance($GLOBALS['ametecs_tenant'], 'smartprs3');   // maintenance mode while it installs / updates   // Download first (owner, 19 Nov 2026)
         $agPost = ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST';
         $agStop = static function (string $why) use ($agPost): never {
             if ($agPost) {
@@ -57,6 +59,17 @@ if (!$superConsole) {
             $agStop('Settings and the employee master are managed centrally, in AmetecsGlobal Organization Setup.');
         }
         $agAction = (string) ($_POST['action'] ?? '');
+        // LICENCES ONLY IN SUPER ADMIN (owner, 19 Nov 2026): SmartPRS3's own subscription, renewal, invoices and self-update
+        // are closed inside AmetecsGlobal; the client sees its licence under My applications.
+        if (in_array((string) ($_GET['r'] ?? ''), ['my-subscription', 'sys-updates'], true) || in_array($agAction, ['my-renew', 'my-invoice', 'system-update', 'plan', 'subscription', 'onprem', 'feature-flag'], true)) {
+            $_SESSION['flash_problem'] = 'Licences, renewals and updates are managed by Ametecs in AmetecsGlobal Super Admin. Your licence is shown under My applications.';
+            if ($agFramed) {
+                echo '<!doctype html><script>top.location.href="../../../core/?v=apps";</script>';
+                exit;
+            }
+            header('Location: ../../../core/?v=apps');
+            exit;
+        }
         if ($agPost) {
             register_shutdown_function([AmetecsLogins::class, 'syncAfterSave']);   // a login for every saved employee, straight away
         }

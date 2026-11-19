@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { NavLink, Navigate, Route, Routes } from 'react-router-dom';
-import { del, download, fmtDate, get, patch, post, put, qs, setOnUnauthorized } from '../lib/api';
+import { ROOT, del, download, fmtDate, get, patch, post, put, qs, setOnUnauthorized } from '../lib/api';
 import { Badge, Card, ErrorBox, Field, Icon, Kpi, Modal, Notice, Page, Pager, PayBadge, Table, Toaster, toast, useAction, useAsync } from '../components/ui';
 import { MyProfile, StaffSignIn, type MfaPending, type StaffMe } from './StaffAuth';
 import { GM_APIS, MapsUsageReport, Road, SKU_ORDER, StackBars, monthName, nn, paceFor, usdInr } from '../components/MapsReport';
@@ -52,7 +52,7 @@ export function SuperApp() {
   return (
     <div className="shell">
       <aside className="sidebar">
-        <div className="brand"><img src="../brand/rovexy-mark-dark.svg" alt="ROVEXY" width="36" height="40" style={{ flex: "none", background: "none", padding: 0 }} /><span className="lbl">ROVEXY · Super Admin</span></div>
+        <div className="brand"><img src={`${ROOT}/brand/rovexy-mark-dark.svg`} alt="ROVEXY" width="36" height="40" style={{ flex: "none", background: "none", padding: 0 }} /><span className="lbl">ROVEXY · Super Admin</span></div>
         <nav className="nav" aria-label="Modules">
           {items.map((i) => <NavLink key={i.to} to={i.to} end={i.to === '/'} className="top"><Icon name={i.icon} size={19} /><span className="lbl">{i.label}</span></NavLink>)}
           {can('accounts') && <a className="top" href="/accounts"><Icon name="chart" size={19} /><span className="lbl">Accounts ↗</span></a>}
