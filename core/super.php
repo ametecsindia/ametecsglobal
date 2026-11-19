@@ -836,7 +836,7 @@ $licenceRows = static function (string $tid, array $prefill = []) use ($plugins,
 $statusPill = static fn (string $s): string => '<span class="pill ' . (['active' => 'green', 'suspended' => 'amber', 'closed' => 'red'][$s] ?? 'grey') . '">' . ag_h(ucfirst($s ?: 'unknown')) . '</span>';
 $f = static fn (string $k, string $default = '') => ag_h((string) ($form[$k] ?? $default));
 ?><!DOCTYPE html>
-<html lang="en"><head><meta charset="utf-8"><script>try{localStorage.getItem("agTheme")==="classic"||document.documentElement.classList.add("t-gold")}catch(e){document.documentElement.classList.add("t-gold")}</script><meta name="viewport" content="width=device-width, initial-scale=1">
+<html lang="en"><head><meta charset="utf-8"><script>try{var R=document.documentElement,T=localStorage.getItem("agTheme");R.classList.add("t-gold");(T==="navy"||T==="classic")&&R.classList.add("th-navy");T==="light"&&R.classList.add("th-light");T==="dark"&&R.classList.add("th-dark")}catch(e){document.documentElement.classList.add("t-gold")}</script><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Super Admin · AmetecsGlobal</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 <style>
@@ -982,7 +982,7 @@ main{max-width:1560px;padding:16px 26px 20px}
 @media (max-width:1100px){.kstrip{grid-template-columns:repeat(3,1fr)}.dgrid2{grid-template-columns:1fr}}
 .cn b{white-space:nowrap}.mxt td:last-child,.mxt th:last-child{padding-right:16px;white-space:nowrap}.mxt th.ac{padding-left:4px;padding-right:4px}.mxt th:first-child{width:30%}
 </style>
-<link rel="stylesheet" href="assets/shell.css?v=17"><link rel="stylesheet" href="assets/super.css?v=13"><link rel="stylesheet" href="assets/theme-gold.css?v=3"><link rel="stylesheet" href="assets/theme-sa-light.css?v=1"></head><body>
+<link rel="stylesheet" href="assets/shell.css?v=21"><link rel="stylesheet" href="assets/super.css?v=13"><link rel="stylesheet" href="assets/theme-gold.css?v=3"><link rel="stylesheet" href="assets/theme-sa-light.css?v=6"><link rel="stylesheet" href="assets/theme-alt.css?v=11"></head><body>
 <?php
 $myName = trim((string) ($me['name'] ?? '')) ?: ucfirst((string) strtok($meEmail, '@'));
 $myIni = strtoupper(implode('', array_map(static fn (string $w): string => mb_substr($w, 0, 1), array_slice(preg_split('/[\s._-]+/', $myName) ?: ['S'], 0, 2))));
@@ -1025,7 +1025,6 @@ $myIni = strtoupper(implode('', array_map(static fn (string $w): string => mb_su
 <div class="shell">
 <aside class="side">
   <a class="brand" href="?p=dashboard"><span class="lm">AG</span><span>Ametecs<b>Global</b><small>SUPER ADMIN</small></span></a>
-  <a class="newc" href="?p=client-new"><i class="fas fa-plus"></i><span>New client</span></a>
   <?php foreach ($navItems as $grp => $items): ?><?= $grp !== '' ? '<div class="nav-l">' . $grp . '</div>' : '' ?>
     <?php foreach ($items as $k => [$label, $ic]): ?><a class="nv<?= $k === ($navGroupOf[$page] ?? $page) ? ' on' : '' ?>" href="?p=<?= $k ?>" title="<?= ag_h($label) ?>"><i class="fas <?= $ic ?>"></i><span><?= ag_h($label) ?></span><?= $k === 'clients' ? '<em class="cnt">' . count($tenants) . '</em>' : '' ?></a><?php endforeach; ?>
   <?php endforeach; ?>
@@ -1039,7 +1038,7 @@ $myIni = strtoupper(implode('', array_map(static fn (string $w): string => mb_su
   <div class="right">
     <a class="cv" href="./" target="_blank"><i class="fas fa-eye"></i>Client view</a>
     <details class="me"><summary><span class="av"><?= ag_h($myIni) ?></span><span class="nm"><?= ag_h($myName) ?><small>Super Admin</small></span><i class="fas fa-chevron-down" style="font-size:11px;color:var(--mute)"></i></summary>
-      <div class="dd"><a href="?p=account"><i class="fas fa-circle-user"></i>My account</a><a data-theme-toggle><i class="fas fa-palette"></i><span data-theme-label>Classic navy theme</span></a><a href="?p=staff"><i class="fas fa-user-shield"></i>Super Admins</a>
+      <div class="dd"><a href="?p=account"><i class="fas fa-circle-user"></i>My account</a><div class="throw"><span>Theme</span><a data-theme-set="gold" title="Golden"><span class="sw" style="background:linear-gradient(135deg,#f3dc95,#d6ae55 45%,#b08433);color:#14100a"><i class="fas fa-crown"></i></span></a><a data-theme-set="navy" title="Navy"><span class="sw" style="background:linear-gradient(145deg,#132b50,#0a1a33);color:#e8c977"><i class="fas fa-gem"></i></span></a><a data-theme-set="light" title="Light"><span class="sw" style="background:#fff;color:#d6ae55"><i class="fas fa-sun"></i></span></a><a data-theme-set="dark" title="Dark"><span class="sw" style="background:#0d0b08;color:#e8c977"><i class="fas fa-moon"></i></span></a></div><a href="?p=staff"><i class="fas fa-user-shield"></i>Super Admins</a>
         <form method="post"><?= $csrf() ?><button name="do" value="signout"><i class="fas fa-arrow-right-from-bracket"></i>Sign out</button></form></div></details>
   </div>
 </header>
@@ -1184,30 +1183,39 @@ $myIni = strtoupper(implode('', array_map(static fn (string $w): string => mb_su
       <?php endforeach; ?></ul><?php endif; ?></div>
   </div>
 
-  <div class="dgrid3">
-    <div class="box"><div class="hd"><h2><i class="fas fa-table-cells"></i>Client licences</h2>
-        <span class="lg"><em><span class="chk on"><i class="fas fa-check"></i></span>Live</em><em><span class="chk soon"><i class="fas fa-check"></i></span>Arriving soon</em><em><span class="chk off"></span>Off</em><em><span class="chk bad"><i class="fas fa-xmark"></i></span>Expired</em></span>
+  <?php // FOUR BOXES REDESIGNED (owner, 19 Nov 2026: "redesign these four"), royal black and gold. ?>
+  <div class="dgrid3 d4">
+    <div class="box d4mx"><div class="hd"><h2><i class="fas fa-table-cells"></i>Client licences</h2>
+        <span class="lg"><em><span class="chk on"><i class="fas fa-check"></i></span>Live</em><em><span class="chk soon"><i class="fas fa-check"></i></span>Arriving soon</em><em><span class="chk off"></span>Not licensed</em><em><span class="chk bad"><i class="fas fa-xmark"></i></span>Expired</em></span>
         <a href="?p=clients" class="more">All clients <i class="fas fa-arrow-right"></i></a></div>
-      <div class="mx"><table class="mxt"><tr><th>Client</th><?php foreach ($plugins as $c => $p): ?><th class="ac" title="<?= ag_h($p['name']) ?>"><?= $saMark($c, $p) ?><small><?= ag_h($p['name']) ?></small></th><?php endforeach; ?><th class="ac">Employees</th><th>Status</th></tr>
-      <?php foreach (array_slice($tenants, 0, 8) as $t): $tid = (string) $t['id']; ?><tr>
+      <div class="mx"><table class="mxt"><thead><tr><th>Client</th><?php foreach ($plugins as $c => $p): ?><th class="ac" title="<?= ag_h($p['name']) ?>"><small><?= ag_h($p['name']) ?></small></th><?php endforeach; ?><th class="ac">Apps</th><th class="ac">Employees</th><th>Status</th></tr></thead><tbody>
+      <?php foreach (array_slice($tenants, 0, 8) as $t): $tid = (string) $t['id']; $nOn = 0; foreach ($plugins as $c => $p) { AmetecsAccess::state($tid, $c, $all) === 'on' && $nOn++; } ?><tr>
         <td><a class="cn" href="?p=client&id=<?= (int) $tid ?>"><b><?= ag_h($t['name']) ?></b><small><?= ($t['subdomain'] ?? '') !== '' ? '/c/' . ag_h((string) $t['subdomain']) : 'no sign-in link' ?></small></a></td>
         <?php foreach ($plugins as $c => $p): ?><td class="ac"><?= $chk(AmetecsAccess::state($tid, $c, $all), $p['open'] !== null) ?></td><?php endforeach; ?>
-        <td class="ac"><b><?= (int) ($used[$tid] ?? 0) ?></b></td><td><?= $statusPill((string) $t['status_code']) ?></td></tr>
-      <?php endforeach; ?><?php if ($tenants === []): ?><tr><td colspan="<?= count($plugins) + 3 ?>"><div class="empty"><i class="fas fa-building"></i>No clients yet.</div></td></tr><?php endif; ?></table></div></div>
-    <div class="box"><div class="hd"><h2><i class="fas fa-layer-group"></i>Licences by app</h2><span class="muted sm">clients &middot; seats</span></div>
-      <ul class="apl2"><?php foreach ($plugins as $c => $p): [$cn, $sn] = $perApp[$c] ?? [0, 0]; ?><li><?= $saMark($c, $p) ?><div><span class="an"><?= ag_h($p['name']) ?><small><?= $p['open'] !== null ? 'Live' : 'Arriving soon' ?></small></span><span class="pbar"><i style="width:<?= max(1, round(100 * $sn / $maxSeats)) ?>%;background:<?= ag_h((string) $p['color']) ?>"></i></span></div><b><?= $cn ?><small> · <?= $sn ?></small></b></li><?php endforeach; ?></ul></div>
+        <td class="ac"><span class="d4n"><?= $nOn ?><small>/<?= count($plugins) ?></small></span></td><td class="ac"><b class="d4emp"><?= (int) ($used[$tid] ?? 0) ?></b></td><td><?= $statusPill((string) $t['status_code']) ?></td></tr>
+      <?php endforeach; ?><?php if ($tenants === []): ?><tr><td colspan="<?= count($plugins) + 4 ?>"><div class="empty"><i class="fas fa-building"></i>No clients yet.</div></td></tr><?php endif; ?></tbody></table></div></div>
+    <div class="box d4apps"><div class="hd"><h2><i class="fas fa-layer-group"></i>Licences by app</h2><span class="muted sm">by seats</span></div>
+      <ol class="d4rank"><?php $ranked = $plugins; uksort($ranked, static fn ($x, $y) => ($perApp[$y][1] ?? 0) <=> ($perApp[$x][1] ?? 0)); $rk = 0;
+        foreach ($ranked as $c => $p): [$cn, $sn] = $perApp[$c] ?? [0, 0]; $rk++; ?>
+        <li><span class="d4r"><?= $rk ?></span><div class="d4m"><div class="d4t"><b><?= ag_h($p['name']) ?></b><span class="d4s <?= $p['open'] !== null ? 'live' : '' ?>"><?= $p['open'] !== null ? 'Live' : 'Soon' ?></span></div>
+          <span class="d4bar"><i style="width:<?= max(2, round(100 * $sn / $maxSeats)) ?>%"></i></span></div>
+          <div class="d4v"><b><?= number_format($sn) ?></b><small>seats</small><em><?= $cn ?> client<?= $cn === 1 ? '' : 's' ?></em></div></li>
+      <?php endforeach; ?></ol></div>
   </div>
 
-  <div class="dgrid3">
-    <div class="box"><div class="hd"><h2><i class="fas fa-server"></i>On-premise servers</h2><span class="muted sm"><?= count($op) ?> active on-premise licences</span></div><div class="bd">
-      <div class="fleet"><a href="?p=licences&amp;dep=onprem"><b class="g"><?= $fleet['online'] ?></b><span>Checked in this week</span></a><a href="?p=licences&amp;dep=onprem"><b class="r"><?= $fleet['silent'] ?></b><span>Silent for a week+</span></a><a href="?p=licences&amp;dep=onprem"><b class="a"><?= $fleet['pending'] ?></b><span>Not activated yet</span></a></div>
-      <?php if ($adopt !== []): ?><div class="adopt"><b class="sm">On the newest version</b><?php foreach ($adopt as $c => [$nv, $cur, $tot]): ?><div><span><?= ag_h($plugins[$c]['name']) ?> <small><?= $nv !== null ? ag_h($nv) : 'no release yet' ?></small></span><span class="pbar"><i style="width:<?= $tot > 0 ? round(100 * $cur / $tot) : 0 ?>%"></i></span><b><?= $cur ?>/<?= $tot ?></b></div><?php endforeach; ?></div>
+  <div class="dgrid3 d4">
+    <div class="box d4op"><div class="hd"><h2><i class="fas fa-server"></i>On-premise servers</h2><span class="muted sm"><?= count($op) ?> active on-premise licences</span></div><div class="bd">
+      <div class="d4fleet"><a href="?p=licences&amp;dep=onprem"><span class="fi ok"><i class="fas fa-signal"></i></span><b><?= $fleet['online'] ?></b><small>Checked in this week</small></a>
+        <a href="?p=licences&amp;dep=onprem" class="<?= $fleet['silent'] > 0 ? 'warn' : '' ?>"><span class="fi<?= $fleet['silent'] > 0 ? ' bad' : '' ?>"><i class="fas fa-bell-slash"></i></span><b><?= $fleet['silent'] ?></b><small>Silent for a week+</small></a>
+        <a href="?p=licences&amp;dep=onprem"><span class="fi"><i class="fas fa-hourglass-half"></i></span><b><?= $fleet['pending'] ?></b><small>Not activated yet</small></a></div>
+      <?php if ($adopt !== []): ?><div class="d4ad"><div class="d4adh"><span>Application</span><span>On the newest version</span></div><?php foreach ($adopt as $c => [$nv, $cur, $tot]): $pc = $tot > 0 ? round(100 * $cur / $tot) : 0; ?>
+        <div class="d4adr"><span><b><?= ag_h($plugins[$c]['name']) ?></b><small><?= $nv !== null ? 'v' . ag_h($nv) : 'no release yet' ?></small></span><span class="d4bar"><i style="width:<?= $pc ?>%"></i></span><em><?= $cur ?>/<?= $tot ?></em></div><?php endforeach; ?></div>
       <?php else: ?><p class="muted" style="margin:12px 0 0;font-size:13px">No on-premise installations yet.</p><?php endif; ?></div></div>
-    <div class="box"><div class="hd"><h2><i class="fas fa-bolt"></i>Latest changes</h2><a href="?p=activity" class="more">All <i class="fas fa-arrow-right"></i></a></div>
+    <div class="box d4feed"><div class="hd"><h2><i class="fas fa-bolt"></i>Latest changes</h2><a href="?p=activity" class="more">All <i class="fas fa-arrow-right"></i></a></div>
       <?php if ($feed === []): ?><div class="empty"><i class="fas fa-wind"></i>No changes yet.</div><?php else: ?>
-      <ul class="feed"><?php foreach ($feed as $r): ?>
-        <li><span class="fd"></span><div><div class="ft2"><?= ag_h($r['what']) ?><?= ($r['tenant'] ?? '') !== '' ? ' &middot; <a href="?p=client&id=' . (int) $r['tenant'] . '">' . ag_h($names[$r['tenant']] ?? '#' . $r['tenant']) . '</a>' : '' ?></div>
-          <div class="fm"><?= ag_h($r['who']) ?> &middot; <time data-at="<?= ag_h($r['at']) ?>"><?= ag_h($r['at']) ?></time></div></div></li>
+      <ul class="d4tl"><?php foreach ($feed as $r): $w = strtolower((string) $r['what']); $fic = str_contains($w, 'payment') ? 'fa-indian-rupee-sign' : (str_contains($w, 'invoice') ? 'fa-file-invoice' : (str_contains($w, 'licen') ? 'fa-key' : (str_contains($w, 'sign') ? 'fa-right-to-bracket' : (str_contains($w, 'release') || str_contains($w, 'update') ? 'fa-cloud-arrow-up' : 'fa-pen')))); ?>
+        <li><span class="d4i"><i class="fas <?= $fic ?>"></i></span><div><div class="ft2"><?= ag_h($r['what']) ?><?= ($r['tenant'] ?? '') !== '' ? ' <a class="d4c" href="?p=client&id=' . (int) $r['tenant'] . '">' . ag_h($names[$r['tenant']] ?? '#' . $r['tenant']) . '</a>' : '' ?></div>
+          <div class="fm"><?= ag_h($r['who']) ?></div></div><time data-at="<?= ag_h($r['at']) ?>"><?= ag_h($r['at']) ?></time></li>
       <?php endforeach; ?></ul><?php endif; ?></div>
   </div>
 <?php elseif ($page === 'clients'):
@@ -1411,7 +1419,7 @@ $myIni = strtoupper(implode('', array_map(static fn (string $w): string => mb_su
   <?php elseif ($view2 === 'client'): ?>
   <div class="lgrp"><?php foreach ($byClient as $tid => $rs): $tn = (string) ($names[$tid] ?? '#' . $tid); $next = min(array_map(static fn ($r) => (string) (($r['valid_until'] ?? '') ?: '9999-12-31'), $rs)); ?>
     <details class="lcl" open data-cl="<?= (int) $tid ?>" data-lf="<?= ag_h(strtolower($tn . ' ' . implode(' ', array_map(static fn ($r) => ($plugins[$r['app']]['name'] ?? $r['app']) . ' ' . ($r['server_name'] ?? ''), $rs)))) ?>">
-      <summary><i class="fas fa-chevron-down car"></i><span class="cav"><?= ag_h(mb_strtoupper(mb_substr($tn, 0, 1))) ?></span><div><a href="?p=client&id=<?= (int) $tid ?>"><b><?= ag_h($tn) ?></b></a><small><?= count($rs) ?> licence<?= count($rs) === 1 ? '' : 's' ?><?= $next !== '9999-12-31' ? ' &middot; next renewal ' . $d($next) : '' ?></small></div>
+      <summary><i class="fas fa-chevron-down car"></i><div><a href="?p=client&id=<?= (int) $tid ?>"><b><?= ag_h($tn) ?></b></a><small><?= count($rs) ?> licence<?= count($rs) === 1 ? '' : 's' ?><?= $next !== '9999-12-31' ? ' &middot; next renewal ' . $d($next) : '' ?></small></div>
         <span class="cpills"><?php foreach ($rs as $r): ?><span title="<?= ag_h($plugins[$r['app']]['name'] ?? $r['app']) ?>"><?= $mark((string) $r['app']) ?></span><?php endforeach; ?></span>
         <a class="btn ghost" href="?p=client&id=<?= (int) $tid ?>#apps">Client</a></summary>
       <div class="lrows"><?php foreach ($rs as $r): $st = $stOf($r); [$sl, $sc] = $st === 'expiring' ? ['Expiring', 'amber'] : AmetecsLicences::STATES[$st === 'off' ? 'off' : $st]; ?>
@@ -1841,10 +1849,10 @@ $myIni = strtoupper(implode('', array_map(static fn (string $w): string => mb_su
         <?php if ($backups === []): ?><tr><td colspan="4"><div class="empty"><i class="fas fa-box-archive"></i>No installs on this server yet.</div></td></tr><?php endif; ?></table>
         <div class="bd muted" style="font-size:12.5px">Database: each PC's MySQL holds its own data. Back it up with Laragon (Menu → MySQL → Backup) or <code>mysqldump</code> before big changes; on the live server use the hosting provider's daily backups.</div></div>
       <?php $smp = AmetecsSample::present(); $houseT = array_values(array_filter($tenants, static fn ($t) => ($t['subdomain'] ?? '') === 'ametecs'))[0]['id'] ?? ($tenants[0]['id'] ?? ''); ?>
-      <div class="box"><div class="hd"><h2><i class="fas fa-flask"></i>Sample data</h2><span class="muted">for demos and testing on this PC only: 20 employees with 30 days of attendance, and 10 demo clients with licences and invoices</span></div><div class="bd">
+      <div class="box"><div class="hd"><h2><i class="fas fa-flask"></i>Sample data</h2><span class="muted">for demos and testing on this PC only: 100 employees in 20 companies with 30 days of attendance, and 20 demo clients with licences and invoices</span></div><div class="bd">
         <?php if ($prod): ?><p class="muted" style="margin:0">Switched off: this server runs as production (APP_ENV).</p>
         <?php else: ?><div class="row" style="gap:10px;flex-wrap:wrap;align-items:center">
-          <form method="post" class="row" style="gap:8px" onsubmit="return confirm('Add 20 sample employees and 10 demo clients to this PC\'s database?')"><?= $csrf() ?><input type="hidden" name="do" value="sample-add">
+          <form method="post" class="row" style="gap:8px" onsubmit="return confirm('Add 100 sample employees in 20 companies and 20 demo clients to this PC\'s database?')"><?= $csrf() ?><input type="hidden" name="do" value="sample-add">
             <label class="muted" style="font-size:12.5px">Employees go to</label><select name="tenant"><?php foreach ($tenants as $t): if (str_starts_with((string) $t['code'], 'DEMO')) { continue; } ?><option value="<?= (int) $t['id'] ?>"<?= (string) $t['id'] === (string) $houseT ? ' selected' : '' ?>><?= ag_h($t['name']) ?></option><?php endforeach; ?></select>
             <button class="btn gold"><i class="fas fa-wand-magic-sparkles"></i>Add sample data</button></form>
           <?php if ($smp !== []): ?><form method="post" onsubmit="return confirm('Remove all sample employees, attendance, demo clients and their invoices?')"><?= $csrf() ?><input type="hidden" name="do" value="sample-remove"><button class="btn danger"><i class="fas fa-trash"></i>Remove sample data</button></form>
@@ -2088,6 +2096,6 @@ document.addEventListener('keydown',function(e){if((e.ctrlKey||e.metaKey)&&e.key
 document.addEventListener('click',function(e){document.querySelectorAll('details.me[open],details.act[open]').forEach(function(d){if(!d.contains(e.target))d.removeAttribute('open')})});
 })();
 </script>
-<script src="assets/ui.js?v=10"></script>
+<script src="assets/ui.js?v=14"></script>
 <?php endif; ?>
 </body></html>

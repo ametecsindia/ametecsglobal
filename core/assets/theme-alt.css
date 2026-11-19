@@ -1,0 +1,119 @@
+/* THEME CHOICE (owner, 19 Nov 2026: "add multiple theme option golden default, navy and light theme").
+   Golden = the royal black-and-gold look (no extra class). html.th-navy and html.th-light restyle it; chosen in the
+   user menu, remembered per browser (localStorage agTheme, assets/ui.js). Loaded LAST on index, org and super. */
+
+/* ---------- NAVY, PREMIUM (owner, 19 Nov 2026: "use premium navy not normal navy"): deep midnight navy with a gold
+   edge and glow, midnight badges with gold glyphs, gold-on-midnight headers. ---------- */
+html.th-navy body{background:radial-gradient(1100px 520px at 100% -12%,rgba(214,174,85,.14),transparent 60%),radial-gradient(900px 500px at -10% 110%,rgba(16,36,66,.06),transparent 60%),#f8f6f1!important}
+html.th-navy .side,html.th-navy .cside{background:radial-gradient(420px 260px at 0% 0%,rgba(214,174,85,.16),transparent 60%),linear-gradient(170deg,#0f2342 0%,#0a1a33 50%,#06101f 100%)!important;border-right:1px solid rgba(214,174,85,.35)!important;box-shadow:inset -1px 0 0 rgba(214,174,85,.12)}
+html.th-navy :is(.side,.cside):after{background:linear-gradient(90deg,#f3dc95,#d6ae55,#b08433)!important}
+html.th-navy .side a.nv:not(.on),html.th-navy .side .grp summary,html.th-navy .cside a.nv:not(.on),html.th-navy .cside .grp summary{color:#d7dfeb!important}
+html.th-navy .side a.nv:not(.on)>i,html.th-navy .side .grp summary>i:first-child,html.th-navy .side a.nv:not(.on) i{background:rgba(214,174,85,.10)!important;color:#e8c977!important}
+html.th-navy :is(.side,.cside) a.nv:not(.on):hover,html.th-navy :is(.side,.cside) .grp summary:hover{background:rgba(214,174,85,.10)!important;color:#fff!important}
+html.th-navy .side .nav-l,html.th-navy .cside .nav-l{color:#c9a24c!important;letter-spacing:1.6px!important}
+html.th-navy .cside .grp a.sub{color:#aebcd0!important}
+html.th-navy :is(.side,.cside) .ws{background:linear-gradient(135deg,rgba(214,174,85,.14),rgba(214,174,85,.04))!important;border-color:rgba(214,174,85,.3)!important}
+html.th-navy :is(.kpi>i,.chart h3>i,.box .hd h2 i,.lstrip i,.akpis i,.ibox h3 i,.ls .li,.ac2 .ai,.ki,.d4r,.d4i,.d4fleet .fi,.kav,.tlic,.d4s.live,.dc-ic,.qa-stat i){background:linear-gradient(145deg,#132b50,#0a1a33)!important;color:#e8c977!important;box-shadow:inset 0 0 0 1px rgba(214,174,85,.35),0 6px 14px -8px rgba(10,26,51,.8)!important}
+html.th-navy :is(.kpi.red>i,.kpi.amber>i,.ls.red .li,.ac2.amber .ai,.d4fleet .fi.bad){background:#8b1e2d!important;color:#f3dc95!important}
+html.th-navy :is(.kpi b,.lstrip b,.ac2 b,.ls b,.d4v b,.d4fleet b,.mxt .cn b){color:#0f2342!important;-webkit-text-fill-color:#0f2342!important}
+html.th-navy :is(.mxt thead th,.kdh,.kdb thead th){background:linear-gradient(180deg,#0f2342,#0a1a33)!important;color:#e8c977!important}
+html.th-navy .kdh{border-bottom:2px solid #d6ae55!important}
+html.th-navy :is(.qbar a:first-child,.tabs a.on,.ch.on,.qa-nav a.on,.kact a.pri,.btn.navy){background:linear-gradient(145deg,#132b50,#0a1a33)!important;color:#f3dc95!important;border-color:#0a1a33!important;box-shadow:inset 0 0 0 1px rgba(214,174,85,.35)!important}
+html.th-navy select option:checked{background:#0a1a33!important;color:#f3dc95!important}
+html.th-navy table th{background:#0f2342!important;color:#e8c977!important}
+html.th-navy .kpi:before,html.th-navy .lcard:before,html.th-navy .sac:before{background:linear-gradient(90deg,#f3dc95,#d6ae55,#b08433)!important}
+
+/* ---------- LIGHT: white menu, soft gold badges ---------- */
+html.th-light body{background:#fbfaf7!important}
+html.th-light .side,html.th-light .cside{background:#fff!important;border-right:1px solid #ece3d1!important}
+html.th-light :is(.side,.cside) .brand{color:#17130c!important}
+html.th-light :is(.side,.cside) .ws{background:#faf6ee!important;border-color:#ece3d1!important}.th-light .cside .ws b{color:#17130c!important}
+html.th-light :is(.side,.cside) a.nv:not(.on),html.th-light :is(.side,.cside) .grp summary{color:#3d3426!important}
+html.th-light :is(.side,.cside) a.nv:not(.on)>i,html.th-light :is(.side,.cside) .grp summary>i:first-child{background:#faf3e3!important;color:#b08433!important}
+html.th-light :is(.side,.cside) a.nv:not(.on):hover,html.th-light :is(.side,.cside) .grp summary:hover{background:#fbf3e2!important;color:#17130c!important}
+html.th-light :is(.side,.cside) .nav-l{color:#a8946c!important}
+html.th-light .cside .grp a.sub{color:#5c5040!important}.th-light .cside .grp a.sub.on{color:#14100a!important;background:#f7ecd2!important}
+html.th-light :is(.side,.cside) .side-foot,html.th-light .side .bottom{border-color:#ece3d1!important;color:#8c7a58!important}.th-light .side .bottom a{color:#3d3426!important}
+html.th-light :is(.sbtog,.sbtog2){background:#faf3e3!important;color:#8a6420!important}
+html.th-light :is(.kpi>i,.chart h3>i,.box .hd h2 i,.lstrip i,.akpis i,.ibox h3 i,.ls .li,.ac2 .ai,.ki,.d4r,.d4i,.d4fleet .fi,.kav,.tlic,.dc-ic,.qa-stat i){background:#fbf1d8!important;color:#8a6420!important;box-shadow:none!important}
+html.th-light :is(.kpi.red>i,.kpi.amber>i,.ls.red .li,.ac2.amber .ai,.d4fleet .fi.bad){background:#fbecee!important;color:#8b1e2d!important}
+html.th-light .d4s.live{background:#fbf1d8!important;color:#8a6420!important}
+html.th-light :is(.mxt thead th,.kdb thead th){background:#fbf6ea!important;color:#7a6e5b!important}
+html.th-light .kdh{background:#fffdf8!important;color:#17130c!important;border-bottom:2px solid #d6ae55!important}
+html.th-light .kdh :is(button,.kcsv){color:#7a6e5b!important;background:#f3ece0!important}.th-light .kdh input{border:1px solid #e6dac2!important}
+html.th-light :is(.qbar a:first-child,.tabs a.on,.ch.on,.qa-nav a.on,.kact a.pri,.btn.navy){background:linear-gradient(135deg,#f3dc95,#b08433)!important;color:#14100a!important;border-color:transparent!important}
+html.th-light select option:checked{background:linear-gradient(135deg,#f3dc95,#b08433)!important;color:#14100a!important}
+
+/* the theme picker in the user menu */
+[data-theme-set]{display:flex!important;align-items:center;gap:10px;cursor:pointer}
+[data-theme-set] .sw{width:14px;height:14px;border-radius:50%;flex:none;box-shadow:inset 0 0 0 1px rgba(0,0,0,.12)}
+[data-theme-set] .ck{margin-left:auto;color:#b08433;visibility:hidden}[data-theme-set].on .ck{visibility:visible}
+.thl{font-size:10.5px;text-transform:uppercase;letter-spacing:.8px;color:#9c8f78;padding:8px 14px 2px;font-weight:700}
+html.th-light :is(.side,.cside) .brand>span:not(.logo-mark):not(.lm){color:#17130c!important}
+
+/* ---------- DARK (owner, 19 Nov 2026: "one more dark theme"): near-black page, charcoal cards, gold accents,
+   ivory text. ---------- */
+html.th-dark{color-scheme:dark}
+html.th-dark body{background:radial-gradient(1100px 520px at 100% -12%,rgba(214,174,85,.10),transparent 60%),#0d0b08!important;color:#e9e1cf!important}
+html.th-dark :is(.top,header.top){background:rgba(20,17,12,.92)!important;border-bottom-color:#2a241a!important;color:#e9e1cf}
+html.th-dark :is(.box,.panel,.kpi,.chart,.dfilters,.ma,.dapp,.lic-t,.ls,.pl,.strip,.card,.ibox,.lcard,.lstrip>div,.ac2,.sac,.appc,.vc,.faq details,.qa-stat,.akpis a,.d4fleet a,.lv>div,.dc-card,.kstrip>div,.hero2,.phero,.h2k a,.tl li,.fleet a,.qbar a,.ws,.dd,.drop,.menu){background:#17140f!important;border-color:#2e2719!important;box-shadow:0 1px 2px rgba(0,0,0,.4),0 14px 30px -20px rgba(0,0,0,.8)!important;color:#e9e1cf!important}
+html.th-dark .box .hd{background:#17140f!important;border-bottom-color:#2a241a!important}
+html.th-dark :is(h1,h2,h3,h4,.pgh h1,.sh h2,.box .hd h2,.chart h3,.panel>h3,.ibox h3,.dsec,.hero2 h1,.phero h1){color:#f3e7c9!important;-webkit-text-fill-color:#f3e7c9!important}
+html.th-dark :is(.kpi b,.lstrip b,.ac2 b,.ls b,.akpis b,.d4v b,.d4fleet b,.d4n,.d4emp,.mxt .cn b,.kpf b,.katt b,.dc-top .dc-val,.qa-stat b,.h2k a b,.kstrip b,.d4adr em,.lv td,.katt span b){color:#f3dc95!important;-webkit-text-fill-color:#f3dc95!important}
+html.th-dark :is(.kpi.red b,.kpi.amber b){color:#f08a96!important}
+html.th-dark :is(small,.muted,.kpi small,.kpi span,.crumb,.pgh p,.sub,.dsub,label,dt,.fm,.d4tl time,.kdb td small){color:#a89b82!important}
+html.th-dark :is(p,td,dd,li,span,b,em){border-color:#2a241a}
+html.th-dark a:not(.btn):not(.btn2):not(.nv):not(.kpi):not(.sub){color:#e8c977}
+html.th-dark table th,html.th-dark :is(.mxt thead th,.kdb thead th,.lv th){background:#211c13!important;color:#d6ae55!important;border-color:#2e2719!important}
+html.th-dark table td{background:transparent!important;border-color:#2a241a!important;color:#e0d6c0}
+html.th-dark table tr:nth-child(even) td{background:#1a1610!important}
+html.th-dark table tr:hover td,html.th-dark .krow:hover td{background:#231d13!important}
+html.th-dark .krow.on td{background:#2c2416!important}
+html.th-dark :is(input:not([type=checkbox]):not([type=radio]):not([type=color]),select,textarea,.emp-pick-text){background:#100d09!important;border-color:#3a3120!important;color:#efe6d2!important}
+html.th-dark select::picker(select){background:#17140f!important;border-color:#3a3120!important}
+html.th-dark select option{color:#e9e1cf!important}html.th-dark select option:hover{background:#2c2416!important}
+html.th-dark :is(.kpi>i,.chart h3>i,.box .hd h2 i,.lstrip i,.akpis i,.ibox h3 i,.ls .li,.ac2 .ai,.ki,.d4r,.d4i,.d4fleet .fi,.kav,.tlic,.dc-ic,.qa-stat i){background:#2a2216!important;color:#e8c977!important;box-shadow:inset 0 0 0 1px #3d3220!important}
+html.th-dark :is(.kpi.red>i,.kpi.amber>i,.ls.red .li,.ac2.amber .ai,.d4fleet .fi.bad){background:#4a1219!important;color:#f3c2c8!important}
+html.th-dark dialog.kdlg{background:#17140f!important;color:#e9e1cf}html.th-dark .kdet{background:#13100b!important;border-color:#2e2719!important}
+html.th-dark .kdh{background:#0a0805!important;border-bottom-color:#d6ae55!important}
+html.th-dark :is(.katt span,.kact a:not(.pri),.d4emp,.d4c,.d4s:not(.live),.lchips span,.sac dl,.ch-grp,.ch){background:#211c13!important;border-color:#3a3120!important;color:#e0d6c0!important}
+html.th-dark :is(.d4bar,.lbar,.pbar,.dc-bar,.d4tl:before){background:#2a241a!important}
+html.th-dark .chk.soon{background:#17140f!important}.th-dark .chk.off{border-color:#3a3120!important}
+html.th-dark .d4i{border-color:#17140f!important;box-shadow:0 0 0 1px #3a3120!important}
+html.th-dark :is(.btn.ghost,.btn2.ghost,.btn-outline){background:#17140f!important;border-color:#3a3120!important;color:#e9e1cf!important}
+html.th-dark .tabs a:not(.on){background:#17140f!important;border-color:#3a3120!important;color:#e9e1cf!important}
+html.th-dark :is(.side,.cside){border-right-color:#2a241a!important}
+html.th-dark .donut2:after,html.th-dark .donut:after{background:#17140f!important}
+html.th-dark ::-webkit-scrollbar-thumb{background:#3a3120}
+
+/* dark theme fixes: bar labels, bell, user name */
+html.th-dark .hb span,html.th-dark .hb b,html.th-dark .hb em{color:#e0d6c0!important}
+html.th-dark .hb>div{background:#2a241a!important}
+html.th-dark :is(.bell,.top .ib,.top button:not(.btn2)){background:#17140f!important;border-color:#3a3120!important;color:#e8c977!important}
+html.th-dark :is(.top .who b,.top .uname,.top .me b,.top b){color:#f3e7c9!important}
+html.th-dark .menu{background:#17140f!important;border-color:#3a3120!important;color:#e9e1cf!important}html.th-dark .menu a:hover,html.th-dark .menu button:hover{background:#231d13!important}
+/* dark: text the automatic contrast check flagged on the menu pages (19 Nov 2026) */
+html.th-dark :is(b,strong,dd,summary,code,.nm,.lockup,.ft2,.tlc,.qm a,.umbar b,.lmh b,.tlh b,.vl b,.d4t b,.cn b):not(.pill):not(.pill *):not(.st):not(.tred):not(.tamb):not(.d4s){color:#efe6d2!important;-webkit-text-fill-color:#efe6d2!important}
+html.th-dark .vsw{background:#211c13!important;border-color:#3a3120!important}html.th-dark .vsw a{color:#cbbd9f!important}html.th-dark .vsw a.on{background:linear-gradient(135deg,#f3dc95,#b08433)!important;color:#14100a!important}
+html.th-dark :is(.umbar,.lmh,.tlh,.vl,.qm,.logo){color:#e9e1cf}
+html.th-dark code{background:#211c13!important}
+html.th-dark .kpi.red b,html.th-dark .kpi.amber b{color:#f08a96!important;-webkit-text-fill-color:#f08a96!important}
+html.th-dark :is(.kpi b,.lstrip b,.ac2 b,.ls b,.d4v b,.d4fleet b,.dc-top .dc-val,.qa-stat b){color:#f3dc95!important;-webkit-text-fill-color:#f3dc95!important}
+html.th-dark :is(.umbar,.tl .it,.tli,.tlh,.tl-item,.tlc,.pf-tot,.pf-sum,.pform form,.vl,.ldet,.lrow,.qm,.qmenu,.lgrp,.lgrp>summary,.lic-row,.vc,.vcard,details.lg>div){background:#17140f!important;border-color:#2e2719!important}
+html.th-dark .tlc{background:#211c13!important;color:#e8c977!important}
+html.th-dark :is(.tlb,.tl li,.lgrp,.lgrp table,.lgrp td,.lgrp .lrows>*){background:#17140f!important;border-color:#2e2719!important}
+html.th-dark :is(.lgrp>summary,.lgrp summary,details>summary){background:#17140f!important;color:#e9e1cf!important}
+html.th-dark :is(.btn,.btn2,button):not(.gold):not(.primary):not(.navy):not(.danger):not(.on):not([data-close]):not(.kx):not(.sbtog):not(.sbtog2){background:#211c13!important;border-color:#3a3120!important;color:#e9e1cf!important}
+/* theme picker: one row of colour dots (owner, 19 Nov 2026: "theme show single line only icons") */
+.throw{display:flex;align-items:center;gap:8px;padding:8px 12px;margin:2px 0;border-top:1px solid rgba(0,0,0,.06);border-bottom:1px solid rgba(0,0,0,.06)}
+.throw>span{font-size:10.5px;text-transform:uppercase;letter-spacing:.8px;color:#9c8f78;font-weight:700;margin-right:auto}
+.throw [data-theme-set]{width:auto!important;padding:0!important;display:inline-flex!important;background:none!important;border-radius:50%!important}
+.throw [data-theme-set] .sw{width:24px;height:24px;border-radius:50%;box-shadow:inset 0 0 0 1px rgba(0,0,0,.15);transition:transform .15s}
+.throw [data-theme-set]:hover .sw{transform:scale(1.12)}
+.throw [data-theme-set].on .sw{box-shadow:0 0 0 2px #fff,0 0 0 4px #c9a24c}
+html.th-dark .throw{border-color:#2e2719}html.th-dark .throw [data-theme-set].on .sw{box-shadow:0 0 0 2px #17140f,0 0 0 4px #e8c977}
+.throw [data-theme-set] .sw{display:grid;place-items:center;font-size:11px}.throw [data-theme-set] .sw i{width:auto!important;color:inherit!important;margin:0!important}
+html.th-dark .donut2:before,html.th-dark .donut:before{background:#17140f!important}
+html.th-dark .donut2{background:conic-gradient(#c9a24c 0 var(--a),#3a3120 var(--a) 360deg)!important}
+html.th-dark .search,html.th-dark .top .search{background:#100d09!important;border-color:#3a3120!important;color:#e9e1cf!important}
+html.th-dark .search kbd{background:#211c13!important;color:#cbbd9f!important;border-color:#3a3120!important}

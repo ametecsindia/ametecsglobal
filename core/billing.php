@@ -497,15 +497,18 @@ final class AmetecsBilling
                 . $e($p['status'] === 'refunded' ? 'Refunded ' . $p['refunded_at'] : 'Received') . '</td><td class="r">' . $e($m($p['amount'])) . '</td></tr>';
         }
         return '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>Invoice ' . $e($inv['number']) . '</title><style>
-@page{size:A4;margin:12mm}*{box-sizing:border-box}body{font:13px/1.5 "Segoe UI",Arial,sans-serif;color:#0f172a;margin:0;background:#f4f6fa}
-.pg{max-width:820px;margin:20px auto;background:#fff;box-shadow:0 4px 20px rgba(15,23,42,.08)}.band{background:#1F3A5F;color:#fff;padding:22px 30px;display:flex;justify-content:space-between;align-items:center}
-.band b{font-size:22px}.band b span{color:#d4a65a}.band .t{text-align:right;font-size:12px;color:#c7d3e3}.band .t strong{display:block;font-size:20px;color:#fff;letter-spacing:.5px}
-.bd{padding:26px 30px}.cards{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px}.card{border:1px solid #e2e8f0;border-radius:8px;padding:12px 14px}.card h4{margin:0 0 6px;font-size:11px;text-transform:uppercase;letter-spacing:1px;color:#B8893B}
-table{width:100%;border-collapse:collapse;margin-bottom:18px}th{background:#1F3A5F;color:#fff;text-align:left;font-size:12px;padding:8px 10px}td{padding:8px 10px;border-bottom:1px solid #eef2f7}tr:nth-child(even) td{background:#f8fafc}
-.r{text-align:right}.tot td{font-weight:700;background:#fbf5ea!important;border-top:2px solid #B8893B}.st{display:inline-block;padding:3px 12px;border-radius:99px;font-weight:700;font-size:12px}
-.st.green{background:#ecfdf3;color:#15803d}.st.amber{background:#fffbeb;color:#b45309}.st.red{background:#fef2f2;color:#b91c1c}.st.grey{background:#f1f5f9;color:#64748b}
-.ft{border-top:1px solid #e2e8f0;padding:12px 30px;color:#94a3b8;font-size:11px;display:flex;justify-content:space-between}.np{text-align:center;margin:14px}@media print{body{background:#fff}.pg{box-shadow:none;margin:0}.np{display:none}}
-</style></head><body><div class="np"><button onclick="print()" style="padding:8px 18px;border:0;border-radius:8px;background:#1F3A5F;color:#fff;font-weight:700;cursor:pointer">Print / save as PDF</button></div><div class="pg">
+@page{size:A4;margin:12mm}*{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}body{font:13px/1.5 "Segoe UI",Arial,sans-serif;color:#17130c;margin:0;background:#faf6ee}
+/* ROYAL BLACK AND GOLD (owner, 19 Nov 2026: "invoice also update according to my theme") */
+.pg{max-width:820px;margin:20px auto;background:#fff;box-shadow:0 6px 28px rgba(60,40,10,.12);border:1px solid #ece3d1}
+.band{background:linear-gradient(160deg,#1d170e,#0a0704);color:#fff;padding:24px 30px;display:flex;justify-content:space-between;align-items:center;border-bottom:4px solid #c9a24c}
+.band b{font-size:23px;color:#fff7e6}.band b span{color:#e8c977}.band .t{text-align:right;font-size:12px;color:#d8cbb2}.band .t strong{display:block;font-size:20px;color:#e8c977;letter-spacing:1.5px}
+.bd{padding:26px 30px}.cards{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px}.card{border:1px solid #ece3d1;border-top:3px solid #c9a24c;border-radius:8px;padding:12px 14px;background:#fffdf8}
+.card h4{margin:0 0 6px;font-size:11px;text-transform:uppercase;letter-spacing:1px;color:#b08433}.card b,.card strong{color:#1f3a5f}
+table{width:100%;border-collapse:collapse;margin-bottom:18px}th{background:#14100a;color:#e8c977;text-align:left;font-size:12px;padding:9px 10px;letter-spacing:.3px}td{padding:8px 10px;border-bottom:1px solid #f1e9d8}tr:nth-child(even) td{background:#fdfaf3}
+.r{text-align:right}.tot td{font-weight:700;color:#1f3a5f;background:#fbf3e2!important;border-top:2px solid #c9a24c;font-size:14px}.st{display:inline-block;padding:3px 12px;border-radius:99px;font-weight:700;font-size:12px}
+.st.green{background:#ecfdf3;color:#15803d}.st.amber{background:#fdf3dc;color:#8a6420}.st.red{background:#fbecee;color:#8b1e2d}.st.grey{background:#f3ece0;color:#7a6e5b}
+.ft{border-top:1px solid #ece3d1;padding:12px 30px;color:#9c8f78;font-size:11px;display:flex;justify-content:space-between;background:#fffdf8}.np{text-align:center;margin:14px}@media print{body{background:#fff}.pg{box-shadow:none;margin:0;border:0}.np{display:none}}
+</style></head><body><div class="np"><button onclick="print()" style="padding:9px 20px;border:0;border-radius:9px;background:linear-gradient(135deg,#f3dc95,#b08433);color:#14100a;font-weight:700;cursor:pointer">Print / save as PDF</button></div><div class="pg">
 <div class="band"><b>Ametecs<span>Global</span></b><div class="t"><strong>TAX INVOICE</strong>' . $e($inv['number']) . ' &middot; ' . $e(date('d M Y', (int) strtotime((string) $inv['issued_on']))) . '</div></div><div class="bd">
 <div class="cards"><div class="card"><h4>From</h4><b>' . $e($s['seller']) . '</b><br>' . nl2br($e($s['address'])) . ($s['gstin'] !== '' ? '<br>GSTIN ' . $e($s['gstin']) : '') . ($s['email'] !== '' ? '<br>' . $e($s['email']) : '') . '</div>
 <div class="card"><h4>Billed to</h4><b>' . $e($t['name']) . '</b><br>Client code ' . $e($t['code']) . ($t['state'] ? '<br>' . $e($t['state']) : '') . '<br><br><span class="st ' . $sc . '">' . $e($sl) . '</span>' . ($inv['status'] === 'pending' ? ' &nbsp;due ' . $e(date('d M Y', (int) strtotime((string) $inv['due_on']))) : '') . '</div></div>

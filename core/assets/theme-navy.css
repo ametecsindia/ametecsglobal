@@ -1,0 +1,34 @@
+/* NAVY + GOLD (owner, 19 Nov 2026: "use my theme" -> navy #1F3A5F and gold #B8893B, the Ametecs house colours).
+   Loaded LAST after theme-gold.css (and theme-sa-light.css on Super Admin): keeps the gold theme's layout and accents,
+   swaps its black for navy. Super Admin keeps its light menu (asked for 18 Nov). */
+.t-gold{--navy:#1f3a5f;--navy-2:#2a4a73;--navy-3:#152a45;--navy2:#2a4a73;--navy3:#152a45;--gold:#b8893b;--gold-2:#d4a65a;--gold2:#d4a65a;
+  --ink:#1b2a3d;--ink-2:#3a4a60;--mute:#6b7a8f;--line:#e3e8f0;--bg:#f5f7fa;
+  --g-grad:linear-gradient(135deg,#e2c27e 0%,#c99d4c 50%,#b8893b 100%);--g-dark:linear-gradient(160deg,#1f3a5f 0%,#152a45 100%)}
+.t-gold body{background:radial-gradient(1100px 520px at 100% -10%,rgba(184,137,59,.10),transparent 60%),#f5f7fa;color:#1b2a3d}
+.t-gold a{color:#1f3a5f}
+
+/* menu */
+.t-gold .side{border-right-color:rgba(212,166,90,.18);color:#d5deea}
+.t-gold .side .nav-l,.t-gold .nav-l{color:#9fb0c7}
+.t-gold .side a.nv,.t-gold .grp summary{color:#d5deea}
+.t-gold .side a.nv i,.t-gold .grp summary>i:first-child{color:#a9b9cf}
+.t-gold .grp a.sub{color:#b9c6d8}
+.t-gold .brand .lm,.t-gold .brand .logo-mark,.t-gold .logo-mark,.t-gold .ws-i,.t-gold .av,.t-gold .saav,.t-gold .stepn,.t-gold .cav{color:#1f3a5f}
+
+/* buttons */
+.t-gold .btn.gold,.t-gold .gold.btn,.t-gold .btn2.primary,.t-gold .primary:not(.btn2):not(.lp),.t-gold .hb.gold,.t-gold .newc{color:#152a45}
+.t-gold .btn.navy,.t-gold .navy.btn{background:linear-gradient(135deg,#2a4a73,#1f3a5f);color:#fff}
+
+/* cards, tables, top bar */
+.t-gold .top{background:rgba(255,255,255,.85);border-bottom-color:#e3e8f0}
+.t-gold .box,.t-gold .panel,.t-gold .lic-t,.t-gold .ibox,.t-gold .ma,.t-gold .dapp,.t-gold .kpi,.t-gold .chart,.t-gold .ls,.t-gold .ac2,.t-gold .lcl,.t-gold .sac,.t-gold .pl,.t-gold .dfilters,.t-gold .strip,.t-gold .toolbar{border-color:#e3e8f0;box-shadow:0 1px 2px rgba(31,58,95,.05),0 12px 30px -18px rgba(31,58,95,.22)}
+.t-gold .box .hd{background:linear-gradient(180deg,#f8fafc,#fff);border-bottom-color:#e8edf3}
+.t-gold table th{background:#f3f6fa;color:#4b5d75;border-bottom-color:#e3e8f0}
+.t-gold table tr:hover td{background:#f8fafc}
+.t-gold .crumb{color:#6b7a8f}
+
+/* hero bands: navy with a gold glow */
+.t-gold .hero2,.t-gold .hero,.t-gold .admin{background:radial-gradient(520px 260px at 100% 0%,rgba(212,166,90,.30),transparent 60%),linear-gradient(135deg,#1f3a5f,#152a45);box-shadow:0 24px 50px -28px rgba(21,42,69,.8);border-color:rgba(212,166,90,.22)}
+
+/* sign-in pages */
+.t-gold .auth-side{background:radial-gradient(900px 500px at -10% -10%,rgba(212,166,90,.22) 0%,transparent 60%),linear-gradient(160deg,#1f3a5f 0%,#152a45 100%)}

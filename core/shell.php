@@ -198,16 +198,10 @@ final class AmetecsShell
         // notifications are the bell; account settings are under the user menu.
         $h .= '<nav class="snav">' . $item($v('home'), 'fa-gauge-high', 'Dashboard', $active === 'home');
         if ($isAdmin) {
-            $h .= $item($v('apps'), 'fa-grip', 'My applications', in_array($active, ['apps', 'updates'], true), (int) ($counts['updates'] ?? 0))
-                . $item($v('plugins'), 'fa-puzzle-piece', 'Modules & plugins', $active === 'plugins')
-                . '<div class="nav-l">Billing</div>'
-                . $item($v('licences'), 'fa-key', 'Licences & plans', $active === 'licences')
-                . $item($v('billing'), 'fa-file-invoice', 'Payments & invoices', $active === 'billing', (int) ($counts['invoices'] ?? 0))
-                . '<div class="nav-l">Organization</div>'
-                . $item($base . 'org.php?s=setup-companies', 'fa-building', 'Company profile', $active === 'org:setup-companies', 0, ' data-q="?r=setup-companies"')
-                . $item($base . 'org.php?s=users', 'fa-user-shield', 'Users & permissions', $active === 'org:users');
+            // MENU v3, 19 Nov 2026 (owner: "redesign left menu", grouped by task): People, Applications, Billing, Settings.
             $orgIcons = ['Organization' => 'fa-sitemap', 'Employees' => 'fa-users', 'Logins & access' => 'fa-id-card', 'Attendance devices' => 'fa-fingerprint'];
-            foreach (AmetecsSetup::CORE as $grp => $items) {
+            $grp = [];
+            foreach (AmetecsSetup::CORE as $g => $items) {
                 $open = false;
                 $subs = '';
                 foreach ($items as $label => $it) {
@@ -216,9 +210,21 @@ final class AmetecsShell
                     $q = AmetecsSetup::href($it);
                     $subs .= '<a class="sub' . ($route === $active ? ' on' : '') . '" href="' . ag_h($base . 'org.php' . str_replace('?r=', '?s=', $q)) . '" data-q="' . ag_h($q) . '"><i class="fas ' . ag_h($it[2]) . '"></i><span>' . ag_h($label) . '</span></a>';
                 }
-                $h .= '<details class="grp"' . ($open ? ' open' : '') . '><summary title="' . ag_h($grp) . '"><i class="fas ' . ($orgIcons[$grp] ?? 'fa-folder') . '"></i><span>' . ag_h($grp) . '</span><i class="fas fa-chevron-down car"></i></summary>' . $subs . '</details>';
+                $grp[$g] = '<details class="grp"' . ($open ? ' open' : '') . '><summary title="' . ag_h($g) . '"><i class="fas ' . ($orgIcons[$g] ?? 'fa-folder') . '"></i><span>' . ag_h($g) . '</span><i class="fas fa-chevron-down car"></i></summary>' . $subs . '</details>';
             }
-            $h .= $item($base . 'org.php?s=ag-apps', 'fa-toggle-on', 'App access', $active === 'org:ag-apps');
+            $h .= '<div class="nav-l">People</div>' . ($grp['Employees'] ?? '') . ($grp['Attendance devices'] ?? '') . ($grp['Logins & access'] ?? '')
+                . $item($base . 'org.php?s=users', 'fa-user-shield', 'Users & permissions', $active === 'org:users')
+                . '<div class="nav-l">Applications</div>'
+                . $item($v('apps'), 'fa-grip', 'My applications', in_array($active, ['apps', 'updates'], true), (int) ($counts['updates'] ?? 0))
+                . $item($v('plugins'), 'fa-puzzle-piece', 'Modules & plugins', $active === 'plugins')
+                . $item($base . 'org.php?s=ag-apps', 'fa-toggle-on', 'App access', $active === 'org:ag-apps')
+                . '<div class="nav-l">Billing</div>'
+                . $item($v('licences'), 'fa-key', 'Licences & plans', $active === 'licences')
+                . $item($v('billing'), 'fa-file-invoice', 'Payments & invoices', $active === 'billing', (int) ($counts['invoices'] ?? 0))
+                . '<div class="nav-l">Settings</div>'
+                . $item($base . 'org.php?s=setup-companies', 'fa-building', 'Company profile', $active === 'org:setup-companies', 0, ' data-q="?r=setup-companies"')
+                . ($grp['Organization'] ?? '');
+            foreach (array_diff_key($grp, array_flip(['Employees', 'Attendance devices', 'Logins & access', 'Organization'])) as $g) { $h .= $g; }   // any group added later
         }
         $h .= '<div class="nav-l">Help</div>'
             . ($isAdmin ? $item($v('activity'), 'fa-clock-rotate-left', 'Activity history', $active === 'activity') : '')

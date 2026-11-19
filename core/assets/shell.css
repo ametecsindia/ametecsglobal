@@ -312,3 +312,44 @@ img,video,canvas{max-width:100%}
 .seatl .logo b,.seatl .logo span{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ract b{overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
 .ins4 .dnut li small{display:none}.ins4 .dnut{gap:14px}.ins4 .dring{width:104px;height:104px}
+/* clickable dashboard tiles and their list pop-up (19 Nov 2026) */
+a.kpi.kgo{text-decoration:none;color:inherit;cursor:pointer;transition:transform .15s,box-shadow .15s}
+a.kpi.kgo:hover{transform:translateY(-2px);box-shadow:0 14px 28px -16px rgba(31,58,95,.45)}
+a.kpi.kgo:after{content:"View \2192";position:absolute;right:14px;bottom:12px;font-size:11px;font-weight:600;color:#b8893b;opacity:0;transition:opacity .15s}
+a.kpi.kgo:hover:after{opacity:1}
+dialog.kdlg{border:0;border-radius:16px;padding:0;width:min(760px,94vw);max-height:82vh;box-shadow:0 30px 70px -20px rgba(15,30,50,.5)}
+dialog.kdlg::backdrop{background:rgba(15,30,50,.45)}
+.kdh{display:flex;align-items:center;gap:10px;padding:14px 16px;background:#1f3a5f;color:#fff;position:sticky;top:0}
+.kdh b{font-size:15px}.kdh em{font-style:normal;background:#b8893b;color:#fff;border-radius:99px;padding:1px 9px;font-size:12px;font-weight:700}
+.kdh input{margin-left:auto;border:0;border-radius:8px;padding:6px 10px;width:200px}
+.kdh button{background:none;border:0;color:#fff;font-size:22px;cursor:pointer;line-height:1}
+.kdb{overflow:auto;max-height:calc(82vh - 56px)}.kdb table{width:100%;border-collapse:collapse;font-size:13px}
+.kdb td{padding:9px 16px;border-bottom:1px solid #eef1f6}.kdb tr:nth-child(even) td{background:#f8fafc}.kdb td.r{text-align:right;color:#6b7a8f}
+/* tile list v2: wider, full columns, row -> detail card (19 Nov 2026) */
+dialog.kdlg{width:min(1180px,96vw);max-height:88vh;overflow:hidden}
+.kdh input{width:260px}.kdh .kcsv{font-size:14px;width:32px;height:32px;border-radius:8px;background:rgba(255,255,255,.1)}
+.kbody{display:flex;max-height:calc(88vh - 60px)}
+.kbody .kdb{flex:1;max-height:none;overflow:auto}
+.kdb thead th{position:sticky;top:0;background:#fbf7ee;color:#8c7a58;font-size:11px;text-transform:uppercase;letter-spacing:.6px;text-align:left;padding:9px 14px;border-bottom:1px solid #ece3d1;z-index:1}
+.kdb td{padding:9px 14px;vertical-align:middle;white-space:nowrap}.kdb td small{display:block;color:#9c8f78;font-size:11.5px;margin-left:40px;margin-top:-2px}
+.kdb td b{font-weight:600}.kdb th.r,.kdb td.r{text-align:right}
+.kav{width:30px;height:30px;border-radius:50%;display:inline-grid;place-items:center;background:#14100a;color:#e8c977;font-size:11px;font-weight:700;margin-right:10px;float:left}
+.kav.big{width:52px;height:52px;font-size:17px;float:none;margin:0;background:linear-gradient(135deg,#f3dc95,#b08433);color:#14100a}
+.krow{cursor:pointer}.krow:hover td{background:#fbf3e2!important}.krow.on td{background:#f7ecd2!important}
+.kgo2{color:#c9a24c;font-size:10px;margin-left:6px}
+.ktag{display:inline-block;padding:2px 9px;border-radius:99px;font-size:11.5px;font-weight:600;background:#f1f4f8;color:#1f3a5f}.ktag.field{background:#fbf1d8;color:#8a6420}
+.kempty{padding:40px;text-align:center;color:#9c8f78}.kempty i{display:block;font-size:26px;margin-bottom:8px;color:#c9a24c}
+.kdet{width:340px;flex:none;border-left:1px solid #ece3d1;background:#fffdf8;overflow:auto;padding:18px;position:relative}
+.kdet .kx{position:absolute;right:10px;top:8px;border:0;background:none;font-size:22px;color:#9c8f78;cursor:pointer}
+.kpf{display:flex;gap:12px;align-items:center;margin-bottom:14px}.kpf b{display:block;font-size:16px;color:#17130c}.kpf small{color:#7a6e5b;font-size:12px}
+.kst{font-style:normal;background:#ecfdf3;color:#15803d;padding:1px 8px;border-radius:99px;font-size:11px;font-weight:600}
+.katt{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-bottom:14px}
+.katt span{background:#fff;border:1px solid #ece3d1;border-radius:9px;padding:6px 4px;text-align:center;font-size:10.5px;color:#7a6e5b}
+.katt b{display:block;font-size:16px;color:#1f3a5f}.katt .bad b{color:#8b1e2d}
+.kdet dl{display:grid;grid-template-columns:110px 1fr;gap:7px 10px;margin:0 0 16px;font-size:12.5px}.kdet dt{color:#9c8f78}.kdet dd{margin:0;color:#17130c;font-weight:500;word-break:break-word}
+.kact{display:flex;gap:8px;flex-wrap:wrap}.kact a{display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border-radius:9px;border:1px solid #e6dac2;color:#3d3426;text-decoration:none;font-size:12.5px;font-weight:600}
+.kact a i{color:#b08433}.kact a.pri{background:#14100a;color:#f3dc95;border-color:#14100a}.kact a.pri i{color:#e8c977}
+@media (max-width:900px){.kbody{flex-direction:column}.kdet{width:auto;border-left:0;border-top:1px solid #ece3d1}}
+.kdb th{white-space:nowrap}.kdb td{white-space:normal}.kdb td:first-child{white-space:nowrap;min-width:190px}
+.kbody:has(.kdet:not([hidden])) .kdb :is(th,td):is(:nth-child(4),:nth-child(6)){display:none}
+.kbody .kdb{overflow-x:hidden}

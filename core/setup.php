@@ -102,7 +102,7 @@ final class AmetecsSetup
     {
         if ($framed) {
             // inside AmetecsGlobal: its gold look too (core/assets/frame-gold.css), so the panel is one product
-            return '<link rel="stylesheet" href="../../../core/assets/frame-gold.css?v=2"><style>.sidebar,.topbar{display:none!important}.main-wrap{margin-left:0!important}</style>';
+            return '<link rel="stylesheet" href="../../../core/assets/frame-gold.css?v=9"><script>try{var T=localStorage.getItem("agTheme");T&&T!=="gold"&&document.documentElement.classList.add("th-"+(T==="classic"?"navy":T))}catch(e){}</script><style>.sidebar,.topbar{display:none!important}.main-wrap{margin-left:0!important}</style>';
         }
         // Hidden by the server's own CSS, so nothing depends on the script below running: every way to add, import,
         // edit or bulk-upload employees inside the app (the Directory stays view and reports only).

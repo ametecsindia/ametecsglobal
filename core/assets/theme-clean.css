@@ -1,0 +1,165 @@
+/* GOLDEN (owner, 19 Nov 2026: "theme looking very simple plz make golden theme and use related color").
+   Keeps the Clean SaaS layout and task-grouped menu; colours are the gold family: espresso, bronze, gold, champagne,
+   ivory, copper. Client panel + Organization Setup; loaded LAST, after theme-gold.css. */
+.t-gold{--gold:#b8893b;--gold-2:#e2c27e;--g-grad:linear-gradient(135deg,#f6e3a8 0%,#dcb661 40%,#b8893b 75%,#8f6524 100%);
+  --g-dark:linear-gradient(170deg,#24446d 0%,#1f3a5f 45%,#14273f 100%)}
+.t-gold body{background:radial-gradient(1200px 600px at 100% -15%,rgba(220,182,97,.22),transparent 60%),radial-gradient(900px 500px at -10% 110%,rgba(184,137,59,.12),transparent 60%),#fbf6ea;color:#2a1f10}
+
+/* menu: navy with gold (owner, 19 Nov: "also use navy blue") */
+.t-gold .cside{background:var(--g-dark);border-right:1px solid rgba(226,194,126,.18);padding:14px 12px}
+.t-gold .cside:after{height:3px;background:var(--g-grad)}
+.t-gold .cside .brand{color:#fff7e6}
+.t-gold .cside .logo-mark{background:var(--g-grad);color:#24190c;box-shadow:0 6px 18px -8px rgba(220,182,97,.9)}
+.t-gold .cside .ws{background:linear-gradient(135deg,rgba(246,227,168,.12),rgba(184,137,59,.06));border:1px solid rgba(226,194,126,.25)}
+.t-gold .cside .ws-i{background:var(--g-grad);color:#24190c}.t-gold .cside .ws b{color:#fff7e6}.t-gold .cside .ws small{color:#d4b876}
+.t-gold .cside .nav-l{color:#c9a24c;font-size:10.5px;letter-spacing:1.4px;font-weight:700;padding:16px 10px 6px}
+.t-gold .cside a.nv,.t-gold .cside .grp summary{color:#dbe4f0;padding:4px 8px}
+.t-gold .cside a.nv>i,.t-gold .cside .grp summary>i:first-child{background:rgba(226,194,126,.08);color:#dcb661}
+.t-gold .cside a.nv:hover,.t-gold .cside .grp summary:hover{background:rgba(226,194,126,.10);color:#fff7e6}
+.t-gold .cside a.nv.on{background:var(--g-grad);color:#14273f;font-weight:700;box-shadow:0 8px 20px -10px rgba(220,182,97,.9)}
+.t-gold .cside a.nv.on>i{background:rgba(36,25,12,.12);color:#24190c}
+.t-gold .cside a.nv.on:before{display:none}
+.t-gold .cside .grp a.sub{color:#b9c8dc}.t-gold .cside .grp a.sub i{color:#a8874d}
+.t-gold .cside .grp a.sub:before{background:rgba(226,194,126,.2)}
+.t-gold .cside .grp a.sub:hover,.t-gold .cside .grp a.sub.on{color:#f6e3a8;background:rgba(226,194,126,.10)}
+.t-gold .cside .grp a.sub.on i,.t-gold .cside .grp a.sub:hover i{color:#f6e3a8}
+.t-gold .cside .grp .car{color:#a8874d}
+.t-gold .cside .ucnt{background:#dcb661;color:#24190c}
+.t-gold .cside .side-foot{border-top-color:rgba(226,194,126,.15);color:#c9ad73}
+
+/* top bar */
+.t-gold .top{background:rgba(255,251,240,.88);border-bottom:1px solid #ecdcb6;backdrop-filter:blur(8px);box-shadow:0 1px 0 rgba(220,182,97,.25)}
+.t-gold .av{background:var(--g-grad);color:#24190c}
+
+/* cards: white with gold hairline and a warm glow */
+.t-gold .box,.t-gold .panel,.t-gold .kpi,.t-gold .chart,.t-gold .dfilters,.t-gold .ma,.t-gold .dapp,.t-gold .lic-t,.t-gold .ls,.t-gold .pl,.t-gold .strip{background:#fffdf8;border:1px solid #ecdcb6;border-radius:14px;box-shadow:0 1px 2px rgba(90,60,15,.05),0 14px 32px -20px rgba(140,100,30,.35)}
+.t-gold .kpis{gap:16px;margin-bottom:24px}.t-gold .charts{gap:16px;margin-bottom:24px}
+.t-gold .kpi{padding:18px 18px 16px;background:linear-gradient(160deg,#fffdf7 0%,#fff8e8 100%)}
+.t-gold .kpi:before{inset:0 0 auto 0;width:auto;height:3px;background:var(--g-grad)}
+.t-gold .kpi.red:before{background:linear-gradient(90deg,#a52a3a,#7b1424)}
+.t-gold .kpi.amber:before{background:linear-gradient(90deg,#e0a43a,#b8742a)}
+.t-gold .kpi>i{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;background:linear-gradient(135deg,#24446d,#1f3a5f);color:#e2c27e;font-size:13px;top:14px;right:14px;box-shadow:0 6px 14px -8px rgba(184,137,59,.9)}
+.t-gold .kpi span{color:#8a6a35;font-weight:600;font-size:12.5px}
+.t-gold .kpi b{color:#1f3a5f;font-size:28px;font-weight:800;margin-top:6px}
+.t-gold .kpi small{color:#a8906a}
+.t-gold .kpi.green b{color:#1f3a5f}.t-gold .kpi.red b{color:#8b1e2d}.t-gold .kpi.amber b{color:#b8742a}.t-gold .kpi.blue b{color:#2a4a73}
+.t-gold a.kpi.kgo:hover{border-color:#dcb661;box-shadow:0 16px 34px -16px rgba(184,137,59,.6)}
+.t-gold .chart h3,.t-gold .panel>h3{color:#1f3a5f}
+.t-gold .chart h3 i,.t-gold .box .hd h2 i{background:linear-gradient(135deg,#24446d,#1f3a5f);color:#e2c27e}
+.t-gold .box .hd{background:linear-gradient(180deg,#fff8e8,#fffdf8)}
+.t-gold .dfilters label{color:#8a6a35}
+.t-gold .qbar a{background:#fffdf8;border-color:#ecdcb6;color:#1f3a5f}
+.t-gold .qbar a:hover{background:var(--g-grad);color:#24190c;border-color:transparent}
+.t-gold .qbar a:hover i{color:#24190c}
+
+/* list pop-up */
+.t-gold .kdh{background:var(--g-dark);color:#fff;border-bottom:2px solid #dcb661}
+.t-gold .kdh em{background:var(--g-grad);color:#24190c}
+.t-gold .kdb tr:nth-child(even) td{background:#fdf7ea}.t-gold .kdb td{border-bottom-color:#f3e8cf}
+.t-gold .top .crumb,.t-gold h1{color:#1f3a5f}
+.t-gold .cside .grp .car,.t-gold .cside .grp a.sub i{color:#8fa3bf}
+/* dark red, the third house accent (owner, 19 Nov: "use both navy blue and dark red") */
+.t-gold .kpi.red>i{background:linear-gradient(135deg,#a52a3a,#7b1424);color:#f6e3a8}
+.t-gold .cside:after{background:linear-gradient(90deg,#dcb661,#b8893b 60%,#8b1e2d)}
+.t-gold .bell em,.t-gold .cside .ucnt{background:#8b1e2d;color:#fff}
+.t-gold .kdh{border-bottom-color:#8b1e2d}
+.t-gold .qbar a:first-child{background:linear-gradient(135deg,#a52a3a,#7b1424);color:#fff;border-color:transparent}.t-gold .qbar a:first-child i{color:#f6e3a8}
+.t-gold .kpi:hover>i{transform:scale(1.06)}
+/* BALANCE (owner, 19 Nov: "use perfect combination"): 60 / 30 / 10 - ivory & white base, navy as the main colour,
+   gold as the accent, dark red only for alerts (absent, late, counts). Warm brown text replaced by navy-grey. */
+.t-gold body{background:radial-gradient(1100px 520px at 100% -12%,rgba(220,182,97,.14),transparent 60%),#faf8f3;color:#1b2a3d}
+.t-gold .top{background:rgba(255,255,255,.92);border-bottom:1px solid #ece4d2;box-shadow:none}
+.t-gold .box,.t-gold .panel,.t-gold .kpi,.t-gold .chart,.t-gold .dfilters,.t-gold .ma,.t-gold .dapp,.t-gold .lic-t,.t-gold .ls,.t-gold .pl,.t-gold .strip{background:#fff;border-color:#ece4d2;box-shadow:0 1px 2px rgba(31,58,95,.04),0 10px 28px -20px rgba(31,58,95,.28)}
+.t-gold .kpi{background:#fff}
+.t-gold .kpi:before{height:3px;background:linear-gradient(90deg,#dcb661,#b8893b)}
+.t-gold .kpi.amber:before,.t-gold .kpi.red:before{background:linear-gradient(90deg,#a52a3a,#7b1424)}
+.t-gold .kpi span{color:#5b6b82}
+.t-gold .kpi small,.t-gold .dfilters label,.t-gold .crumb{color:#8a97a8}
+.t-gold .kpi b,.t-gold .kpi.green b,.t-gold .kpi.blue b{color:#1f3a5f}
+.t-gold .kpi.amber b,.t-gold .kpi.red b{color:#8b1e2d}
+.t-gold .kpi.amber>i{background:linear-gradient(135deg,#a52a3a,#7b1424);color:#f6e3a8}
+.t-gold .chart h3,.t-gold .panel>h3,.t-gold h1,.t-gold .dsec{color:#1f3a5f}
+.t-gold .qbar a{background:#fff;border-color:#ece4d2;color:#1f3a5f}.t-gold .qbar a i{color:#b8893b}
+.t-gold .qbar a:first-child{background:linear-gradient(135deg,#24446d,#1f3a5f);color:#fff}.t-gold .qbar a:first-child i{color:#e2c27e}
+.t-gold .qbar a:hover{background:linear-gradient(135deg,#e2c27e,#b8893b);color:#14273f;border-color:transparent}.t-gold .qbar a:hover i{color:#14273f}
+.t-gold .kdb tr:nth-child(even) td{background:#f8f6f0}.t-gold .kdb td{border-bottom-color:#efe9dc}
+.t-gold .kpis{grid-template-columns:repeat(5,minmax(0,1fr))}   /* 15 tiles = 3 even rows */
+@media (max-width:1100px){.t-gold .kpis{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media (max-width:640px){.t-gold .kpis{grid-template-columns:1fr 1fr}}
+/* OPTION A - ROYAL BLACK AND GOLD (owner picked from 3 previews, 19 Nov 2026): black menu with gold gradient highlights,
+   ivory page, white tiles with a gold top line, navy numbers, dark red only for alerts. Overrides everything above. */
+.t-gold{--g-dark:linear-gradient(170deg,#1d170e 0%,#110d07 55%,#0a0704 100%);--g-grad:linear-gradient(135deg,#f3dc95 0%,#d6ae55 45%,#b08433 100%)}
+.t-gold body{background:radial-gradient(1100px 520px at 100% -12%,rgba(214,174,85,.16),transparent 60%),#faf6ee;color:#17130c}
+.t-gold .cside{background:var(--g-dark)!important;border-right:1px solid rgba(232,201,119,.14)}
+.t-gold .cside:after{background:var(--g-grad)}
+.t-gold .cside a.nv,.t-gold .cside .grp summary{color:#d8cbb2}
+.t-gold .cside a.nv>i,.t-gold .cside .grp summary>i:first-child{background:rgba(232,201,119,.08);color:#d6ae55}
+.t-gold .cside a.nv:hover,.t-gold .cside .grp summary:hover{background:rgba(232,201,119,.08);color:#fff7e6}
+.t-gold .cside a.nv.on{background:var(--g-grad);color:#14100a}
+.t-gold .cside a.nv.on>i{background:rgba(20,16,10,.14);color:#14100a}
+.t-gold .cside .nav-l{color:#b8964f}
+.t-gold .cside .grp a.sub{color:#bfae8d}.t-gold .cside .grp a.sub i,.t-gold .cside .grp .car{color:#8c7a58}
+.t-gold .cside .grp a.sub:hover,.t-gold .cside .grp a.sub.on{color:#f3dc95;background:rgba(232,201,119,.08)}
+.t-gold .cside .ws small{color:#b8964f}
+.t-gold .top{background:rgba(255,252,245,.9);border-bottom:1px solid #ece3d1}
+.t-gold .av{background:var(--g-grad);color:#14100a}
+.t-gold .box,.t-gold .panel,.t-gold .kpi,.t-gold .chart,.t-gold .dfilters,.t-gold .ma,.t-gold .dapp,.t-gold .lic-t,.t-gold .ls,.t-gold .pl,.t-gold .strip{background:#fff;border-color:#ece3d1;box-shadow:0 1px 2px rgba(60,40,10,.04),0 12px 30px -20px rgba(60,40,10,.25)}
+.t-gold .kpi:before{background:var(--g-grad)}
+.t-gold .kpi>i{background:#14100a;color:#e8c977;box-shadow:none}
+.t-gold .kpi.red>i,.t-gold .kpi.amber>i{background:#8b1e2d;color:#f3dc95}
+.t-gold .kpi span{color:#7a6e5b}.t-gold .kpi small,.t-gold .dfilters label,.t-gold .crumb{color:#9c8f78}
+.t-gold .chart h3 i,.t-gold .box .hd h2 i{background:#14100a;color:#e8c977}
+.t-gold .qbar a{background:#fff;border-color:#ece3d1;color:#3d3426}.t-gold .qbar a i{color:#b08433}
+.t-gold .qbar a:first-child{background:#14100a;color:#f3dc95}.t-gold .qbar a:first-child i{color:#e8c977}
+.t-gold .qbar a:hover{background:var(--g-grad);color:#14100a}.t-gold .qbar a:hover i{color:#14100a}
+.t-gold .kdh{background:var(--g-dark);border-bottom:2px solid #d6ae55}
+.t-gold .kdh em{background:var(--g-grad);color:#14100a}
+/* Dropdowns in black and gold, not Windows blue (19 Nov 2026). Chrome/Edge 135+ (customisable select); older browsers keep their own list. */
+@supports (appearance: base-select) {
+  .t-gold select,.t-gold select::picker(select){appearance:base-select}
+  .t-gold select{display:flex;align-items:center;justify-content:space-between;gap:6px;background:#fff;border:1px solid #e6dac2;border-radius:9px;color:#17130c;cursor:pointer}
+  .t-gold select::picker-icon{color:#b08433;transition:transform .15s}
+  .t-gold select:open::picker-icon{transform:rotate(180deg)}
+  .t-gold select::picker(select){border:1px solid #ece3d1;border-radius:12px;background:#fffdf8;padding:5px;margin-top:4px;box-shadow:0 18px 40px -16px rgba(20,16,10,.45);max-height:320px}
+  .t-gold select option{padding:7px 10px;border-radius:7px;color:#3d3426;font-size:13px;cursor:pointer}
+  .t-gold select option::checkmark{display:none}
+  .t-gold select option:hover,.t-gold select option:focus-visible{background:#f7ecd2;color:#14100a;outline:0}
+  .t-gold select option:checked{background:linear-gradient(135deg,#1d170e,#0a0704);color:#f3dc95;font-weight:600}
+}
+/* EVERY PAGE in Option A (owner, 19 Nov 2026: "change every where theme and arrange all page / section / features good way").
+   Shared patterns: navy headings, black icon badges with a gold glyph, gold lines, tidier grids. */
+.t-gold .pgh h1,.t-gold .sh h2,.t-gold .ibox h3,.t-gold .box .hd h2,.t-gold .card>h2,.t-gold .pane h1,.t-gold .pane h2{color:#1f3a5f}
+.t-gold .pgh p{color:#7a6e5b}
+.t-gold .lstrip i,.t-gold .akpis i,.t-gold .tlic,.t-gold .ibox h3 i,.t-gold .box .hd h2 i{background:#14100a!important;color:#e8c977!important;border-radius:10px}
+.t-gold .ibox h3 i{width:30px;height:30px;display:grid;place-items:center;font-size:13px}
+.t-gold .lstrip>div,.t-gold .ibox,.t-gold .lcard,.t-gold .faq details,.t-gold .card{background:#fff;border-color:#ece3d1;box-shadow:0 1px 2px rgba(60,40,10,.04),0 10px 26px -18px rgba(60,40,10,.28)}
+.t-gold .lstrip b{color:#1f3a5f}
+
+/* Licences & plans: one gold line on every card, gold seat bar, navy time bar, buttons side by side */
+.t-gold .lcard,.t-gold .lcard[style]{--c:#c9a24c!important}
+.t-gold .lcard:before{height:3px;background:linear-gradient(90deg,#f3dc95,#d6ae55,#b08433)}
+.t-gold .lbar i{background:linear-gradient(90deg,#d6ae55,#b08433)}
+.t-gold .lbar.t i{background:linear-gradient(90deg,#2a4a73,#1f3a5f)}
+.t-gold .lcard footer{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.t-gold .lcard footer>*{min-width:0}.t-gold .lcard footer .pform[open]{grid-column:1/-1}
+.t-gold .lcard footer summary,.t-gold .lcard footer .btn2,.t-gold .lcard footer button{width:100%;justify-content:center;white-space:nowrap}
+.t-gold .lcard .lchips span{background:#faf6ee;border-color:#ece3d1;color:#4a3f2e}.t-gold .lcard .lchips i{color:#b08433}
+
+/* Support & help: contact narrow, message wide; questions in two columns */
+.t-gold .grid2c{grid-template-columns:minmax(0,1fr) minmax(0,1.7fr)}
+.t-gold .faq{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;align-items:start}
+.t-gold .faq details{margin:0}.t-gold .faq summary{color:#1f3a5f}.t-gold .faq summary::marker{color:#b08433}
+@media (max-width:900px){.t-gold .grid2c,.t-gold .faq{grid-template-columns:1fr}}
+
+/* App access: app tabs black and gold; each level a card with its own scroll; wider pickers */
+.t-gold .tabs a.on{background:#14100a;color:#f3dc95;border-color:#14100a}
+.t-gold .tabs a:not(.on):hover{border-color:#d6ae55;background:#fffaf0}
+.t-gold .lv{grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:16px;align-items:start}
+.t-gold .lv>div{background:#fff;border:1px solid #ece3d1;border-top:3px solid #c9a24c;border-radius:12px;max-height:440px;overflow:auto;scrollbar-width:thin;scrollbar-color:#e2d3b3 transparent}
+.t-gold .lv table{width:100%;border-collapse:collapse}
+.t-gold .lv th{position:sticky;top:0;background:#fbf6ea;color:#7a6e5b;z-index:1;padding:9px 12px;text-align:left}
+.t-gold .lv td{padding:7px 12px;border-bottom:1px solid #f3ece0;font-size:13px}
+.t-gold .lv select{min-width:140px;white-space:nowrap}
+.t-gold .ibox .frm{max-width:none}.t-gold .ibox .frm input,.t-gold .ibox .frm textarea,.t-gold .ibox .frm .btn2{width:100%;max-width:none;box-sizing:border-box}
+.t-gold .ibox .frm .btn2{justify-content:center}
+.t-gold .lv td:first-child{white-space:nowrap}

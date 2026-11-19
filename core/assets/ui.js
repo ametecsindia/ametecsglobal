@@ -77,18 +77,21 @@
   new MutationObserver(function () { document.querySelectorAll('main table:not(.rt)').forEach(label); }).observe(document.body, {childList: true, subtree: true});
 })();
 
-// THEME SWITCH (owner, 18 Nov 2026: gold by default; "Classic navy theme" in the user menu), remembered on this browser.
+// THEME CHOICE (owner, 19 Nov 2026): Golden (default), Navy, Light - user menu, remembered on this browser.
 (function () {
   var root = document.documentElement;
-  function label() { document.querySelectorAll('[data-theme-label]').forEach(function (l) { l.textContent = root.classList.contains('t-gold') ? 'Classic navy theme' : 'Gold theme'; }); }
+  function cur() { return root.classList.contains('th-navy') ? 'navy' : (root.classList.contains('th-light') ? 'light' : (root.classList.contains('th-dark') ? 'dark' : 'gold')); }
+  function mark() { document.querySelectorAll('[data-theme-set]').forEach(function (a) { a.classList.toggle('on', a.dataset.themeSet === cur()); }); }
   document.addEventListener('click', function (e) {
-    if (!e.target.closest('[data-theme-toggle]')) return;
+    var a = e.target.closest('[data-theme-set]'); if (!a) return;
     e.preventDefault();
-    var gold = root.classList.toggle('t-gold');
-    try { localStorage.setItem('agTheme', gold ? 'gold' : 'classic'); } catch (x) {}
-    label();
+    root.classList.remove('th-navy', 'th-light', 'th-dark');
+    if (a.dataset.themeSet !== 'gold') root.classList.add('th-' + a.dataset.themeSet);
+    try { localStorage.setItem('agTheme', a.dataset.themeSet); } catch (x) {}
+    mark();
+    document.querySelectorAll('iframe').forEach(function (f) { try { var h = f.contentDocument.documentElement; h.classList.remove('th-navy', 'th-light', 'th-dark'); a.dataset.themeSet !== 'gold' && h.classList.add('th-' + a.dataset.themeSet); } catch (x) {} });
   });
-  label();
+  mark();
 })();
 // self-service plan form: plan price, credit, GST and total as you change plan or seats
 (function () {
@@ -129,3 +132,44 @@ document.addEventListener('click', function (e) {
   var csv = rows.map(function (r) { return r.map(function (c) { return '"' + String(c).replace(/"/g, '""') + '"'; }).join(','); }).join('\r\n');
   var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv' })); a.download = b.dataset.name || 'export.csv'; a.click();
 });
+
+/* Dashboard tiles open their list (dialog.kdlg, core/dashboard.php), 19 Nov 2026 */
+document.addEventListener('click', function (ev) {
+  var t = ev.target.closest('[data-dlg]');
+  if (t) { ev.preventDefault(); var d = document.getElementById(t.dataset.dlg); if (d) d.showModal(); return; }
+  if (ev.target.closest('[data-close]') || ev.target.matches('dialog.kdlg')) { var o = ev.target.closest('dialog'); if (o) o.close(); }
+});
+document.addEventListener('input', function (ev) {
+  if (!ev.target.matches('[data-kfind]')) return;
+  var q = ev.target.value.toLowerCase();
+  ev.target.closest('dialog').querySelectorAll('tbody tr').forEach(function (r) { r.hidden = q !== '' && r.textContent.toLowerCase().indexOf(q) < 0; });
+});
+
+/* Tile list rows open the person's full details in the side card; CSV of the visible rows (19 Nov 2026) */
+(function () {
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]; }); }
+  function show(row) {
+    var dlg = row.closest('dialog'), box = dlg.querySelector('.kdet'), d = JSON.parse(row.dataset.d);
+    dlg.querySelectorAll('.krow.on').forEach(function (r) { r.classList.remove('on'); }); row.classList.add('on');
+    var ini = d.name.split(/\s+/).slice(0, 2).map(function (w) { return w.charAt(0); }).join('').toUpperCase();
+    var h = '<button type="button" class="kx" data-kx aria-label="Close details">&times;</button><div class="kpf"><span class="kav big">' + esc(ini) + '</span><div><b>' + esc(d.name) + '</b><small>' + esc(d.code) + ' &middot; <em class="kst">' + esc(d.status) + '</em></small></div></div><div class="katt">';
+    Object.keys(d.att).forEach(function (k) { h += '<span class="' + (k === 'Absent' || k === 'Late' ? 'bad' : '') + '"><b>' + d.att[k] + '</b>' + esc(k) + '</span>'; });
+    h += '</div><dl>';
+    ['Staff type', 'Designation', 'Company', 'Branch', 'Department', 'Team', 'Gender', 'Date of joining', 'Date of birth', 'Probation ends', 'Mobile', 'Email'].forEach(function (k) { if (d[k]) h += '<dt>' + esc(k) + '</dt><dd>' + esc(d[k]) + '</dd>'; });
+    h += '</dl><div class="kact">' + (d.Mobile ? '<a href="tel:' + esc(d.Mobile) + '"><i class="fas fa-phone"></i>Call</a>' : '') + (d.Email ? '<a href="mailto:' + esc(d.Email) + '"><i class="fas fa-envelope"></i>Email</a>' : '')
+      + '<a class="pri" href="org.php?s=employees"><i class="fas fa-user-pen"></i>Employee directory</a></div>';
+    box.innerHTML = h; box.hidden = false;
+  }
+  document.addEventListener('click', function (ev) {
+    var r = ev.target.closest('.krow'); if (r) { show(r); return; }
+    var x = ev.target.closest('[data-kx]'); if (x) { var b = x.closest('.kdet'); b.hidden = true; b.closest('dialog').querySelectorAll('.krow.on').forEach(function (r) { r.classList.remove('on'); }); return; }
+    var c = ev.target.closest('[data-kcsv]'); if (!c) return;
+    var dlg = c.closest('dialog'), rows = [];
+    dlg.querySelectorAll('table tr').forEach(function (tr) { if (tr.hidden) return; var d = tr.dataset.d ? JSON.parse(tr.dataset.d) : null;
+      rows.push(d ? [d.name, d.code, d['Staff type'], d.Designation, d.Company, d.Branch, d.Department, d.Team, d.Mobile, d.Email, d['Date of joining'], tr.lastElementChild.textContent.trim()]
+        : (tr.parentNode.tagName === 'THEAD' && dlg.querySelector('.krow') ? ['Name', 'Code', 'Staff type', 'Designation', 'Company', 'Branch', 'Department', 'Team', 'Mobile', 'Email', 'Date of joining', 'Note'] : [].map.call(tr.children, function (t) { return t.textContent.trim(); }))); });
+    var csv = rows.map(function (r) { return r.map(function (v) { return '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"'; }).join(','); }).join('\r\n');
+    var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv' })); a.download = c.dataset.kcsv; a.click();
+  });
+  document.addEventListener('keydown', function (ev) { if (ev.key === 'Enter' && ev.target.classList && ev.target.classList.contains('krow')) show(ev.target); });
+})();

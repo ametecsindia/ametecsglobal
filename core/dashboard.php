@@ -131,8 +131,64 @@ $opt = static function (array $list, string $cur, string $all): string {
     return $h;
 };
 $range = $oneDay ? date('d M Y', (int) strtotime($from)) : date('d M', (int) strtotime($from)) . ' – ' . date('d M Y', (int) strtotime($to));
-$tile = static fn (string $label, string $value, string $sub = '', string $tone = '', string $icon = ''): string
-    => '<div class="kpi ' . ag_h($tone) . '">' . ($icon !== '' ? '<i class="fas ' . $icon . '"></i>' : '') . '<span>' . ag_h($label) . '</span><b>' . ag_h($value) . '</b>' . ($sub !== '' ? '<small>' . ag_h($sub) . '</small>' : '') . '</div>';
+// CLICKABLE TILES (owner, 19 Nov 2026: "add here more features and clickable"): a tile with a list opens it in a pop-up
+// (<dialog>, ui.js); the list is the people behind the number, with company, department and a note.
+$byIdAll = array_column($chosen, null, 'id');
+$lists = [];
+$desig = $orgList('designations');
+$who = static function (array $e, string $note = '') use ($org, $col, $desig, $people): array {
+    $nm = static fn (string $k) => $org[$k][(string) ($e[$col[$k]] ?? '')] ?? '';
+    $dt = static fn ($d) => strlen((string) $d) >= 10 ? date('d M Y', (int) strtotime((string) $d)) : '';
+    $p = $people[(string) ($e['id'] ?? '')] ?? [];
+    // full record for the detail card (row click, ui.js)
+    $d = ['name' => trim((string) ($e['name'] ?? '')), 'code' => (string) ($e['emp_code'] ?? ''), 'status' => ucfirst((string) ($e['status'] ?? 'active')),
+        'Staff type' => trim((string) ($e['type'] ?? '')), 'Company' => $nm('company'), 'Branch' => $nm('branch'), 'Department' => $nm('department'), 'Team' => $nm('team'),
+        'Designation' => $desig[(string) ($e['designation_id'] ?? '')] ?? (string) ($e['designation'] ?? ''), 'Gender' => (string) ($e['gender'] ?? ''),
+        'Date of joining' => $dt($e['doj'] ?? ''), 'Date of birth' => $dt($e['dob'] ?? ''), 'Probation ends' => $dt($e['probation_end'] ?? ''),
+        'Mobile' => (string) ($e['mobile'] ?? ''), 'Email' => (string) ($e['email'] ?? ''),
+        'att' => ['Present' => (int) ($p['present'] ?? 0), 'Absent' => (int) ($p['absent'] ?? 0), 'On leave' => (int) ($p['leave'] ?? 0), 'Late' => (int) ($p['late'] ?? 0), 'Early out' => (int) ($p['early'] ?? 0)]];
+    return [$d['name'], $d['code'], $d['Company'], $d['Department'], $note, $d];
+};
+$lists['employees'] = array_map(static fn ($e) => $who($e, (string) ($e['type'] ?? '')), $chosen);
+$lists['field'] = array_map(static fn ($e) => $who($e, trim((string) ($e['type'] ?? '')) ?: 'No staff type'), $chosen);
+usort($lists['field'], static fn ($a, $b) => [$a[4], $a[0]] <=> [$b[4], $b[0]]);
+foreach (array_keys($combine) as $k) {
+    foreach ($people as $id => $p) {
+        if ((int) ($p[$k] ?? 0) > 0 && isset($byIdAll[$id])) {
+            $lists[$k][] = $who($byIdAll[$id], $oneDay ? '' : $p[$k] . ($k === 'late' || $k === 'early' ? ' times' : ' days'));
+        }
+    }
+}
+$lists['notmarked'] = array_map(static fn ($e) => $who($e), array_values(array_filter($chosen, static fn ($e) => !isset($people[(string) $e['id']]) || array_sum(array_intersect_key($people[(string) $e['id']], ['present' => 1, 'absent' => 1, 'leave' => 1])) === 0)));
+$soon = static fn (string $d, int $days) => $d !== '' && $d >= $today && $d <= $day('+' . $days . ' days');
+$lists['joiners'] = array_map(static fn ($e) => $who($e, 'Joined ' . date('d M Y', (int) strtotime((string) $e['doj']))), array_values(array_filter($chosen, static fn ($e) => (string) ($e['doj'] ?? '') >= $day('-30 days'))));
+$lists['birthdays'] = array_map(static fn ($e) => $who($e, date('d M', (int) strtotime((string) $e['dob']))), array_values(array_filter($chosen, static fn ($e) => strlen((string) ($e['dob'] ?? '')) >= 10 && substr((string) $e['dob'], 5, 2) === substr($today, 5, 2))));
+$lists['probation'] = array_map(static fn ($e) => $who($e, 'Ends ' . date('d M Y', (int) strtotime((string) $e['probation_end']))), array_values(array_filter($chosen, static fn ($e) => $soon(substr((string) ($e['probation_end'] ?? ''), 0, 10), 30))));
+$coCount = array_count_values(array_map(static fn ($e) => (string) ($e[$col['company']] ?? ''), $chosen));
+$deptCount = array_count_values(array_map(static fn ($e) => (string) ($e[$col['department']] ?? ''), $chosen));
+$lists['companies'] = array_map(static fn ($id, $n) => [$org['company'][$id] ?? 'Not set', '', '', '', $n . ' employees'], array_keys($coCount), $coCount);
+$lists['departments'] = array_map(static fn ($id, $n) => [$org['department'][$id] ?? 'Not set', '', '', '', $n . ' employees'], array_keys($deptCount), $deptCount);
+$tile = static function (string $label, string $value, string $sub = '', string $tone = '', string $icon = '', string $key = '', string $href = '') use ($lists): string {
+    $inner = ($icon !== '' ? '<i class="fas ' . $icon . '"></i>' : '') . '<span>' . ag_h($label) . '</span><b>' . ag_h($value) . '</b>' . ($sub !== '' ? '<small>' . ag_h($sub) . '</small>' : '');
+    if ($key !== '' && isset($lists[$key])) { return '<a class="kpi kgo ' . ag_h($tone) . '" href="#" data-dlg="dl-' . $key . '">' . $inner . '</a>'; }
+    return $href !== '' ? '<a class="kpi kgo ' . ag_h($tone) . '" href="' . ag_h($href) . '">' . $inner . '</a>' : '<div class="kpi ' . ag_h($tone) . '">' . $inner . '</div>';
+};
+$dialog = static function (string $key, string $title) use ($lists, $range): string {
+    $rows = $lists[$key] ?? [];
+    $people = isset($rows[0][5]);
+    $h = '<dialog class="kdlg" id="dl-' . $key . '"><div class="kdh"><b>' . ag_h($title) . '</b><em>' . count($rows) . '</em><input type="search" placeholder="Search name, code, company…" data-kfind>'
+        . '<button type="button" class="kcsv" data-kcsv="' . ag_h($key . '-' . date('Y-m-d') . '.csv') . '" title="Download as CSV"><i class="fas fa-download"></i></button><button type="button" data-close aria-label="Close">&times;</button></div>';
+    if ($rows === []) { return $h . '<p class="kempty"><i class="fas fa-mug-hot"></i>Nobody here for ' . ag_h($range) . '.</p></dialog>'; }
+    $h .= '<div class="kbody"><div class="kdb"><table><thead><tr>' . ($people ? '<th>Employee</th><th>Staff type</th><th>Company</th><th>Branch</th><th>Department</th><th>Team</th><th class="r">Note</th>' : '<th>Name</th><th class="r">Employees</th>') . '</tr></thead><tbody>';
+    foreach ($rows as $r) {
+        [$n, $c, $co, $dp, $note] = $r;
+        if (!$people) { $h .= '<tr><td><b>' . ag_h($n) . '</b></td><td class="r">' . ag_h((string) $note) . '</td></tr>'; continue; }
+        $d = $r[5];
+        $ini = mb_strtoupper(implode('', array_map(static fn ($w) => mb_substr($w, 0, 1), array_slice(preg_split('/\s+/', $n) ?: [], 0, 2))));
+        $h .= '<tr class="krow" tabindex="0" data-d="' . ag_h((string) json_encode($d)) . '"><td><span class="kav">' . ag_h($ini) . '</span><b>' . ag_h($n) . '</b><small>' . ag_h($c) . '</small></td><td><span class="ktag ' . strtolower(ag_h($d['Staff type'])) . '">' . ag_h($d['Staff type'] ?: '—') . '</span></td><td>' . ag_h($co) . '</td><td>' . ag_h($d['Branch']) . '</td><td>' . ag_h($dp) . '</td><td>' . ag_h($d['Team']) . '</td><td class="r">' . ag_h((string) $note) . ' <i class="fas fa-chevron-right kgo2"></i></td></tr>';
+    }
+    return $h . '</tbody></table></div><aside class="kdet" hidden></aside></div></dialog>';
+};
 
 ob_start(); ?>
 <form class="dfilters" id="dfilters" method="get" autocomplete="off">
@@ -155,14 +211,22 @@ ob_start(); ?>
 <?php endif; ?>
 
 <section class="kpis">
-  <?= $tile('Employees', (string) count($chosen), $filtered ? 'in this selection' : 'active', '', 'fa-users') ?>
-  <?= $tile('Field / Office', $field . ' / ' . $office, count($chosen) - $field - $office > 0 ? (count($chosen) - $field - $office) . ' without a staff type' : 'staff type', '', 'fa-person-walking') ?>
+  <?= $tile('Employees', (string) count($chosen), $filtered ? 'in this selection' : 'active', '', 'fa-users', 'employees') ?>
+  <?= $tile('Field / Office', $field . ' / ' . $office, count($chosen) - $field - $office > 0 ? (count($chosen) - $field - $office) . ' without a staff type' : 'staff type', '', 'fa-person-walking', 'field') ?>
   <?php if ($working > 0 || isset($tot['present'])): ?>
-  <?= $tile('Attendance', $working > 0 ? (int) round(100 * (($tot['present'] ?? 0) + ($tot['leave'] ?? 0)) / $working) . '%' : '-', 'present or on leave', 'green', 'fa-chart-pie') ?>
-  <?php foreach ($combine as $k => $lab): if (!isset($tot[$k])) { continue; } ?><?= $tile($lab, (string) $tot[$k], $oneDay ? ($k === 'present' ? 'of ' . $working . ' working' : ($from === $today ? 'today' : 'that day')) : ($k === 'late' || $k === 'early' ? 'times' : 'person-days'), ['present' => 'green', 'absent' => $tot[$k] > 0 ? 'red' : '', 'leave' => 'blue', 'late' => $tot[$k] > 0 ? 'amber' : '', 'early' => $tot[$k] > 0 ? 'amber' : ''][$k]) ?><?php endforeach; ?>
+  <?= $tile('Attendance', $working > 0 ? (int) round(100 * (($tot['present'] ?? 0) + ($tot['leave'] ?? 0)) / $working) . '%' : '-', 'present or on leave', 'green', 'fa-chart-pie', 'present') ?>
+  <?php foreach ($combine as $k => $lab): if (!isset($tot[$k])) { continue; } ?><?= $tile($lab, (string) $tot[$k], $oneDay ? ($k === 'present' ? 'of ' . $working . ' working' : ($from === $today ? 'today' : 'that day')) : ($k === 'late' || $k === 'early' ? 'times' : 'person-days'), ['present' => 'green', 'absent' => $tot[$k] > 0 ? 'red' : '', 'leave' => 'blue', 'late' => $tot[$k] > 0 ? 'amber' : '', 'early' => $tot[$k] > 0 ? 'amber' : ''][$k], ['present' => 'fa-user-check', 'absent' => 'fa-user-xmark', 'leave' => 'fa-umbrella-beach', 'late' => 'fa-clock', 'early' => 'fa-person-walking-arrow-right'][$k], $k) ?><?php endforeach; ?>
   <?php endif; ?>
-  <?= $tile('Applications', (string) count($held), $f['app'] !== '' ? 'filtered' : 'in your plan', '', 'fa-grip') ?>
+  <?= $tile('Applications', (string) count($held), $f['app'] !== '' ? 'filtered' : 'in your plan', '', 'fa-grip', '', '?v=apps') ?>
+  <?= $tile('Not marked', (string) count($lists['notmarked']), 'no attendance ' . ($oneDay ? 'that day' : 'in range'), count($lists['notmarked']) > 0 ? 'amber' : '', 'fa-user-clock', 'notmarked') ?>
+  <?= $tile('Companies', (string) count($lists['companies']), count($lists['departments']) . ' departments', '', 'fa-building', 'companies') ?>
+  <?= $tile('Departments', (string) count($lists['departments']), 'with employees', '', 'fa-sitemap', 'departments') ?>
+  <?= $tile('New joiners', (string) count($lists['joiners']), 'last 30 days', '', 'fa-user-plus', 'joiners') ?>
+  <?= $tile('Birthdays', (string) count($lists['birthdays']), 'this month', '', 'fa-cake-candles', 'birthdays') ?>
+  <?= $tile('Probation ending', (string) count($lists['probation']), 'next 30 days', count($lists['probation']) > 0 ? 'blue' : '', 'fa-user-check', 'probation') ?>
 </section>
+<?php foreach (['employees' => 'Employees', 'field' => 'Field / office staff', 'present' => 'Present', 'absent' => 'Absent', 'leave' => 'On leave', 'late' => 'Late arrivals', 'early' => 'Early logouts',
+    'notmarked' => 'Not marked', 'companies' => 'Companies', 'departments' => 'Departments', 'joiners' => 'New joiners', 'birthdays' => 'Birthdays this month', 'probation' => 'Probation ending'] as $k => $t) { echo $dialog($k, $t . ' · ' . $range); } ?>
 <nav class="qbar"><a href="org.php?s=employees"><i class="fas fa-user-plus"></i>Add employee</a><a href="org.php?s=users"><i class="fas fa-user-shield"></i>Users &amp; permissions</a><a href="?v=apps"><i class="fas fa-grip"></i>My applications</a><a href="?v=plugins"><i class="fas fa-puzzle-piece"></i>Modules &amp; plugins</a><a href="?v=billing"><i class="fas fa-file-invoice"></i>Payments</a><a href="?v=support"><i class="fas fa-headset"></i>Get help</a></nav>
 
 <?php
@@ -221,11 +285,11 @@ foreach ($chosen as $e) {
 }
 usort($moments, static fn ($a, $b) => $a[0] <=> $b[0]);
 $acts = array_slice(array_values(array_filter(AmetecsData::activity($tenant, 100), static fn ($r) => !in_array($r['what'], ['Signed in', 'Signed out'], true))), 0, 5);
-$cols = ['Present' => '#16a34a', 'On leave' => '#2563eb', 'Absent' => '#dc2626'];
+$cols = ['Present' => '#c9a24c', 'On leave' => '#1f3a5f', 'Absent' => '#8b1e2d'];
 ?>
 <section class="ins3">
   <div class="chart"><h3><i class="fas fa-chart-pie"></i>Attendance <span class="muted2"><?= ag_h($range) ?></span></h3>
-    <?= $donut(['Present' => [$tot['present'] ?? 0, '#16a34a'], 'On leave' => [$tot['leave'] ?? 0, '#2563eb'], 'Absent' => [$tot['absent'] ?? 0, '#dc2626']],
+    <?= $donut(['Present' => [$tot['present'] ?? 0, '#c9a24c'], 'On leave' => [$tot['leave'] ?? 0, '#1f3a5f'], 'Absent' => [$tot['absent'] ?? 0, '#8b1e2d']],
         $working > 0 ? round(100 * (($tot['present'] ?? 0) + ($tot['leave'] ?? 0)) / $working) . '%' : '-', $working > 0 ? 'attendance' : 'no working day') ?>
     <div class="mini2"><span><i class="fas fa-clock"></i>Late <b><?= (int) ($tot['late'] ?? 0) ?></b></span><span><i class="fas fa-person-walking-arrow-right"></i>Early out <b><?= (int) ($tot['early'] ?? 0) ?></b></span></div></div>
   <div class="chart wide"><?php if ($trend !== null): $max = max(1, ...array_map(static fn ($i) => array_sum(array_column($trend['sets'], $i)), array_keys($trend['labels']))); ?>
@@ -237,9 +301,9 @@ $cols = ['Present' => '#16a34a', 'On leave' => '#2563eb', 'Absent' => '#dc2626']
 </section>
 
 <?php if ($break !== []): $bmax = max(1, ...array_values(array_map('array_sum', $break))); ?>
-<section class="charts"><div class="chart"><h3><i class="fas fa-layer-group"></i>By <?= $dim ?><span class="legend2"><em><i style="background:#16a34a"></i>Present</em><em><i style="background:#2563eb"></i>Leave</em><em><i style="background:#dc2626"></i>Absent</em></span></h3>
+<section class="charts"><div class="chart"><h3><i class="fas fa-layer-group"></i>By <?= $dim ?><span class="legend2"><em><i style="background:#c9a24c"></i>Present</em><em><i style="background:#1f3a5f"></i>Leave</em><em><i style="background:#8b1e2d"></i>Absent</em></span></h3>
   <div class="hbars"><?php foreach ($break as $label => $b): $sumb = array_sum($b); ?>
-    <div class="hb"><span title="<?= ag_h((string) $label) ?>"><?= ag_h((string) $label) ?></span><div><div class="hbs" style="width:<?= max(2, round(100 * $sumb / $bmax)) ?>%"><?php foreach (['present' => '#16a34a', 'leave' => '#2563eb', 'absent' => '#dc2626'] as $k => $c): if ($b[$k] === 0) { continue; } ?><i style="flex:<?= $b[$k] ?>;background:<?= $c ?>" title="<?= ucfirst($k) . ' ' . $b[$k] ?>"></i><?php endforeach; ?></div></div>
+    <div class="hb"><span title="<?= ag_h((string) $label) ?>"><?= ag_h((string) $label) ?></span><div><div class="hbs" style="width:<?= max(2, round(100 * $sumb / $bmax)) ?>%"><?php foreach (['present' => '#c9a24c', 'leave' => '#1f3a5f', 'absent' => '#8b1e2d'] as $k => $c): if ($b[$k] === 0) { continue; } ?><i style="flex:<?= $b[$k] ?>;background:<?= $c ?>" title="<?= ucfirst($k) . ' ' . $b[$k] ?>"></i><?php endforeach; ?></div></div>
       <b><?= $sumb > 0 ? round(100 * ($b['present'] + $b['leave']) / $sumb) . '%' : '-' ?></b></div>
   <?php endforeach; ?></div></div></section>
 <?php endif; ?>
@@ -250,7 +314,7 @@ $cols = ['Present' => '#16a34a', 'On leave' => '#2563eb', 'Absent' => '#dc2626']
 <?php else: ?>
 <section class="ins4">
   <div class="chart"><h3><i class="fas fa-person-walking"></i>Staff type</h3><?= $donut(['Field' => [$field, '#c9a24c'], 'Office' => [$office, '#1f3a5f'], 'Not set' => [count($chosen) - $field - $office, '#cbd5e1']], (string) count($chosen), 'employees') ?></div>
-  <div class="chart"><h3><i class="fas fa-venus-mars"></i>Gender</h3><?php $gc = ['Male' => '#2563eb', 'Female' => '#db2777']; $gp = []; foreach ($genders as $g => $n) { $gp[$g] = [$n, $gc[$g] ?? '#94a3b8']; } ?><?= $donut($gp, (string) count($chosen), 'employees') ?></div>
+  <div class="chart"><h3><i class="fas fa-venus-mars"></i>Gender</h3><?php $gc = ['Male' => '#c9a24c', 'Female' => '#1f3a5f']; $gp = []; foreach ($genders as $g => $n) { $gp[$g] = [$n, $gc[$g] ?? '#94a3b8']; } ?><?= $donut($gp, (string) count($chosen), 'employees') ?></div>
   <div class="chart"><h3><i class="fas fa-sitemap"></i>By department</h3><div class="hlist"><?= $hbar($cnt($chosen, $deptOf), 'linear-gradient(90deg,#d4a65a,#b8893b)') ?></div></div>
   <div class="chart"><h3><i class="fas fa-user-plus"></i>New joiners<span class="muted2">last 6 months</span></h3>
     <div class="jbars"><?php foreach ($joiners as $m => $n): ?><div title="<?= ag_h(date('M Y', (int) strtotime($m . '-01')) . ': ' . $n) ?>"><b><?= $n ?: '' ?></b><i style="height:<?= max(3, round(100 * $n / $jmax)) ?>%"></i><span><?= ag_h(date('M', (int) strtotime($m . '-01'))) ?></span></div><?php endforeach; ?></div></div>

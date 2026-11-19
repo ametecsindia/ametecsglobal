@@ -24,3 +24,57 @@ table td:nth-child(n){background:transparent!important}table th:nth-child(n){bac
 table tr:nth-child(even) td{background:#fffcf6!important}
 fieldset{border-color:#ecdcb8}
 .help-tip{background:#fffaf0!important;border-color:#f0dfb8!important;color:#5c4510!important}
+/* EMPLOYEE DIRECTORY in the royal black-and-gold look (owner, 19 Nov 2026: "arrange good way and use my theme").
+   Cards: gold top line, black icon badge with gold glyph, navy number; the per-company breakdown is a tidy scrolling
+   list in house colours instead of a 20-line rainbow; the company / branch buttons are neutral, black when picked. */
+.dc-card,.dc-card[style]{--k:#c9a24c!important;background:#fff!important;border:1px solid #ece3d1!important;border-top:3px solid transparent!important;border-image:linear-gradient(90deg,#f3dc95,#d6ae55,#b08433) 1!important;border-image-slice:1 0 0 0!important;border-radius:12px!important;box-shadow:0 1px 2px rgba(60,40,10,.04),0 10px 26px -18px rgba(60,40,10,.3)!important}
+.dc-ic{background:#14100a!important;color:#e8c977!important;box-shadow:none!important}
+.dc-lab{color:#7a6e5b!important;letter-spacing:.06em!important}
+.dc-top .dc-val{color:#1f3a5f!important;font-size:30px!important}
+.dc-bar{background:#f3ece0!important}
+.dc-bar i:nth-child(5n+1),.dc-leg div:nth-child(5n+1) i{background:#c9a24c!important}
+.dc-bar i:nth-child(5n+2),.dc-leg div:nth-child(5n+2) i{background:#1f3a5f!important}
+.dc-bar i:nth-child(5n+3),.dc-leg div:nth-child(5n+3) i{background:#8b1e2d!important}
+.dc-bar i:nth-child(5n+4),.dc-leg div:nth-child(5n+4) i{background:#8a6420!important}
+.dc-bar i:nth-child(5n+5),.dc-leg div:nth-child(5n+5) i{background:#e6cf98!important}
+.dc-leg{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr));gap:3px 12px!important;max-height:84px;overflow-y:auto;padding-right:4px;scrollbar-width:thin;scrollbar-color:#e2d3b3 transparent}
+.dc-leg div{flex:none!important;min-width:0}.dc-leg span{overflow:hidden!important;text-overflow:ellipsis;white-space:nowrap!important;color:#4a3f2e}.dc-leg b{color:#1f3a5f!important}
+#dir-filter{border-top:3px solid #c9a24c!important;background:#fff!important}
+#dir-filter .ch-tree{max-height:118px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:#e2d3b3 transparent}
+.ch,.ch[style],.ch-grp,.ch-grp[style]{--c:#3d3426!important}
+.ch-grp{background:#fffdf8!important;border:1px solid #ece3d1!important}
+.ch,.ch-grp .ch{color:#3d3426!important}.ch i,.ch-rel,.ch-sep{color:#b08433!important}
+.ch:hover,.ch-grp .ch:hover{background:#fbf3e2!important}
+.ch.on,.ch-grp .ch.on{background:#14100a!important;color:#f3dc95!important;border-color:#14100a!important}.ch.on i{color:#e8c977!important}
+.ch.all.on{background:linear-gradient(135deg,#f3dc95,#b08433)!important;color:#14100a!important}
+/* EVERY FRAMED SCREEN in Option A (19 Nov 2026): navy headings with gold icons instead of SmartPRS3's orange,
+   black-and-gold tabs, KPI tiles like the dashboard's. */
+h1,h2,.page-title,.card h3,.card>h3,.card h2,.qa-head h3{color:#1f3a5f!important}
+.card h3 i,.card h2 i,h1 i,h2 i{color:#b08433!important}
+.qa-nav{background:#fff!important;border-color:#ece3d1!important}
+.qa-nav a.on{background:#14100a!important;color:#f3dc95!important}.qa-nav a.on i{color:#e8c977!important}
+.qa-nav a:hover{background:#fbf3e2!important}
+.qa-stat{background:#fff!important;border:1px solid #ece3d1!important;border-top:3px solid #c9a24c!important;box-shadow:0 1px 2px rgba(60,40,10,.04),0 10px 24px -18px rgba(60,40,10,.3);transition:transform .15s}
+.qa-stat:hover{transform:translateY(-2px)}
+.qa-stat i{background:#14100a!important;color:#e8c977!important}
+.qa-stat b{color:#1f3a5f!important}
+.qa-wait a:hover{background:#fbf3e2}
+.btn-outline{border-color:#e6dac2!important;color:#3d3426!important}.btn-outline:hover{border-color:#d6ae55!important;background:#fffaf0!important}
+details>summary{color:#1f3a5f}
+/* the panel's Dark theme reaches the framed screens too (class set by core/setup.php and assets/ui.js) */
+html.th-dark{color-scheme:dark;--bg:#0d0b08!important;--card:#17140f!important;--border:#2e2719!important;--text1:#e9e1cf!important;--text2:#a89b82!important;--text3:#8c7f68!important}
+html.th-dark body{background:#0d0b08!important;color:#e9e1cf!important}
+html.th-dark :is(.card,.panel,.box,.form-section,.dc-card,.qa-stat,.qa-nav,#dir-filter,.ch-grp,.help-tip,.modal-content){background:#17140f!important;border-color:#2e2719!important;color:#e9e1cf!important}
+html.th-dark :is(h1,h2,h3,h4,.card h3,.page-title){color:#f3e7c9!important}
+html.th-dark :is(.dc-top .dc-val,.qa-stat b,.dc-leg b){color:#f3dc95!important}
+html.th-dark table th,html.th-dark table th:nth-child(n){background:#211c13!important;color:#d6ae55!important}
+html.th-dark table td,html.th-dark table td:nth-child(n){background:transparent!important;border-color:#2a241a!important;color:#e0d6c0!important}
+html.th-dark table tr:nth-child(even) td{background:#1a1610!important}
+html.th-dark :is(input:not([type=checkbox]):not([type=radio]):not([type=color]),select,textarea){background:#100d09!important;border-color:#3a3120!important;color:#efe6d2!important}
+html.th-dark :is(.ch,.btn-outline,.btn-secondary){background:#211c13!important;border-color:#3a3120!important;color:#e0d6c0!important}
+html.th-dark a{color:#e8c977}
+html.th-navy table th,html.th-navy table th:nth-child(n){background:#0f2342!important;color:#e8c977!important}
+html.th-navy :is(.dc-ic,.qa-stat i){background:linear-gradient(145deg,#132b50,#0a1a33)!important}html.th-navy .qa-nav a.on,html.th-navy .ch.on{background:#0a1a33!important}
+html.th-dark :is(.dc-leg span,.dc-lab,.note,label,b,strong,summary,.ch-tree .ch span){color:#d8ccb2!important}
+html.th-dark code{background:#211c13!important;color:#e8c977!important}
+html.th-dark :is(.badge-gray,.badge){background:#211c13!important;color:#d8ccb2!important}

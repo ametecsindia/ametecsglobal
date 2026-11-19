@@ -385,7 +385,7 @@ if ($user !== null && $isAdmin && $view === 'home' && $pdo !== null) {
     require __DIR__ . '/dashboard.php';
 }
 ?><!DOCTYPE html>
-<html lang="en"><head><meta charset="utf-8"><script>try{localStorage.getItem("agTheme")==="classic"||document.documentElement.classList.add("t-gold");localStorage.getItem("agSb")==="1"&&document.documentElement.classList.add("sb-mini")}catch(e){document.documentElement.classList.add("t-gold")}</script><meta name="viewport" content="width=device-width, initial-scale=1">
+<html lang="en"><head><meta charset="utf-8"><script>try{var R=document.documentElement,T=localStorage.getItem("agTheme");R.classList.add("t-gold");(T==="navy"||T==="classic")&&R.classList.add("th-navy");T==="light"&&R.classList.add("th-light");T==="dark"&&R.classList.add("th-dark");localStorage.getItem("agSb")==="1"&&document.documentElement.classList.add("sb-mini")}catch(e){document.documentElement.classList.add("t-gold")}</script><meta name="viewport" content="width=device-width, initial-scale=1">
 <title><?= $user !== null ? 'Home' : 'Sign in' ?> · AmetecsGlobal</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 <style>
@@ -708,7 +708,7 @@ a{color:inherit}
 .ucnt{margin-left:auto;font-style:normal;font-size:11px;background:var(--gold);color:#fff;padding:1px 8px;border-radius:99px}.lic-t td.r,.lic-t th.r{text-align:right}
 .lp{display:inline-block;padding:2px 10px;border-radius:99px;font-size:12px;font-weight:600}.lp-green{background:var(--ok-bg);color:var(--ok)}.lp-amber{background:#fffbeb;color:#b45309}.lp-red{background:var(--bad-bg);color:var(--bad)}.lp-grey{background:#f1f5f9;color:var(--mute)}
 </style>
-<link rel="stylesheet" href="assets/shell.css?v=17"><link rel="stylesheet" href="assets/theme-gold.css?v=2"></head><body>
+<link rel="stylesheet" href="assets/shell.css?v=21"><link rel="stylesheet" href="assets/theme-gold.css?v=2"><link rel="stylesheet" href="assets/theme-clean.css?v=10"><link rel="stylesheet" href="assets/theme-alt.css?v=11"></head><body>
 <?php if ($user === null): ?>
 <div class="auth">
   <aside class="auth-side">
@@ -782,7 +782,7 @@ a{color:inherit}
   <div class="clock"><i class="far fa-clock"></i><span id="clock"><?= $now->format('h:i A') ?></span></div>
   <details class="user"><summary><span class="av"><?= ag_h($initials) ?></span><span class="nm"><?= ag_h($who) ?><small><?= ag_h(ucfirst((string) ($user['role'] ?? ''))) ?></small></span><i class="fas fa-chevron-down" style="font-size:11px;color:var(--mute)"></i></summary>
     <div class="menu"><div class="mh"><b><?= ag_h($who) ?></b><span><?= ag_h((string) ($user['email'] ?? '')) ?></span></div>
-      <a href="?v=account"><i class="fas fa-user-gear"></i>Account settings</a><a data-theme-toggle><i class="fas fa-palette"></i><span data-theme-label>Classic navy theme</span></a>
+      <a href="?v=account"><i class="fas fa-user-gear"></i>Account settings</a><div class="throw"><span>Theme</span><a data-theme-set="gold" title="Golden"><span class="sw" style="background:linear-gradient(135deg,#f3dc95,#d6ae55 45%,#b08433);color:#14100a"><i class="fas fa-crown"></i></span></a><a data-theme-set="navy" title="Navy"><span class="sw" style="background:linear-gradient(145deg,#132b50,#0a1a33);color:#e8c977"><i class="fas fa-gem"></i></span></a><a data-theme-set="light" title="Light"><span class="sw" style="background:#fff;color:#d6ae55"><i class="fas fa-sun"></i></span></a><a data-theme-set="dark" title="Dark"><span class="sw" style="background:#0d0b08;color:#e8c977"><i class="fas fa-moon"></i></span></a></div>
       <?php if ($isAdmin): ?><a href="org.php?s=users"><i class="fas fa-user-shield"></i>User Management</a><?php endif; ?>
       <form method="post"><?= $cField() ?><input type="hidden" name="csrf" value="<?= ag_h($session->token()) ?>"><button name="do" value="signout"><i class="fas fa-arrow-right-from-bracket"></i>Sign out</button></form>
     </div></details>
@@ -1119,7 +1119,7 @@ a{color:inherit}
       if (!custom) load(qs(), true);
     });
     box.addEventListener('click', function (e) { if (e.target.closest('[data-reset]')) { e.preventDefault(); load('', true); } });
-    setInterval(function () { if (!document.hidden) load(location.search.replace(/^\?/, ''), false); }, 60000);
+    setInterval(function () { if (!document.hidden && !document.querySelector('dialog[open]')) load(location.search.replace(/^\?/, ''), false); }, 60000);
   })();
   </script>
   <?php else: ?>
@@ -1171,5 +1171,5 @@ document.addEventListener('click',function(e){document.querySelectorAll('details
 </script>
 <?php endif; ?>
 <?php if ($user !== null): ?><div class="foot">AmetecsGlobal by Ametecs India &middot; <a href="super.php">Super Admin</a></div><?php endif; ?>
-<script src="assets/ui.js?v=10"></script>
+<script src="assets/ui.js?v=14"></script>
 </body></html>

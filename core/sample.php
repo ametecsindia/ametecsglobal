@@ -1,6 +1,6 @@
 <?php
 /**
- * SAMPLE DATA (owner, 18 Nov 2026: "add sample data 20 employee and 10 client on super admin").
+ * SAMPLE DATA (owner, 18 Nov 2026: "add sample data 20 employee and 10 client on super admin"; 19 Nov: 100 employees, 20 companies, 20 clients).
  * Super Admin -> System & health -> Sample data. Adds, on THIS PC's database only (never through a migration, so it
  * cannot reach a live server by sync):
  *   - 20 employees in one client (default: the house client), with branches / departments / teams if it has none,
@@ -35,10 +35,17 @@ final class AmetecsSample
         $store = $platform->forTenant($tenant);
         $done = [];
 
-        // --- 20 employees ------------------------------------------------------------------------------------------
+        // --- 100 employees -----------------------------------------------------------------------------------------
         $have = static fn (string $t) => array_values(array_filter($store->all($t), static fn ($r) => ($r['deleted_at'] ?? null) === null));
-        $companies = $have('companies');
-        $company = (string) ($companies[0]['id'] ?? $keep('companies', $store->put('companies', ['name' => 'Sample Company', 'timezone' => 'Asia/Kolkata']))['id']);
+        $cos = [];
+        $byName = array_column($have('companies'), 'id', 'name');   // clicking Add twice reuses them
+        // 20 sample companies (owner, 19 Nov 2026: 100 employees, 20 companies)
+        foreach (['Ametecs Recoveries', 'Kondapur Collections', 'Deccan Finserv', 'Charminar Agencies', 'Hitech Credit Services', 'Banjara Debt Solutions', 'Golconda Field Force',
+            'Madhapur Telecollect', 'Gachibowli Microfinance', 'Jubilee Business Services', 'Secunderabad Recoveries', 'Ameerpet Agencies', 'Kukatpally Credit Care',
+            'Begumpet Finance', 'Miyapur Field Ops', 'Uppal Collections', 'Manikonda Services', 'Nizampet Recoveries', 'Kompally Credit', 'Shamshabad Agencies'] as $cn) {
+            $cos[] = (string) ($byName[$cn . ' Pvt Ltd'] ?? $keep('companies', $store->put('companies', ['name' => $cn . ' Pvt Ltd', 'timezone' => 'Asia/Kolkata']))['id']);
+        }
+        $company = $cos[0];
         $mk = static function (string $table, array $names) use ($have, $store, $keep, $company): array {
             $ids = array_column($have($table), 'id', 'name');
             foreach ($names as $n) {
@@ -49,19 +56,21 @@ final class AmetecsSample
         try { $branches = $mk('branches', ['Hyderabad - Kondapur', 'Bengaluru']); } catch (\Throwable) { $branches = []; }
         try { $depts = $mk('departments', ['Collections', 'Operations', 'Sales', 'HR & Admin']); } catch (\Throwable) { $depts = []; }
         try { $teams = $mk('teams', ['Team Alpha', 'Team Beta']); } catch (\Throwable) { $teams = []; }
-        $people = [['Aarav Sharma', 'M'], ['Priya Reddy', 'F'], ['Mohammed Irfan', 'M'], ['Sneha Patil', 'F'], ['Rahul Verma', 'M'], ['Ananya Iyer', 'F'], ['Vikram Singh', 'M'],
-            ['Fatima Khan', 'F'], ['Karthik Nair', 'M'], ['Divya Menon', 'F'], ['Arjun Kapoor', 'M'], ['Lakshmi Rao', 'F'], ['Sameer Ali', 'M'], ['Pooja Gupta', 'F'],
-            ['Naveen Kumar', 'M'], ['Meera Joshi', 'F'], ['Rohit Das', 'M'], ['Kavya Shetty', 'F'], ['Imran Sheikh', 'M'], ['Swathi Varma', 'F']];
+        $first = [['Aarav', 'M'], ['Priya', 'F'], ['Mohammed', 'M'], ['Sneha', 'F'], ['Rahul', 'M'], ['Ananya', 'F'], ['Vikram', 'M'], ['Fatima', 'F'], ['Karthik', 'M'], ['Divya', 'F'],
+            ['Arjun', 'M'], ['Lakshmi', 'F'], ['Sameer', 'M'], ['Pooja', 'F'], ['Naveen', 'M'], ['Meera', 'F'], ['Rohit', 'M'], ['Kavya', 'F'], ['Imran', 'M'], ['Swathi', 'F']];
+        $last = ['Sharma', 'Reddy', 'Khan', 'Patil', 'Verma', 'Iyer', 'Singh', 'Nair', 'Rao', 'Gupta'];
+        $people = [];   // 100 unique names: first i%20, last (i + i/20)%10
+        for ($i = 0; $i < 100; $i++) { $people[] = [$first[$i % 20][0] . ' ' . $last[($i + intdiv($i, 20)) % 10], $first[$i % 20][1]]; }
         $today = AmetecsAccess::today();
         $used = array_flip(array_map(static fn ($e) => (string) ($e['emp_code'] ?? ''), $store->all('employees')));
         $codes = [];
         foreach ($people as $i => [$name, $g]) {
             $code = 'SMP' . str_pad((string) ($i + 1), 3, '0', STR_PAD_LEFT);
             if (isset($used[$code])) { continue; }
-            $doj = date('Y-m-d', strtotime($today . ' -' . (15 + $i * 47) . ' days'));
-            $dob = date('Y-m-d', strtotime((1985 + $i % 14) . '-' . substr($today, 5, 5) . ' +' . ($i * 3 - 6) . ' days'));   // a few birthdays this month
+            $doj = date('Y-m-d', strtotime($today . ' -' . (15 + ($i * 47) % 3600) . ' days'));
+            $dob = date('Y-m-d', strtotime((1985 + $i % 14) . '-' . substr($today, 5, 5) . ' +' . (($i % 20) * 3 - 6) . ' days'));   // a few birthdays this month
             $keep('employees', $store->put('employees', ['emp_code' => $code, 'name' => $name, 'gender' => $g === 'M' ? 'Male' : 'Female', 'dob' => $dob, 'doj' => $doj,
-                'type' => $i % 3 === 0 ? 'Office' : 'Field', 'employer_company_id' => $company, 'status' => 'active',
+                'type' => $i % 3 === 0 ? 'Office' : 'Field', 'employer_company_id' => $cos[$i % 20], 'status' => 'active',
                 'branch_id' => $branches === [] ? null : array_values($branches)[$i % count($branches)],
                 'department_id' => $depts === [] ? null : array_values($depts)[$i % count($depts)],
                 'team_id' => $teams === [] ? null : array_values($teams)[$i % count($teams)],
@@ -87,7 +96,8 @@ final class AmetecsSample
 
         // --- 10 demo clients ----------------------------------------------------------------------------------------
         $names = ['Sunrise Recoveries', 'Apex Collections', 'BlueOcean Finserv', 'Trident Agencies', 'Nova Credit Services', 'Pinnacle Debt Solutions',
-            'Metro Field Force', 'Zenith Telecollect', 'Greenline Microfinance', 'Royal Business Services'];
+            'Metro Field Force', 'Zenith Telecollect', 'Greenline Microfinance', 'Royal Business Services', 'Orbit Credit Care', 'Summit Agencies', 'Harbour Finserv',
+            'Crest Recoveries', 'Vertex Field Ops', 'Lotus Collections', 'Eagle Telecollect', 'Coral Microfinance', 'Prime Debt Services', 'Silverline Agencies'];
         $apps = array_keys(AmetecsAccess::plugins());
         $made = 0;
         foreach ($names as $i => $name) {
@@ -106,7 +116,7 @@ final class AmetecsSample
                 $seats = [25, 50, 100, 150, 200][($i + $j) % 5];
                 AmetecsLicences::put($tid, $app, ['deployment' => $i % 4 === 3 ? 'onprem' : 'cloud', 'plan' => $plan, 'status' => 'active', 'seats' => $seats,
                     'price' => number_format($seats * ($plan === 'monthly' ? 60 : 600), 2, '.', ''), 'currency' => 'INR',
-                    'valid_until' => date('Y-m-d', strtotime($today . ' +' . ([12, 25, 45, 90, 200, -5, 330, 18, 60, 150][$i]) . ' days'))], 'Sample data');
+                    'valid_until' => date('Y-m-d', strtotime($today . ' +' . ([12, 25, 45, 90, 200, -5, 330, 18, 60, 150][$i % 10]) . ' days'))], 'Sample data');
                 $log['licences'][] = [$tid, $app];
             }
             if (AmetecsBilling::ready()) {   // paid invoices spread over the last 6 months
