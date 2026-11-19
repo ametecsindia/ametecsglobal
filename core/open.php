@@ -40,7 +40,7 @@ if (strtolower((string) ($user['role'] ?? '')) === 'employee') {
 
 // Not set up on this server yet (sync.ps1 installs its libraries, .env and database): say so instead of a PHP error.
 $appDir = __DIR__ . '/../plugins/' . $app;
-if (!is_file($appDir . '/vendor/autoload.php') || !is_file($appDir . '/.env')) {
+if (!is_file($appDir . '/vendor/autoload.php') || !str_contains((string) @file_get_contents($appDir . '/.env'), 'APP_KEY=base64:')) {
     $_SESSION['flash_problem'] = (AmetecsAccess::plugins()[$app]['name'] ?? $app) . ' is not installed on this server yet. Start Laragon and run SYNC.bat once, then open it again.';
     header('Location: ./');
     exit;

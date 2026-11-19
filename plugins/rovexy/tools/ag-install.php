@@ -8,6 +8,12 @@
  */
 declare(strict_types=1);
 
+ini_set('display_errors', '1');   // Laragon's PHP hides errors by default: sync.ps1 must be able to show why set-up stopped
+set_exception_handler(static function (\Throwable $x): void {
+    fwrite(STDOUT, 'ROVEXY set-up stopped: ' . $x->getMessage() . PHP_EOL);
+    exit(1);
+});
+
 $dir = dirname(__DIR__);
 $opt = getopt('', ['root-user::', 'root-password::', 'url::']) + ['root-user' => 'root', 'root-password' => ''];
 foreach (['storage/app/public', 'storage/framework/cache/data', 'storage/framework/sessions', 'storage/framework/views', 'storage/logs', 'bootstrap/cache'] as $d) {
@@ -25,7 +31,23 @@ $set = static function (string $k, string $v) use (&$env): void {
 $db = 'rovexy';
 $user = 'rovexy';
 $pass = $get('DB_USERNAME') === $user && $get('DB_PASSWORD') !== '' ? $get('DB_PASSWORD') : bin2hex(random_bytes(12));
-$root = new PDO('mysql:host=127.0.0.1;port=' . ($get('DB_PORT') ?: '3306'), (string) $opt['root-user'], (string) $opt['root-password'], [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+// MySQL's administrator: Laragon's default (root, no password); also tried: "root" as the password, then SmartPRS3's migrator.
+$sp = (string) @file_get_contents($dir . '/../smartprs3/.env');
+$spGet = static fn (string $k): string => preg_match('/^' . $k . '=("?)([^"#\r\n]*)\1/m', $sp, $m) ? trim($m[2]) : '';
+$root = null;
+$why = [];
+foreach (array_unique([[(string) $opt['root-user'], (string) $opt['root-password']], ['root', 'root'], [$spGet('DB_MIGRATION_USERNAME'), $spGet('DB_MIGRATION_PASSWORD')]], SORT_REGULAR) as [$u, $pw]) {
+    if ($u === '') { continue; }
+    try {
+        $root = new PDO('mysql:host=127.0.0.1;port=' . ($get('DB_PORT') ?: '3306'), $u, $pw, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+        break;
+    } catch (\PDOException $x) {
+        $why[] = $u . ': ' . $x->getMessage();
+    }
+}
+if ($root === null) {
+    throw new RuntimeException('could not sign in to MySQL (' . implode(' | ', $why) . '). If root has a password: php tools/ag-install.php --root-password=YOURPASSWORD');
+}
 $root->exec("CREATE DATABASE IF NOT EXISTS `$db` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
 foreach (['localhost', '127.0.0.1'] as $h) {
     $root->exec("CREATE USER IF NOT EXISTS '$user'@'$h' IDENTIFIED BY " . $root->quote($pass));
