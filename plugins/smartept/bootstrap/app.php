@@ -50,6 +50,7 @@ return Application::configure(basePath: dirname(__DIR__))
             // 23-Sep-2026: every API request runs on the signed-in company's Organisation-tab
             // timezone, including on a multi-company server — see the class docblock.
             \App\Http\Middleware\ApplyCompanyTimezone::class,
+            \App\Http\Middleware\AgSession::class,   // AmetecsGlobal: signed out there = console signed out here
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {

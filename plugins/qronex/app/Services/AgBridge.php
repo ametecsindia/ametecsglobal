@@ -100,19 +100,38 @@ final class AgBridge
         return $p;
     }
 
+    /**
+     * ONE ADDRESS NAME (owner, 19 Nov 2026: "common slug everywhere"): the workspace uses the company's AmetecsGlobal
+     * address name (core/c/<slug>), not "ag-<slug>". Only if another company here already has it, or it is a word the app
+     * keeps for itself, does it fall back to "ag-<slug>".
+     */
+    private static function commonSlug(array $p, callable $taken, int $max): string
+    {
+        $want = trim(substr(Str::slug((string) ($p['slug'] ?: $p['tname'])), 0, $max), '-') ?: 'company-' . preg_replace('/[^0-9]/', '', (string) $p['tid']);
+        $reserved = ['admin', 'api', 'login', 'logout', 'sso', 'ag', 'w', 'storage', 'assets', 'build', 'register', 'pricing', 'contact', 'home', 'core', 'plugins', 'public', 'img', 'brand', 'up'];
+        foreach ([$want, 'ag-' . $want] as $s) {
+            if (!in_array($s, $reserved, true) && !$taken($s)) {
+                return $s;
+            }
+        }
+        do { $s = 'ag-' . $want . '-' . random_int(10, 99); } while ($taken($s));
+        return $s;
+    }
+
     /** The client's QRONEX company, made the first time someone from that client opens QRONEX. */
     public static function workspace(array $p): Tenant
     {
         $t = Tenant::query()->where('ag_tenant', (string) $p['tid'])->first();
+        $taken = static fn (string $s) => in_array($s, Tenant::RESERVED_SLUGS, true) || Tenant::withTrashed()->where('slug', $s)->where('id', '!=', $t?->id ?? 0)->exists();
         if ($t !== null) {
             $t->name !== (string) $p['tname'] && $t->update(['name' => (string) $p['tname']]);
+            if (str_starts_with((string) $t->slug, 'ag-') && ($s = self::commonSlug($p, $taken, 40)) !== $t->slug) {
+                $t->forceFill(['slug' => $s])->save();   // made before the common name: renamed once
+            }
             return $t;
         }
         Plan::query()->exists() || \Illuminate\Support\Facades\Artisan::call('db:seed', ['--class' => \Database\Seeders\PlatformSeeder::class, '--force' => true]);
-        $slug = 'ag-' . trim(substr(Str::slug((string) ($p['slug'] ?: $p['tname'])), 0, 40), '-');
-        while (Tenant::withTrashed()->where('slug', $slug)->exists()) {
-            $slug = substr($slug, 0, 50) . '-' . random_int(10, 99);
-        }
+        $slug = self::commonSlug($p, $taken, 40);
         $t = Tenant::create(['name' => (string) $p['tname'], 'slug' => $slug, 'status' => 'active', 'customer_type' => 'independent', 'ag_tenant' => (string) $p['tid'],
             'commercial_note' => 'AmetecsGlobal client #' . $p['tid'] . ' - licence managed in AmetecsGlobal Super Admin.']);
         $t->settings()->create(TenantSetting::defaults());
@@ -190,14 +209,48 @@ final class AgBridge
     public static function admin(Tenant $t, array $p): User
     {
         $email = strtolower((string) $p['email']);
+        $role = (string) ($p['role'] ?? 'admin');
         $u = User::query()->firstWhere('email', $email);
         if ($u !== null && (int) $u->tenant_id !== (int) $t->id) {
             $email = 'ag' . $t->ag_tenant . '+' . $email;   // the same person in two client companies: one login each
             $u = User::query()->firstWhere('email', $email);
         }
         $u ??= new User(['email' => $email, 'password' => Str::random(40)]);
-        $u->forceFill(['tenant_id' => $t->id, 'name' => (string) ($p['name'] ?: $email), 'role' => $u->role && $u->exists ? $u->role : 'company_owner', 'is_active' => true, 'last_login_at' => now()])->save();
+        // ONE ROLE MAP (19 Nov 2026): AmetecsGlobal decides. Admin = Company Owner (or the admin role already given here);
+        // Manager / Team Lead = Office Manager of the offices their people (reporting line, any depth) work at.
+        // ponytail: QRONEX scopes by office, so a lead sees everyone at those offices; per-person scope if that is too wide.
+        $keep = $u->exists && in_array($u->role, ['company_owner', 'company_admin'], true) ? $u->role : 'company_owner';
+        $u->forceFill(['tenant_id' => $t->id, 'name' => (string) ($p['name'] ?: $email), 'role' => $role === 'admin' ? $keep : 'office_manager', 'is_active' => true, 'last_login_at' => now()])->save();
+        if ($role !== 'admin') {
+            $refs = array_map(static fn ($i) => 'ag-' . $i, self::teamOf((string) $t->ag_tenant, (string) ($p['emp'] ?? '')));
+            $u->offices()->sync(Employee::withoutGlobalScopes()->where('tenant_id', $t->id)->whereIn('hrms_ref', $refs)->whereNotNull('office_id')->distinct()->pluck('office_id')->all());
+        }
         return $u;
+    }
+
+    /** AmetecsGlobal employee ids reporting to $emp at any depth (the reporting line, as core/roles.php reads it). @return list<string> */
+    public static function teamOf(string $tid, string $emp): array
+    {
+        $q = self::agPdo()->prepare('SELECT id, reporting_manager_id FROM employees WHERE tenant_id = ? AND deleted_at IS NULL');
+        $q->execute([$tid]);
+        $kids = [];
+        foreach ($q->fetchAll() as $e) {
+            $kids[(string) $e['reporting_manager_id']][] = (string) $e['id'];
+        }
+        $seen = [$emp => true];
+        for ($todo = [$emp]; $todo !== [];) {   // guarded against loops in bad data
+            foreach ($kids[array_pop($todo)] ?? [] as $k) {
+                if (!isset($seen[$k])) { $seen[$k] = true; $todo[] = $k; }
+            }
+        }
+        unset($seen[$emp]);
+        return array_map('strval', array_keys($seen));
+    }
+
+    /** ONE LOGIN: the AmetecsGlobal session this app session came from is still the browser's (signed out there = out here). */
+    public static function sameSession(?string $sid): bool
+    {
+        return $sid === null || hash_equals($sid, hash('sha256', (string) ($_COOKIE['AMETECSGLOBAL'] ?? '')));
     }
 
     /** Tell AmetecsGlobal a punch was recorded: it pulls new punches into its attendance (never blocks the phone). */

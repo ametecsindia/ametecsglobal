@@ -82,7 +82,15 @@ $tokenUrl = '?' . http_build_query(['t' => $tenantId, 'g' => $gate['code'], 'k' 
   .row{display:flex;gap:24px;justify-content:center;flex-wrap:wrap;font-size:clamp(.9rem,2.2vh,1.4rem)}
   .clock{font-variant-numeric:tabular-nums;font-size:clamp(1.4rem,4.5vh,3rem);font-weight:700}
   .off{color:#FCA5A5}.msg{font-size:clamp(1rem,3vh,2rem);color:var(--navy)}
+  /* THEME FOLLOWS AMETECSGLOBAL (19 Nov 2026): Golden (default) / Navy / Light / Dark, as chosen in the AmetecsGlobal menu */
+  :root{--navy:#14100a;--gold:#c9a24c;--bar:#2a2012;--ink:#f3e7c9;--sub:#c9bc9f;--card:linear-gradient(135deg,#f3dc95,#d6ae55 45%,#b08433);--cardink:#14100a}
+  html.th-navy{--navy:#0a1a33;--bar:#132b50;--ink:#EAF0F7;--sub:#C9D5E4}
+  html.th-dark{--navy:#0d0b08;--bar:#221c13}
+  html.th-light{--navy:#fbfaf7;--bar:#ece3d1;--ink:#17130c;--sub:#7a6e5b}
+  body{color:var(--ink)}.sub{color:var(--sub)}.bar{background:var(--bar)}.co{background:var(--card);color:var(--cardink)}
+  html.th-light #qr{box-shadow:0 18px 40px -18px rgba(20,16,10,.35);border:1px solid #ece3d1}
 </style>
+<script>(function(h){function s(){var t;try{t=localStorage.getItem("agTheme")}catch(e){}h.classList.remove("th-navy","th-light","th-dark");if(t&&t!="gold")h.classList.add("th-"+t)}s();addEventListener("storage",s)})(document.documentElement)</script>
 </head>
 <body>
   <div class="co"><?= $h($company['name'] ?? 'SmartPRS3') ?></div>

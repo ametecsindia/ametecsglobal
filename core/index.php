@@ -50,7 +50,10 @@ if ($session !== null && ($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     } elseif (($_POST['do'] ?? '') === 'signin') {
         $r = $badLink ? ['ok' => false, 'why' => 'This sign-in link is not valid.'] : $session->signIn((string) ($_POST['email'] ?? ''), (string) ($_POST['password'] ?? ''), $ws === null ? null : (string) $ws['id']);
         if ($r['ok']) {
-            header('Location: ' . $cq());
+            // ONE LOGIN (19 Nov 2026): came from an app's sign-in? Straight back into it (asked for in the last 15 minutes).
+            $next = (array) ($_SESSION['ag_next'] ?? []);
+            unset($_SESSION['ag_next']);
+            header('Location: ' . (($next[1] ?? 0) > time() - 900 ? 'open.php?app=' . rawurlencode((string) $next[0]) : $cq()));
             exit;
         }
         $problem = $r['why'];
@@ -98,6 +101,8 @@ if ($session !== null && ($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         }
     } elseif (($_POST['do'] ?? '') === 'signout') {
         $session->signOut();
+        // ONE LOGIN (19 Nov 2026): drop the cookie too, so every app opened from this session sees it end (their AgSession).
+        setcookie(session_name(), '', ['expires' => time() - 3600, 'path' => '/', 'httponly' => true, 'samesite' => 'Lax']);
         header('Location: ' . $cq());
         exit;
     }
@@ -164,10 +169,21 @@ if ($user !== null) {
 // UPDATES (Phase 2, 18 Nov 2026): what each licensed app is offered. Cloud = the version Ametecs' server runs; on-premise = what
 // the client's server last reported. Only administrators see this; only apps this client holds.
 // PHASE 4 (18 Nov 2026): every section of the client administrator's panel (core/shell.php draws the menu).
-$adminViews = ['apps', 'plugins', 'updates', 'licences', 'billing', 'invoice', 'activity'];
+$adminViews = ['apps', 'plugins', 'updates', 'licences', 'billing', 'invoice', 'activity', 'people', 'reports'];
 // PHASE 6 (18 Nov 2026): fewer pages - old addresses land on the page that now holds their content.
 $view = ['plans' => 'licences', 'installs' => 'apps', 'upgrades' => 'activity'][(string) ($_GET['v'] ?? '')] ?? (string) ($_GET['v'] ?? 'home');
-$view = $user !== null && (in_array($view, ['notifications', 'support', 'account'], true) || ($isAdmin && in_array($view, $adminViews, true))) ? $view : 'home';
+// TEAM LEADS AND MANAGERS (19 Nov 2026, one role map): Employee 360 for the people who report to them, at any depth.
+$p3scope = null;
+$myLevel = 'employee';
+if ($user !== null && !$isAdmin && (string) ($user['employee_id'] ?? '') !== '' && $pdo !== null) {
+    $p3all = (new \SmartPRS\Surface\SqlStore($pdo))->forTenant($tenant)->all('employees');
+    $myLevel = AmetecsRoles::levels($p3all)[(string) $user['employee_id']] ?? 'employee';
+    $myLevel !== 'employee' && $p3scope = AmetecsRoles::team($p3all, (string) $user['employee_id']);
+}
+$view = $user !== null && (in_array($view, ['notifications', 'support', 'account'], true) || ($isAdmin && in_array($view, $adminViews, true)) || (in_array($view, ['people', 'reports'], true) && $p3scope !== null)) ? $view : 'home';
+if ($view === 'reports' && isset($_GET['csv'])) {   // REPORTS download: the file, before any page is drawn
+    require __DIR__ . '/reports.php';
+}
 $upd = [];
 if ($user !== null && $isAdmin && AmetecsReleases::ready()) {
     $upd = AmetecsShell::updates($tenant);
@@ -476,7 +492,7 @@ if ($user !== null && $isAdmin && $view === 'home' && $pdo !== null) {
     require __DIR__ . '/dashboard.php';
 }
 ?><!DOCTYPE html>
-<html lang="en"><head><meta charset="utf-8"><script>try{var R=document.documentElement,T=localStorage.getItem("agTheme");R.classList.add("t-gold");(T==="navy"||T==="classic")&&R.classList.add("th-navy");T==="light"&&R.classList.add("th-light");T==="dark"&&R.classList.add("th-dark");localStorage.getItem("agSb")==="1"&&document.documentElement.classList.add("sb-mini")}catch(e){document.documentElement.classList.add("t-gold")}</script><meta name="viewport" content="width=device-width, initial-scale=1">
+<html lang="en"><head><meta charset="utf-8"><link rel="icon" href="assets/brand/favicon.svg" type="image/svg+xml"><link rel="icon" href="assets/brand/favicon-32x32.png" sizes="32x32"><link rel="apple-touch-icon" href="assets/brand/apple-touch-icon.png"><script>try{var R=document.documentElement,T=localStorage.getItem("agTheme");R.classList.add("t-gold");(T==="navy"||T==="classic")&&R.classList.add("th-navy");T==="light"&&R.classList.add("th-light");T==="dark"&&R.classList.add("th-dark");localStorage.getItem("agSb")==="1"&&document.documentElement.classList.add("sb-mini")}catch(e){document.documentElement.classList.add("t-gold")}</script><meta name="viewport" content="width=device-width, initial-scale=1">
 <title><?= $user !== null ? 'Home' : 'Sign in' ?> · AmetecsGlobal</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 <style>
@@ -799,7 +815,7 @@ a{color:inherit}
 .ucnt{margin-left:auto;font-style:normal;font-size:11px;background:var(--gold);color:#fff;padding:1px 8px;border-radius:99px}.lic-t td.r,.lic-t th.r{text-align:right}
 .lp{display:inline-block;padding:2px 10px;border-radius:99px;font-size:12px;font-weight:600}.lp-green{background:var(--ok-bg);color:var(--ok)}.lp-amber{background:#fffbeb;color:#b45309}.lp-red{background:var(--bad-bg);color:var(--bad)}.lp-grey{background:#f1f5f9;color:var(--mute)}
 </style>
-<link rel="stylesheet" href="assets/shell.css?v=26"><link rel="stylesheet" href="assets/theme-gold.css?v=2"><link rel="stylesheet" href="assets/theme-clean.css?v=10"><link rel="stylesheet" href="assets/theme-alt.css?v=11"></head><body>
+<link rel="stylesheet" href="assets/shell.css?v=29"><link rel="stylesheet" href="assets/theme-gold.css?v=2"><link rel="stylesheet" href="assets/theme-clean.css?v=10"><link rel="stylesheet" href="assets/theme-alt.css?v=11"></head><body>
 <?php if ($user === null): ?>
 <div class="auth">
   <aside class="auth-side">
@@ -865,11 +881,11 @@ a{color:inherit}
       foreach (AmetecsSetup::CORE as $grp => $items) { foreach ($items as $label => $it) { $paletteItems[] = ['t' => $label, 'h' => 'org.php' . str_replace('?r=', '?s=', AmetecsSetup::href($it)), 'i' => $it[2], 's' => $grp]; } }
   } ?>
 <div class="shell">
-<?= AmetecsShell::nav($company, $isAdmin, $view === 'invoice' ? 'billing' : $view, ['updates' => $updCount, 'invoices' => $billOn ? count(AmetecsBilling::invoices($tenant, 'pending')) : 0, 'notifications' => count($notes)]) ?>
+<?= AmetecsShell::nav($company, $isAdmin, $view === 'invoice' ? 'billing' : $view, ['lead' => $p3scope !== null ? 1 : 0, 'updates' => $updCount, 'invoices' => $billOn ? count(AmetecsBilling::invoices($tenant, 'pending')) : 0, 'notifications' => count($notes)]) ?>
 <div class="mainc">
 <header class="top"><div class="top-in">
   <button type="button" class="drawer-btn" data-drawer aria-label="Menu"><i class="fas fa-bars"></i></button>
-  <div class="crumb"><?= ag_h($company ?: 'AmetecsGlobal') ?> <i class="fas fa-chevron-right"></i> <?= ag_h(['home' => 'Dashboard', 'apps' => 'My applications', 'updates' => 'Updates', 'plugins' => 'Modules & plugins', 'licences' => 'Licences & plans', 'billing' => 'Payments & invoices', 'activity' => 'Activity history', 'support' => 'Support & help', 'account' => 'Account settings', 'notifications' => 'Notifications'][$view] ?? 'Dashboard') ?></div>
+  <div class="crumb"><?= ag_h($company ?: 'AmetecsGlobal') ?> <i class="fas fa-chevron-right"></i> <?= ag_h(['home' => 'Dashboard', 'apps' => 'My applications', 'updates' => 'Updates', 'plugins' => 'Modules & plugins', 'licences' => 'Licences & plans', 'billing' => 'Payments & invoices', 'activity' => 'Activity history', 'people' => 'Employee 360', 'reports' => 'Reports', 'support' => 'Support & help', 'account' => 'Account settings', 'notifications' => 'Notifications'][$view] ?? 'Dashboard') ?></div>
   <a class="bell" href="?v=notifications" title="Notifications"><i class="far fa-bell"></i><?= $notes !== [] ? '<em>' . count($notes) . '</em>' : '' ?></a>
   <div class="clock"><i class="far fa-clock"></i><span id="clock"><?= $now->format('h:i A') ?></span></div>
   <details class="user"><summary><span class="av"><?= ag_h($initials) ?></span><span class="nm"><?= ag_h($who) ?><small><?= ag_h(ucfirst((string) ($user['role'] ?? ''))) ?></small></span><i class="fas fa-chevron-down" style="font-size:11px;color:var(--mute)"></i></summary>
@@ -1253,6 +1269,9 @@ a{color:inherit}
       <p style="font-size:13px;margin:0">From <b>INR <?= number_format(min(array_filter([(float) ($r['monthly'] ?? 0), (float) ($r['yearly'] ?? 0) / 12])), 2) ?></b> per <?= ag_h(rtrim((string) $p['unit'], 's')) ?> a month + GST</p>
       <footer><?= $planForm($code, null, 'Buy ' . $p['name']) ?></footer></article>
   <?php endforeach; ?></div><?php endif; ?>
+
+<?php elseif ($view === 'people'): require __DIR__ . '/people.php'; ?>
+<?php elseif ($view === 'reports'): require __DIR__ . '/reports.php'; ?>
 
 <?php elseif ($view === 'notifications'): ?>
   <div class="pgh"><div><h1>Notifications</h1><p>Updates, invoices, renewals and installation alerts for <?= ag_h($company ?: 'your company') ?>, most urgent first. They clear by themselves once handled.</p></div></div>

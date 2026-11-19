@@ -15,6 +15,7 @@ use SmartPRS\Surface\Database;
 use SmartPRS\Surface\Session;
 use SmartPRS\Surface\SqlStore;
 
+const AG_SELF_SERVICE = ['smartept'];   // apps with a web view of an employee's own data (SmartEPT's employee portal)
 const AG_OPEN = ['rovexy' => '../plugins/rovexy/public/ag/sso', 'qronex' => '../plugins/qronex/public/ag/sso', 'smartept' => '../plugins/smartept/public/ag/sso'];   // each Laravel app's hand-over address
 
 session_name('AMETECSGLOBAL');
@@ -23,6 +24,11 @@ $session = $pdo === null ? null : new Session(new SqlStore($pdo), PasswordHasher
 $session?->start();
 $user = $session?->user();
 $app = (string) ($_GET['app'] ?? '');
+if ($user === null && isset(AG_OPEN[$app]) && $session !== null) {   // ONE LOGIN: sign in here, then straight on into the app
+    $_SESSION['ag_next'] = [$app, time()];
+    header('Location: ./');
+    exit;
+}
 if ($user === null || !isset(AG_OPEN[$app])) {
     header('Location: ./');
     exit;
@@ -39,8 +45,22 @@ if (!AmetecsLicences::installed(AmetecsLicences::row($tid, $app)) || AmetecsLice
     header('Location: ./?v=apps');
     exit;
 }
+// ONE LOGIN, ONE ROLE MAP (owner, 19 Nov 2026): Admin = a login that is not an employee login; for employee logins the
+// reporting line decides Manager / Team Lead / Employee (core/roles.php). Each app gives that role its own scope.
+$emp = (string) ($user['employee_id'] ?? '');
+$level = 'admin';
 if (strtolower((string) ($user['role'] ?? '')) === 'employee') {
-    $_SESSION['flash_problem'] = (AmetecsAccess::plugins()[$app]['name'] ?? $app) . ' is for administrators. Employees use its mobile app.';
+    $level = $emp !== '' ? (AmetecsRoles::levels((new SqlStore($pdo))->forTenant($tid)->all('employees'))[$emp] ?? 'employee') : 'employee';
+}
+$appName = AmetecsAccess::plugins()[$app]['name'] ?? $app;
+$off = AmetecsAppAccess::hidden($pdo, $tid, $app);
+if ($level !== 'admin' && $emp !== '' && in_array((int) $emp, array_map('intval', $off), true)) {
+    $_SESSION['flash_problem'] = 'Your administrator has switched ' . $appName . ' off for you (App access).';
+    header('Location: ./');
+    exit;
+}
+if ($level === 'employee' && !in_array($app, AG_SELF_SERVICE, true)) {
+    $_SESSION['flash_problem'] = $appName . ' is for administrators, managers and team leads. Employees use its mobile app.';
     header('Location: ./');
     exit;
 }
@@ -65,7 +85,9 @@ $body = rtrim(strtr(base64_encode((string) json_encode([
     'tid' => $tid, 'tname' => (string) ($tenant['name'] ?? 'Company ' . $tid), 'slug' => (string) ($tenant['subdomain'] ?? ''),
     'email' => strtolower((string) $user['email']), 'name' => (string) ($user['name'] ?? ''),
     'seats' => (int) ($lic['seats'] ?? 0), 'until' => (string) ($lic['until'] ?? ''), 'state' => 'on',
-    'off' => AmetecsAppAccess::hidden($pdo, $tid, $app),
+    'off' => $off,
+    'role' => $level, 'emp' => $emp,   // the app reads the team under 'emp' from AmetecsGlobal's employees (reporting line)
+    'sid' => hash('sha256', (string) session_id()),   // this AmetecsGlobal session: when it ends, the app's session ends too
     'exp' => time() + 60, 'jti' => bin2hex(random_bytes(12)),
 ])), '+/', '-_'), '=');
 $token = $body . '.' . hash_hmac('sha256', $body, trim((string) file_get_contents($keyFile)));

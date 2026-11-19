@@ -874,7 +874,7 @@ $licenceRows = static function (string $tid, array $prefill = []) use ($plugins,
 $statusPill = static fn (string $s): string => '<span class="pill ' . (['active' => 'green', 'suspended' => 'amber', 'closed' => 'red'][$s] ?? 'grey') . '">' . ag_h(ucfirst($s ?: 'unknown')) . '</span>';
 $f = static fn (string $k, string $default = '') => ag_h((string) ($form[$k] ?? $default));
 ?><!DOCTYPE html>
-<html lang="en"><head><meta charset="utf-8"><script>try{var R=document.documentElement,T=localStorage.getItem("agTheme");R.classList.add("t-gold");(T==="navy"||T==="classic")&&R.classList.add("th-navy");T==="light"&&R.classList.add("th-light");T==="dark"&&R.classList.add("th-dark")}catch(e){document.documentElement.classList.add("t-gold")}</script><meta name="viewport" content="width=device-width, initial-scale=1">
+<html lang="en"><head><meta charset="utf-8"><link rel="icon" href="assets/brand/favicon.svg" type="image/svg+xml"><link rel="icon" href="assets/brand/favicon-32x32.png" sizes="32x32"><link rel="apple-touch-icon" href="assets/brand/apple-touch-icon.png"><script>try{var R=document.documentElement,T=localStorage.getItem("agTheme");R.classList.add("t-gold");(T==="navy"||T==="classic")&&R.classList.add("th-navy");T==="light"&&R.classList.add("th-light");T==="dark"&&R.classList.add("th-dark")}catch(e){document.documentElement.classList.add("t-gold")}</script><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Super Admin · AmetecsGlobal</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 <style>
@@ -1020,7 +1020,7 @@ main{max-width:1560px;padding:16px 26px 20px}
 @media (max-width:1100px){.kstrip{grid-template-columns:repeat(3,1fr)}.dgrid2{grid-template-columns:1fr}}
 .cn b{white-space:nowrap}.mxt td:last-child,.mxt th:last-child{padding-right:16px;white-space:nowrap}.mxt th.ac{padding-left:4px;padding-right:4px}.mxt th:first-child{width:30%}
 </style>
-<link rel="stylesheet" href="assets/shell.css?v=26"><link rel="stylesheet" href="assets/super.css?v=13"><link rel="stylesheet" href="assets/theme-gold.css?v=3"><link rel="stylesheet" href="assets/theme-sa-light.css?v=6"><link rel="stylesheet" href="assets/theme-alt.css?v=11"></head><body>
+<link rel="stylesheet" href="assets/shell.css?v=29"><link rel="stylesheet" href="assets/super.css?v=13"><link rel="stylesheet" href="assets/theme-gold.css?v=3"><link rel="stylesheet" href="assets/theme-sa-light.css?v=6"><link rel="stylesheet" href="assets/theme-alt.css?v=11"></head><body>
 <?php
 $myName = trim((string) ($me['name'] ?? '')) ?: ucfirst((string) strtok($meEmail, '@'));
 $myIni = strtoupper(implode('', array_map(static fn (string $w): string => mb_substr($w, 0, 1), array_slice(preg_split('/[\s._-]+/', $myName) ?: ['S'], 0, 2))));
@@ -1906,10 +1906,10 @@ $myIni = strtoupper(implode('', array_map(static fn (string $w): string => mb_su
         <?php if ($backups === []): ?><tr><td colspan="4"><div class="empty"><i class="fas fa-box-archive"></i>No installs on this server yet.</div></td></tr><?php endif; ?></table>
         <div class="bd muted" style="font-size:12.5px">Database: each PC's MySQL holds its own data. Back it up with Laragon (Menu → MySQL → Backup) or <code>mysqldump</code> before big changes; on the live server use the hosting provider's daily backups.</div></div>
       <?php $smp = AmetecsSample::present(); $houseT = array_values(array_filter($tenants, static fn ($t) => ($t['subdomain'] ?? '') === 'ametecs'))[0]['id'] ?? ($tenants[0]['id'] ?? ''); ?>
-      <div class="box"><div class="hd"><h2><i class="fas fa-flask"></i>Sample data</h2><span class="muted">for demos and testing on this PC only: 100 employees in 20 companies with 30 days of attendance, and 20 demo clients with licences and invoices</span></div><div class="bd">
+      <div class="box"><div class="hd"><h2><i class="fas fa-flask"></i>Sample data</h2><span class="muted">for demos and testing on this PC only: 100 employees in Ametecs India Pvt Ltd (4 managers, 12 team leads) with 30 days of attendance, and 20 demo clients with licences and invoices</span></div><div class="bd">
         <?php if ($prod): ?><p class="muted" style="margin:0">Switched off: this server runs as production (APP_ENV).</p>
         <?php else: ?><div class="row" style="gap:10px;flex-wrap:wrap;align-items:center">
-          <form method="post" class="row" style="gap:8px" onsubmit="return confirm('Add 100 sample employees in 20 companies and 20 demo clients to this PC\'s database?')"><?= $csrf() ?><input type="hidden" name="do" value="sample-add">
+          <form method="post" class="row" style="gap:8px" onsubmit="return confirm('Add 100 sample employees in Ametecs India Pvt Ltd and 20 demo clients to this PC\'s database?')"><?= $csrf() ?><input type="hidden" name="do" value="sample-add">
             <label class="muted" style="font-size:12.5px">Employees go to</label><select name="tenant"><?php foreach ($tenants as $t): if (str_starts_with((string) $t['code'], 'DEMO')) { continue; } ?><option value="<?= (int) $t['id'] ?>"<?= (string) $t['id'] === (string) $houseT ? ' selected' : '' ?>><?= ag_h($t['name']) ?></option><?php endforeach; ?></select>
             <button class="btn gold"><i class="fas fa-wand-magic-sparkles"></i>Add sample data</button></form>
           <?php if ($smp !== []): ?><form method="post" onsubmit="return confirm('Remove all sample employees, attendance, demo clients and their invoices?')"><?= $csrf() ?><input type="hidden" name="do" value="sample-remove"><button class="btn danger"><i class="fas fa-trash"></i>Remove sample data</button></form>

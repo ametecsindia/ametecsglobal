@@ -108,20 +108,39 @@ final class AgBridge
         ])->save();
     }
 
+    /**
+     * ONE ADDRESS NAME (owner, 19 Nov 2026: "common slug everywhere"): the workspace uses the company's AmetecsGlobal
+     * address name (core/c/<slug>), not "ag-<slug>". Only if another company here already has it, or it is a word the app
+     * keeps for itself, does it fall back to "ag-<slug>".
+     */
+    private static function commonSlug(array $p, callable $taken, int $max): string
+    {
+        $want = trim(substr(Str::slug((string) ($p['slug'] ?: $p['tname'])), 0, $max), '-') ?: 'company-' . preg_replace('/[^0-9]/', '', (string) $p['tid']);
+        $reserved = ['admin', 'api', 'login', 'logout', 'sso', 'ag', 'w', 'storage', 'assets', 'build', 'register', 'pricing', 'contact', 'home', 'core', 'plugins', 'public', 'img', 'brand', 'up'];
+        foreach ([$want, 'ag-' . $want] as $s) {
+            if (!in_array($s, $reserved, true) && !$taken($s)) {
+                return $s;
+            }
+        }
+        do { $s = 'ag-' . $want . '-' . random_int(10, 99); } while ($taken($s));
+        return $s;
+    }
+
     /** The client's SmartEPT company, made the first time someone from that client opens SmartEPT. */
     public static function workspace(array $p): Company
     {
         $ext = 'ag-' . preg_replace('/[^0-9]/', '', (string) $p['tid']);
         $c = Company::withoutGlobalScopes()->where('external_tenant_id', $ext)->first();
+        $taken = static fn (string $s) => Company::withoutGlobalScopes()->where('slug', $s)->where('id', '!=', $c?->id ?? 0)->exists();
         if ($c !== null) {
             $c->name !== (string) $p['tname'] && $c->forceFill(['name' => (string) $p['tname']])->save();
+            if (str_starts_with((string) $c->slug, 'ag-') && ($s = self::commonSlug($p, $taken, 30)) !== $c->slug) {
+                $c->forceFill(['slug' => $s])->save();   // made before the common name: renamed once
+            }
             return $c;
         }
         Role::query()->where('slug', 'COMPANY_ADMIN')->exists() || \Illuminate\Support\Facades\Artisan::call('db:seed', ['--class' => \Database\Seeders\RolePermissionSeeder::class, '--force' => true]);
-        $slug = 'ag-' . trim(substr(Str::slug((string) ($p['slug'] ?: $p['tname'])), 0, 30), '-');
-        while (Company::withoutGlobalScopes()->where('slug', $slug)->exists()) {
-            $slug = substr($slug, 0, 34) . '-' . random_int(10, 99);
-        }
+        $slug = self::commonSlug($p, $taken, 30);
         $code = strtoupper(substr(preg_replace('/[^A-Za-z0-9]/', '', (string) $p['tname']), 0, 6)) . preg_replace('/[^0-9]/', '', (string) $p['tid']);
         while (Company::withoutGlobalScopes()->where('code', $code)->exists()) {
             $code .= random_int(0, 9);
@@ -176,19 +195,65 @@ final class AgBridge
         return [count($branch), count($team), count($seen)];
     }
 
-    /** The AmetecsGlobal administrator signing in: their SmartEPT login (by email), a Company Admin of this company. */
+    /**
+     * The AmetecsGlobal person signing in (ONE LOGIN, 19 Nov 2026). AmetecsGlobal decides the role: Admin = Company Admin
+     * (or the admin role already given here), Manager = MANAGER, Team Lead = TEAM_LEADER, Employee = EMPLOYEE (their own
+     * data only). Their people come from AmetecsGlobal's reporting line, written as SmartEPT's own reporting links, so
+     * SmartEPT's HierarchyService scopes them exactly as it scopes its own managers.
+     */
     public static function admin(Company $c, array $p): User
     {
         $email = strtolower((string) $p['email']);
+        $level = (string) ($p['role'] ?? 'admin');
+        $emp = (string) ($p['emp'] ?? '');
         $u = User::query()->firstWhere('email', $email);
         if ($u !== null && $u->company_id !== null && (int) $u->company_id !== (int) $c->id) {
             $email = 'ag' . substr((string) $c->external_tenant_id, 3) . '+' . $email;   // one login per client company
             $u = User::query()->firstWhere('email', $email);
         }
         $u ??= new User(['email' => $email, 'password' => Str::password(32)]);
-        $role = $u->exists && $u->role_id ? $u->role_id : Role::query()->where('slug', 'COMPANY_ADMIN')->value('id');
+        $slug = ['manager' => 'MANAGER', 'team_lead' => 'TEAM_LEADER', 'employee' => 'EMPLOYEE'][$level] ?? null;
+        $admins = Role::query()->whereIn('slug', ['SUPER_ADMIN', 'COMPANY_ADMIN'])->pluck('id')->all();
+        $role = $slug !== null ? Role::query()->where('slug', $slug)->value('id')
+            : ($u->exists && in_array($u->role_id, $admins) ? $u->role_id : Role::query()->where('slug', 'COMPANY_ADMIN')->value('id'));
         $u->forceFill(['company_id' => $c->id, 'role_id' => $role, 'name' => (string) ($p['name'] ?: $email), 'status' => 'ACTIVE', 'must_change_password' => false])->save();
+        if ($emp !== '') {
+            self::linkPeople($c, $u, $emp, $slug !== null && $slug !== 'EMPLOYEE');
+        }
         return $u;
+    }
+
+    /** The person's own employee row is theirs; a lead's people (any depth) report up to a SmartEPT login through them. */
+    private static function linkPeople(Company $c, User $u, string $emp, bool $lead): void
+    {
+        $rows = Employee::withoutGlobalScopes()->where('company_id', $c->id)->where('smartprs_employee_id', 'like', 'ag-%');
+        (clone $rows)->where('smartprs_employee_id', 'ag-' . $emp)->update(['user_id' => $u->id]);
+        if (!$lead) {
+            return;
+        }
+        $q = self::agPdo()->prepare('SELECT id, reporting_manager_id FROM employees WHERE tenant_id = ? AND deleted_at IS NULL');
+        $q->execute([substr((string) $c->external_tenant_id, 3)]);
+        $kids = [];
+        $boss = [];
+        foreach ($q->fetchAll() as $e) {
+            $kids[(string) $e['reporting_manager_id']][] = (string) $e['id'];
+            $boss[(string) $e['id']] = (string) $e['reporting_manager_id'];
+        }
+        $seen = [$emp => true];
+        for ($todo = [$emp]; $todo !== [];) {   // guarded against loops in bad data
+            foreach ($kids[array_pop($todo)] ?? [] as $k) {
+                if (!isset($seen[$k])) { $seen[$k] = true; $todo[] = $k; }
+            }
+        }
+        unset($seen[$emp]);
+        $login = (clone $rows)->whereNotNull('user_id')->pluck('user_id', 'smartprs_employee_id')->all();   // 'ag-<id>' => user id
+        foreach (array_keys($seen) as $id) {
+            // reports to this lead, or to someone under them who has never signed in to SmartEPT (then this lead is the
+            // nearest login above them); someone who has signed in keeps their own people
+            $over = $boss[(string) $id] ?? '';
+            $to = $over === $emp ? $u->id : ($login['ag-' . $over] ?? $u->id);
+            (clone $rows)->where('smartprs_employee_id', 'ag-' . $id)->update(['reporting_manager_user_id' => $to]);
+        }
     }
 
     /** The console's own SSO ticket (the one SmartEPT Central used to send), signed with this server's SSO secret. */
@@ -214,5 +279,11 @@ final class AgBridge
         app()->terminating(static function () use ($url, $body, $sig): void {
             rescue(static fn () => \Illuminate\Support\Facades\Http::timeout(5)->withHeaders(['X-AG-Signature' => $sig])->withBody($body, 'application/json')->post($url), null, false);
         });
+    }
+
+    /** ONE LOGIN: the AmetecsGlobal session the console came from is still the browser's (signed out there = out here). */
+    public static function sameSession(?string $sid): bool
+    {
+        return $sid === null || hash_equals($sid, hash('sha256', (string) ($_COOKIE['AMETECSGLOBAL'] ?? '')));
     }
 }

@@ -213,6 +213,8 @@ final class AmetecsShell
                 $grp[$g] = '<details class="grp"' . ($open ? ' open' : '') . '><summary title="' . ag_h($g) . '"><i class="fas ' . ($orgIcons[$g] ?? 'fa-folder') . '"></i><span>' . ag_h($g) . '</span><i class="fas fa-chevron-down car"></i></summary>' . $subs . '</details>';
             }
             $h .= '<div class="nav-l">People</div>' . ($grp['Employees'] ?? '') . ($grp['Attendance devices'] ?? '') . ($grp['Logins & access'] ?? '')
+                . $item($v('people'), 'fa-id-card-clip', 'Employee 360', $active === 'people')
+                . $item($v('reports'), 'fa-chart-column', 'Reports', $active === 'reports')
                 . $item($base . 'org.php?s=users', 'fa-user-shield', 'Users & permissions', $active === 'org:users')
                 . '<div class="nav-l">Applications</div>'
                 . $item($v('apps'), 'fa-grip', 'My applications', in_array($active, ['apps', 'updates'], true), (int) ($counts['updates'] ?? 0))
@@ -225,6 +227,10 @@ final class AmetecsShell
                 . $item($base . 'org.php?s=setup-companies', 'fa-building', 'Company profile', $active === 'org:setup-companies', 0, ' data-q="?r=setup-companies"')
                 . ($grp['Organization'] ?? '');
             foreach (array_diff_key($grp, array_flip(['Employees', 'Attendance devices', 'Logins & access', 'Organization'])) as $g) { $h .= $g; }   // any group added later
+        }
+        if (!$isAdmin && !empty($counts['lead'])) {   // team leads and managers: their people (Employee 360)
+            $h .= '<div class="nav-l">My team</div>' . $item($v('people'), 'fa-id-card-clip', 'Employee 360', $active === 'people')
+                . $item($v('reports'), 'fa-chart-column', 'Reports', $active === 'reports');
         }
         $h .= '<div class="nav-l">Help</div>'
             . ($isAdmin ? $item($v('activity'), 'fa-clock-rotate-left', 'Activity history', $active === 'activity') : '')

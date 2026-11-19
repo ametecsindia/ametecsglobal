@@ -106,7 +106,10 @@ final class AmetecsSetup
         }
         // Hidden by the server's own CSS, so nothing depends on the script below running: every way to add, import,
         // edit or bulk-upload employees inside the app (the Directory stays view and reports only).
-        return '<style>.topbar a[href="index.php"],a[href*="r=my-subscription"],a[href*="r=sys-updates"],#add-employment,#add-employee-link,.dir-empty-acts,'
+        $ag = '<link rel="stylesheet" href="../../../core/assets/ag-prs.css?v=1"><script>(function(h){function s(){var t;try{t=localStorage.getItem("agTheme")}catch(e){}'
+            . 'h.classList.remove("th-navy","th-light","th-dark");if(t&&t!="gold")h.classList.add("th-"+t);h.setAttribute("data-mode",t==="dark"?"dark":"light")}'
+            . 's();addEventListener("storage",s);document.addEventListener("DOMContentLoaded",s)})(document.documentElement)</script>';   // same everywhere (19 Nov 2026)
+        return $ag . '<style>.topbar a[href="index.php"],a[href*="r=my-subscription"],a[href*="r=sys-updates"],#add-employment,#add-employee-link,.dir-empty-acts,'
             . 'a[href*="#add-employment"],a[href*="add=1"],a[href*="r=employee-import"],a[href*="edit="][href*="r=employees"],'
             . 'form:has(input[name=action][value="employee-import-sample"]),form:has(input[name=action][value="employee-status"]),'
             . 'form:has(input[name=action][value="employee-delete"]),form:has(input[name=action][value="employee-delete-cancel"]){display:none!important}'
@@ -158,7 +161,7 @@ final class AmetecsSetup
             . 'document.querySelectorAll(".nav-section").forEach(function(s){if(!s.querySelector(".nav-items a"))s.remove()});'
             . 'var sb=document.querySelector(".sidebar-nav");if(sb){var b=document.createElement("a");b.id="ag-back";b.href="../../../core/";'
             . 'b.innerHTML="&larr; All apps";sb.parentNode.insertBefore(b,sb)}'
-            . '})();</script>';
+            . '})();</script><script src="../../../core/assets/ag-topbar.js?v=4" defer></script>';   // AmetecsGlobal's top bar (19 Nov 2026)
     }
 }
 

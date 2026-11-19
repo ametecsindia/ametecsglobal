@@ -13,6 +13,7 @@ use App\Models\User;
 use App\Services\Platform\Licensing;
 use App\Services\Platform\Workspaces;
 use App\Support\CurrentCompany;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 /**
@@ -87,16 +88,35 @@ final class AgBridge
         return $p;
     }
 
+    /**
+     * ONE ADDRESS NAME (owner, 19 Nov 2026: "common slug everywhere"): the workspace uses the company's AmetecsGlobal
+     * address name (core/c/<slug>), not "ag-<slug>". Only if another company here already has it, or it is a word the app
+     * keeps for itself, does it fall back to "ag-<slug>".
+     */
+    private static function commonSlug(array $p, callable $taken, int $max): string
+    {
+        $want = trim(substr(Str::slug((string) ($p['slug'] ?: $p['tname'])), 0, $max), '-') ?: 'company-' . preg_replace('/[^0-9]/', '', (string) $p['tid']);
+        $reserved = ['admin', 'api', 'login', 'logout', 'sso', 'ag', 'w', 'storage', 'assets', 'build', 'register', 'pricing', 'contact', 'home', 'core', 'plugins', 'public', 'img', 'brand', 'up'];
+        foreach ([$want, 'ag-' . $want] as $s) {
+            if (!in_array($s, $reserved, true) && !$taken($s)) {
+                return $s;
+            }
+        }
+        do { $s = 'ag-' . $want . '-' . random_int(10, 99); } while ($taken($s));
+        return $s;
+    }
+
     /** The client's workspace, made the first time someone from that client opens ROVEXY. */
     public static function workspace(array $p): Company
     {
         $ctx = app(CurrentCompany::class);
         $c = $ctx->withoutScope(fn () => Company::query()->get()->first(fn (Company $c) => (string) $c->setting('ag_tenant') === (string) $p['tid']));
+        $taken = static fn (string $s) => Company::query()->where('slug', $s)->where('id', '!=', $c?->id ?? 0)->exists();
+        if ($c !== null && str_starts_with((string) $c->slug, 'ag-') && ($s = self::commonSlug($p, $taken, 30)) !== $c->slug) {
+            $c->forceFill(['slug' => $s])->save();   // made before the common name: renamed once
+        }
         if ($c === null) {
-            $slug = 'ag-' . trim(substr(Str::slug((string) ($p['slug'] ?: $p['tname'])), 0, 30), '-');
-            while (Company::query()->where('slug', $slug)->exists()) {
-                $slug = substr($slug, 0, 34) . '-' . random_int(10, 99);
-            }
+            $slug = self::commonSlug($p, $taken, 30);
             $c = Workspaces::create($slug, (string) $p['tname'], (string) $p['email'], (string) $p['name'], Str::random(40));
             $c->settings = ['ag_tenant' => (string) $p['tid']] + ($c->settings ?? []);
             $c->save();
@@ -164,7 +184,13 @@ final class AgBridge
             ])->save();
             $want && $active++;
             $u->wasRecentlyCreated && $roleId && $u->roles()->attach($roleId, ['company_id' => $c->id]);
-            $u->teams()->sync(isset($team[$e['team_id']]) ? [$team[$e['team_id']] => ['company_id' => $c->id]] : []);
+            // member of their AmetecsGlobal team; supervisor rows (Team Lead / Manager, set at sign-in) are left alone
+            $mine = isset($team[$e['team_id']]) ? [$team[$e['team_id']]] : [];
+            DB::table('team_user')->where('user_id', $u->id)->where('membership', 'member')->whereNotIn('team_id', $mine)->delete();
+            foreach ($mine as $tm) {
+                DB::table('team_user')->where('user_id', $u->id)->where('team_id', $tm)->exists()
+                    || DB::table('team_user')->insert(['team_id' => $tm, 'user_id' => $u->id, 'company_id' => $c->id, 'membership' => 'member']);
+            }
             $seen[] = $u->id;
         }
         // Gone from AmetecsGlobal: switched off here too (nothing deleted - calls and history stay).
@@ -173,17 +199,62 @@ final class AgBridge
         return [count($branch), count($team), count($seen)];
     }
 
-    /** The AmetecsGlobal user signing in: their ROVEXY login (matched by email), an administrator. */
+    /**
+     * The AmetecsGlobal person signing in (ONE LOGIN, 19 Nov 2026). AmetecsGlobal decides the role: an Admin is a Company Admin
+     * here; a Manager or Team Lead is a Supervisor of the ROVEXY teams their people (reporting line, any depth) belong to.
+     * ponytail: ROVEXY scopes by team, so a lead sees everyone in those teams; per-person scope if leads share teams.
+     */
     public static function admin(Company $c, array $p): User
     {
         $email = strtolower((string) $p['email']);
-        $u = User::query()->firstWhere('email', $email)
+        $role = (string) ($p['role'] ?? 'admin');
+        $emp = (string) ($p['emp'] ?? '');
+        $u = ($role !== 'admin' && $emp !== '' ? User::query()->firstWhere('employee_code', 'ag-' . $emp) : null)
+            ?? User::query()->firstWhere('email', $email)
             ?? User::query()->create(['employee_code' => 'agu-' . substr(md5($email), 0, 10), 'email' => $email, 'name' => (string) ($p['name'] ?: $email), 'password' => Str::random(40), 'status' => 'active']);
         $u->status !== 'active' && $u->update(['status' => 'active']);
-        if (!$u->isAdminUser()) {
-            $u->roles()->syncWithoutDetaching([Role::query()->where('key', 'company_admin')->value('id') => ['company_id' => $c->id]]);
-            $u->unsetRelation('roles');
+        $rid = static fn (string $k) => Role::query()->where('key', $k)->value('id');
+        if ($role === 'admin') {
+            if (!$u->isAdminUser()) {
+                $u->roles()->syncWithoutDetaching([$rid('company_admin') => ['company_id' => $c->id]]);
+            }
+        } else {
+            $u->roles()->detach($rid('company_admin'));   // AmetecsGlobal says this person is not an administrator
+            $u->roles()->syncWithoutDetaching([$rid('supervisor') => ['company_id' => $c->id]]);
+            $codes = array_map(static fn ($i) => 'ag-' . $i, self::teamOf((string) $c->setting('ag_tenant'), $emp));
+            $teams = DB::table('team_user')->join('users', 'users.id', '=', 'team_user.user_id')->where('team_user.company_id', $c->id)
+                ->whereIn('users.employee_code', $codes)->where('team_user.membership', 'member')->distinct()->pluck('team_user.team_id')->all();
+            DB::table('team_user')->where('user_id', $u->id)->where('membership', 'supervisor')->whereNotIn('team_id', $teams)->delete();
+            foreach ($teams as $tm) {
+                DB::table('team_user')->updateOrInsert(['team_id' => $tm, 'user_id' => $u->id], ['company_id' => $c->id, 'membership' => 'supervisor']);
+            }
         }
+        $u->unsetRelation('roles');
         return $u;
+    }
+
+    /** AmetecsGlobal employee ids reporting to $emp at any depth (the reporting line, as core/roles.php reads it). @return list<string> */
+    public static function teamOf(string $tid, string $emp): array
+    {
+        $q = self::agPdo()->prepare('SELECT id, reporting_manager_id FROM employees WHERE tenant_id = ? AND deleted_at IS NULL');
+        $q->execute([$tid]);
+        $kids = [];
+        foreach ($q->fetchAll() as $e) {
+            $kids[(string) $e['reporting_manager_id']][] = (string) $e['id'];
+        }
+        $seen = [$emp => true];
+        for ($todo = [$emp]; $todo !== [];) {   // guarded against loops in bad data
+            foreach ($kids[array_pop($todo)] ?? [] as $k) {
+                if (!isset($seen[$k])) { $seen[$k] = true; $todo[] = $k; }
+            }
+        }
+        unset($seen[$emp]);
+        return array_map('strval', array_keys($seen));
+    }
+
+    /** ONE LOGIN: the AmetecsGlobal session this app session came from is still the browser's (signed out there = out here). */
+    public static function sameSession(?string $sid): bool
+    {
+        return $sid === null || hash_equals($sid, hash('sha256', (string) ($_COOKIE['AMETECSGLOBAL'] ?? '')));
     }
 }

@@ -117,7 +117,12 @@ class AuthController extends Controller
         $this->audit($request, 'SSO_LOGIN', User::class, $user->id, null, $user);
 
         $abilities = ['role:' . ($user->roleSlug() ?? 'NONE')];
-        $token = $user->createToken('sso-web', $abilities)->plainTextToken;
+        $new = $user->createToken('sso-web', $abilities);
+        $token = $new->plainTextToken;
+        // ONE LOGIN (19 Nov 2026): opened from AmetecsGlobal - this console token ends with that session (AgSession).
+        if (\App\Services\AgBridge::managed() && ($_COOKIE['AMETECSGLOBAL'] ?? '') !== '') {
+            \Illuminate\Support\Facades\Cache::put('ag-sid:' . $new->accessToken->getKey(), hash('sha256', (string) $_COOKIE['AMETECSGLOBAL']), now()->addDays(2));
+        }
 
         return response()->json([
             'token' => $token,

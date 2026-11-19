@@ -11,7 +11,9 @@ class Tenant extends Model
 {
     use SoftDeletes;
 
-    public const RESERVED_SLUGS = ['admin', 'api', 'app', 'www', 'login', 'logout', 'signup', 'register', 'pricing', 'docs', 'help', 'support', 'status', 'billing', 'display', 'static', 'assets', 'mail', 'blog', 'about', 'legal', 'terms', 'privacy', 'qronex', 'ametecs', 'dashboard', 'settings', 'super', 'client', 'account', 'two-factor', 'forgot-password', 'reset-password', 'contact', 'up', 'health'];
+    // AmetecsGlobal copy (19 Nov 2026): 'ametecs' taken off - it is Ametecs India's own company address name in
+    // AmetecsGlobal, which every app now shares (core/c/ametecs); no QRONEX page uses /ametecs.
+    public const RESERVED_SLUGS = ['admin', 'api', 'app', 'www', 'login', 'logout', 'signup', 'register', 'pricing', 'docs', 'help', 'support', 'status', 'billing', 'display', 'static', 'assets', 'mail', 'blog', 'about', 'legal', 'terms', 'privacy', 'qronex', 'dashboard', 'settings', 'super', 'client', 'account', 'two-factor', 'forgot-password', 'reset-password', 'contact', 'up', 'health'];
 
     protected $guarded = ['id'];
 
