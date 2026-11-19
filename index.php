@@ -34,7 +34,7 @@ $apps = [
     ['SmartEPT', 'Employee productivity tracking', 'fa-chart-line', 'Arriving soon', ['Work time and activity', 'Office and remote teams', 'Daily and weekly reports', 'Team and person views']],
     ['SmartDCM', 'Debt collection management', 'fa-hand-holding-dollar', 'Arriving soon', ['Allocations to agents', 'Calling and follow-ups', 'Payments and promises to pay', 'Agency and portfolio reports']],
     ['LeadGER', 'Lead management', 'fa-bullseye', 'Arriving soon', ['Capture leads from every source', 'Assign and follow up', 'Pipeline and stages', 'Conversion reports']],
-    ['ROVEXY', 'Field force and visits', 'fa-route', 'Arriving soon', ['Field visits and routes', 'Live location of field staff', 'Visit proof and notes', 'Daily field reports']],
+    ['ROVEXY', 'Field force, calling and visits', 'fa-route', 'Live', ['Calling from the phone with outcomes and follow-ups', 'Live location and field visits', 'Call recordings and payment slips', 'Managed company phones']],
     ['QRONEX', 'QR attendance', 'fa-qrcode', 'Arriving soon', ['QR codes at gates and offices', 'Geo-fenced punches', 'Works with the mobile app', 'Feeds attendance everywhere']],
 ];
 $features = [

@@ -422,6 +422,35 @@
       "install": [
         "tools/db/bootstrap-local.php --if-broken"
       ]
+    },
+    {
+      "name": "ROVEXY",
+      "source": "C:\\laragon\\www\\Smart caller",
+      "target": "plugins/rovexy",
+      "_note": "Laravel 13 + built console (public/admin; source in console/, build: cd console && npm ci && npx vite build). One sign-in, seats and employee copy: app/Services/AgBridge.php + core/open.php. Served at /AmetecsGlobal/plugins/rovexy/public.",
+      "install": [
+        "tools/ag-install.php"
+      ],
+      "database": {
+        "migrations": "database/migrations",
+        "commands": [
+          "artisan migrate --force"
+        ]
+      },
+      "mustContain": [
+        {
+          "files": [
+            "routes\\web.php"
+          ],
+          "text": "AgSsoController"
+        },
+        {
+          "files": [
+            "console\\src\\lib\\api.ts"
+          ],
+          "text": "window as any).__ROOT__"
+        }
+      ]
     }
   ],
   "git": {

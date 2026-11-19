@@ -48,7 +48,7 @@ final class AmetecsAccess
         'smartept'  => ['name' => 'SmartEPT', 'what' => 'Employee productivity tracking', 'unit' => 'users', 'open' => null, 'color' => '#2563EB'],
         'smartdcm'  => ['name' => 'SmartDCM', 'what' => 'Debt collection management', 'unit' => 'agents', 'open' => null, 'color' => '#0F766E'],
         'leadger'   => ['name' => 'LeadGER', 'what' => 'Lead management', 'unit' => 'users', 'open' => null, 'color' => '#7C3AED'],
-        'rovexy'    => ['name' => 'ROVEXY', 'what' => '', 'unit' => 'users', 'open' => null, 'color' => '#DB2777'],
+        'rovexy'    => ['name' => 'ROVEXY', 'what' => 'Field force · Calling · Visits', 'unit' => 'users', 'open' => 'open.php?app=rovexy', 'color' => '#DB2777'],
         'qronex'    => ['name' => 'QRONEX', 'what' => 'QR attendance', 'unit' => 'employees', 'open' => null, 'color' => '#CA8A04'],
     ];
 

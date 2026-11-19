@@ -1,0 +1,12 @@
+# AmetecsGlobal (19 Nov 2026): only each app's public/ folder is reachable from a browser. Everything else in an app
+# folder (.env with database passwords, storage, vendor, source code) is refused. Each public/.htaccess takes over below it.
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteRule ^[^/]+/(?!public(/|$)) - [F]
+    RewriteRule ^[^/]+/?$ - [F]
+</IfModule>
+<IfModule !mod_rewrite.c>
+    <FilesMatch "^\.env|\.(log|sql|key|pem|json|lock)$">
+        Require all denied
+    </FilesMatch>
+</IfModule>
