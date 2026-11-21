@@ -295,7 +295,24 @@ switch ($aaOp) {
         return ['ok' => true, 'code' => $aaCode, 'name' => (string) ($aaMe['name'] ?? ''), 'designation' => orgValueOf($store, $aaMe, 'designation'),
             'company' => orgValueOf($store, $aaMe, 'company'), 'status' => ucfirst(strtolower(trim((string) ($aaMe['status'] ?? 'Active')) ?: 'Active')),
             'joined' => $pfJoined, 'shift' => substr((string) $calendar->shiftStart(), 0, 5) . ' – ' . substr((string) $calendar->shiftEnd(), 0, 5),
-            'sections' => $pfSections];
+            'sections' => $pfSections, 'employee_id' => (string) $aaOwn,
+            // RESIGNATION (owner, 21 Nov 2026): the one under notice, if any, and the notice this person would serve
+            'resignation' => (static function () use ($store, $aaOwn): ?array {
+                $x = resignationOf($store, (string) $aaOwn);
+                if ($x === null) {
+                    return null;
+                }
+                $r = (array) json_decode((string) ($x['remarks'] ?? ''), true);
+                return ['id' => (string) $x['id'], 'last_day' => Dates::dmy((string) $x['last_day']), 'start' => Dates::dmy((string) ($r['start_date'] ?? substr((string) ($x['created_at'] ?? ''), 0, 10))),
+                    'note' => (string) ($r['note'] ?? '')];
+            })(),
+            'notice_days' => (static function () use ($employeeExtras, $aaMe, $store): int {
+                try {
+                    return resignationNoticeDays($employeeExtras, $aaMe, $store);
+                } catch (\Throwable) {
+                    return 0;
+                }
+            })()];
 
     case 'letters':   // My Letters: each letter as issued; one that needs acknowledgement carries ack = false until signed off
         if (!isset($aaHrefs['letters-mine'])) {

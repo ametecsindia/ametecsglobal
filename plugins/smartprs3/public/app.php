@@ -10694,14 +10694,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 resignationSweep($store);
             }
         }
-        $_SESSION[$problem !== null && $problem !== '' ? 'flash_problem' : 'flash_notice'] = $problem !== null && $problem !== '' ? $problem : $notice;
-        $rsBackTo = match (post('back')) {
-            'me' => 'me&id=' . rawurlencode((string) ($rsEmp['id'] ?? '')),
-            'profile' => 'employees&sel=' . rawurlencode($rsEmp === null ? '' : Employment::code($rsEmp)) . '#emp-resign',
-            default => 'resignations',
-        };
-        header('Location: ?r=' . $rsBackTo);
-        exit;
+        // FROM THE PHONE APP (owner, 21 Nov 2026): no redirect - ?ag_api=result reports $problem / $notice as JSON.
+        // A redirect read as "signed out" made the phone sign in again and send the same resignation twice.
+        if (!isset($_GET['ag_api'])) {
+            $_SESSION[$problem !== null && $problem !== '' ? 'flash_problem' : 'flash_notice'] = $problem !== null && $problem !== '' ? $problem : $notice;
+            $rsBackTo = match (post('back')) {
+                'me' => 'me&id=' . rawurlencode((string) ($rsEmp['id'] ?? '')),
+                'profile' => 'employees&sel=' . rawurlencode($rsEmp === null ? '' : Employment::code($rsEmp)) . '#emp-resign',
+                default => 'resignations',
+            };
+            header('Location: ?r=' . $rsBackTo);
+            exit;
+        }
     }
 
     // RE-JOIN (owner, 22 Oct 2026): a past employee (Backed up / Old data) comes back as a NEW employment in

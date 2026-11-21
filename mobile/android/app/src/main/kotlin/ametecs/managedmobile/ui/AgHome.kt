@@ -623,9 +623,9 @@ private fun PunchResult(r: JsonObject, retry: () -> Unit, close: () -> Unit) {
 // ---------- Apps & services: Bento (owner, 21 Nov 2026: option A of the redesign canvas) ----------
 /** A cached API answer, shown at once and refreshed in the background; null until the first answer. No spinner. */
 @Composable
-private fun rememberAg(key: String, load: suspend () -> JsonObject): JsonObject? {
+private fun rememberAg(key: String, tick: Int = 0, load: suspend () -> JsonObject): JsonObject? {
     var v by remember(key) { mutableStateOf(AgCache.peek(key)) }
-    LaunchedEffect(key) { runCatching { AgCache.fetch(key, load) }.onSuccess { if (it.str("ok") != "false") v = it } }
+    LaunchedEffect(key, tick) { runCatching { AgCache.fetch(key, load) }.onSuccess { if (it.str("ok") != "false") v = it } }
     return v
 }
 
@@ -1648,13 +1648,19 @@ private fun SupportPage(vm: AppViewModel, back: () -> Unit, go: (String) -> Unit
 private fun ProfilePage(vm: AppViewModel, back: () -> Unit, go: (String) -> Unit) {
     var ask by remember { mutableStateOf(false) }
     var idCard by remember { mutableStateOf(false) }
+    var rsAsk by remember { mutableStateOf<String?>(null) }
+    var rsNote by remember { mutableStateOf("") }
+    var rsBusy by remember { mutableStateOf(false) }
+    var rsMsg by remember { mutableStateOf<Pair<Boolean, String>?>(null) }
+    val scope = rememberCoroutineScope()
     var open by rememberSaveable { mutableStateOf(setOf<String>()) }
     val ctx = LocalContext.current
     val launch = { uri: String -> runCatching { ctx.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(uri))) } }
     Column(Modifier.fillMaxSize().background(Cream)) {
         Load(Unit, { vm.ag.get("home") }, cache = "home") { h, _ ->
             val me = h.o("me") ?: JsonObject(emptyMap())
-            val pf = rememberAg("profile") { vm.ag.get("profile") }
+            var pfTick by remember { mutableIntStateOf(0) }
+            val pf = rememberAg("profile", pfTick) { vm.ag.get("profile") }
             val sup = h.o("support")
             val mgr = sup?.o("manager"); val co = sup?.o("company")
             val joined = runCatching { LocalDate.parse((pf?.s("joined") ?: me.s("joined")).take(10)) }.getOrNull()
@@ -1772,6 +1778,57 @@ private fun ProfilePage(vm: AppViewModel, back: () -> Unit, go: (String) -> Unit
                         .clickable { ask = true }.padding(16.dp), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.AutoMirrored.Outlined.Logout, null, tint = Bad); Spacer(Modifier.width(8.dp))
                         Text("Sign out", color = Bad, fontWeight = FontWeight.Bold)
+                    }
+                }
+                // resignation (owner, 21 Nov 2026): at the bottom; each asks first, "No" leaves everything as it is
+                if (pf != null) item {
+                    val rs = pf.o("resignation")
+                    Column(Modifier.padding(horizontal = 16.dp).fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(Color.White).border(1.dp, Line, RoundedCornerShape(22.dp)).padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text("Resignation", color = Text1, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                        Text(if (rs != null) "Submitted ${rs.s("start")} · notice ends ${rs.s("last_day")}" + (rs.s("note").takeIf { it.isNotBlank() }?.let { " · \"$it\"" } ?: "")
+                            else "No resignation on record." + (pf.n("notice_days").takeIf { it > 0 }?.let { " Your notice period is $it days." } ?: ""),
+                            color = if (rs != null) Warn else Text2, fontSize = 13.sp, lineHeight = 18.sp)
+                        rsMsg?.let { (ok, m) -> Text(m, color = if (ok) Ok else Bad, fontSize = 13.sp) }
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            val canStart = rs == null; val canRevoke = rs != null
+                            Box(Modifier.weight(1f).clip(RoundedCornerShape(14.dp)).background(if (canStart) Bad else Line)
+                                .clickable(enabled = canStart) { rsAsk = "submit"; rsNote = "" }.padding(vertical = 13.dp), contentAlignment = Alignment.Center) {
+                                Text("Initiate resignation", color = if (canStart) Color.White else Text2, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                            }
+                            Box(Modifier.weight(1f).clip(RoundedCornerShape(14.dp)).border(1.dp, if (canRevoke) Ok else Line, RoundedCornerShape(14.dp))
+                                .clickable(enabled = canRevoke) { rsAsk = "revoke" }.padding(vertical = 13.dp), contentAlignment = Alignment.Center) {
+                                Text("Revoke resignation", color = if (canRevoke) Ok else Text2, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                    rsAsk?.let { kind ->
+                        val submit = kind == "submit"
+                        AlertDialog(onDismissRequest = { if (!rsBusy) rsAsk = null },   // dismissed = "No": nothing happens
+                            title = { Text(if (submit) "Initiate resignation?" else "Revoke resignation?") },
+                            text = {
+                                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    Text(if (submit) "Your resignation starts today" + (pf.n("notice_days").takeIf { it > 0 }?.let { " and your notice of $it days ends on " +
+                                            dmy(LocalDate.now().plusDays(it.toLong()).toString()) } ?: "") + ". Your reporting line will be told."
+                                        else "Your resignation (notice ending ${rs?.s("last_day")}) will be withdrawn and your reporting line told.", fontSize = 14.sp)
+                                    if (submit) OutlinedTextField(rsNote, { rsNote = it }, label = { Text("Reason (required)") }, minLines = 2, modifier = Modifier.fillMaxWidth())
+                                }
+                            },
+                            confirmButton = {
+                                TextButton(enabled = !rsBusy && (!submit || rsNote.isNotBlank()), onClick = {
+                                    rsBusy = true
+                                    scope.launch {
+                                        val r = runCatching {
+                                            if (submit) vm.ag.action("resign-submit", mapOf("id" to pf.s("employee_id"), "note" to rsNote.trim(), "start_date" to LocalDate.now().toString(), "back" to "me"))
+                                            else vm.ag.action("resign-revoke", mapOf("id" to (rs?.s("id") ?: ""), "back" to "me"))
+                                        }.getOrElse { fail(it.message ?: "Could not send. Try again.") }
+                                        rsBusy = false; rsAsk = null
+                                        rsMsg = r.b("ok") to r.s("message")
+                                        pfTick++   // read the profile again: the resignation state changed
+                                    }
+                                }) { Text(if (rsBusy) "Sending…" else "Yes", color = if (submit) Bad else Ok, fontWeight = FontWeight.Bold) }
+                            },
+                            dismissButton = { TextButton(enabled = !rsBusy, onClick = { rsAsk = null }) { Text("No") } })
                     }
                 }
                 item {
