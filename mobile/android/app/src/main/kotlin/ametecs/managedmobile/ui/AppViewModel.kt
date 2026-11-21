@@ -203,6 +203,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             if (type == "session.revoked" || type == "session.ended" || type == "session.revalidate") viewModelScope.launch { refreshStatus() }
             if (type.startsWith("chat") || type.startsWith("message")) viewModelScope.launch { checkChat() }
         }
+        agApps.value = g.store.getString("ag_apps")?.split("\n")?.mapNotNull { l -> l.split("\t").takeIf { it.size == 2 }?.let { it[0] to it[1] } }
         viewModelScope.launch { startup() }
     }
 
@@ -359,6 +360,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private fun applyMe(me: JsonObject) {
         agToday.value = (me["ag_today"] as? JsonObject)?.let { Triple(it.str("status") ?: "none", it.str("in"), it.str("out")) }
         agApps.value = (me["ag_apps"] as? JsonArray)?.mapNotNull { e -> (e as? JsonObject)?.let { o -> o.str("app")?.let { it to (o.str("name") ?: it) } } }
+        // KEPT ON THE PHONE (owner, 21 Nov 2026: "showing only rovexy"): a slow or failed `me`, or an offline start, no longer
+        // drops an Ametecs Global employee onto the plain ROVEXY dashboard. Cleared on sign-out.
+        g.store.putString("ag_apps", agApps.value?.joinToString("\n") { "${it.first}\t${it.second}" })
         callingRoute = me.str("calling_route") ?: "server"
         callingRoutes = (me["calling_routes"] as? JsonArray)?.mapNotNull { it.toString().trim('"').takeIf { r -> r == "sim" || r == "server" } }
             ?: listOf(callingRoute)   // empty list = no calling option allowed (server says so on Call)
@@ -477,6 +481,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         stopWork()
         ag.reset()
         ametecs.managedmobile.data.AgCache.clear()
+        g.store.putString("ag_apps", null)
+        agApps.value = null
         g.session.logout()
         g.work.clearWorkData()
         screen.value = Screen.Login

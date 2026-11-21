@@ -265,7 +265,8 @@ private fun RefreshBar() {
 fun AgHome(vm: AppViewModel) {
     val apps by vm.agApps.collectAsState()
     var page by rememberSaveable { mutableStateOf("home") }
-    if (apps == null) { Dashboard(vm); return }
+    AgCache.attach(LocalContext.current)
+    if (apps == null && AgCache.peek("home") == null) { Dashboard(vm); return }   // a plain ROVEXY workspace
     val go: (String) -> Unit = { page = it }
     val back = { page = when { page.startsWith("payslip:") -> "payslips"; page == "leave-apply" -> "leave"; page == "correct" -> "corrections"; else -> "home" } }
     if (page != "home") BackHandler(onBack = back)
