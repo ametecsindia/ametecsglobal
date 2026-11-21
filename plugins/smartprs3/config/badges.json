@@ -1,0 +1,12 @@
+{
+  "_about": "Attendance badges on the phone app's Home (owner, 21 Nov 2026). Each company can change, remove or add badges here. type: streak (n on-time days in a row) | on_time (n on-time days) | present (n present days) | early (count days punched in at least minutes before shift) | zero_late (no late day) | no_absent (whole month, no absent day) | hours (h hours worked). icon: star | sun | bolt | trophy | fire | clock | medal | heart. Counted per calendar month.",
+  "badges": [
+    {"id": "perfect-week", "name": "Perfect week", "icon": "star", "type": "streak", "n": 5, "about": "Be on time 5 working days in a row."},
+    {"id": "early-bird", "name": "Early bird", "icon": "sun", "type": "early", "minutes": 15, "count": 1, "about": "Punch in at least 15 minutes before your shift starts."},
+    {"id": "zero-late", "name": "Zero late", "icon": "bolt", "type": "zero_late", "about": "Go the whole month without a late day."},
+    {"id": "full-month", "name": "Full month", "icon": "trophy", "type": "no_absent", "about": "No absent day in the whole month."},
+    {"id": "on-time-15", "name": "Punctual 15", "icon": "clock", "type": "on_time", "n": 15, "about": "Be on time on 15 working days this month."},
+    {"id": "hours-160", "name": "160 club", "icon": "medal", "type": "hours", "h": 160, "about": "Work 160 hours or more this month."},
+    {"id": "streak-10", "name": "On fire", "icon": "fire", "type": "streak", "n": 10, "about": "Be on time 10 working days in a row."}
+  ]
+}

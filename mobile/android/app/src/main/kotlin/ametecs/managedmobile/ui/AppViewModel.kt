@@ -215,6 +215,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private suspend fun startupInner() {
         if (g.config.serverOrigin == null || g.store.getString("registered") == null) { screen.value = Screen.Connect; loadBranding(); return }
         viewModelScope.launch { loadBranding() }   // the company name for sign-in; not needed to decide the screen
+        // OPEN ON HOME AT ONCE (owner, 21 Nov 2026: "app loading slow"): signed in, inside the work lease, and an Ametecs
+        // Global employee last time -> Home now, from what the phone kept; the checks below still run and move to Login /
+        // Policy / Locked if the server says so.
+        if (agApps.value != null && g.session.hasWorkSession && g.session.lease.isValid(System.currentTimeMillis())) screen.value = Screen.Dashboard
         refreshStatus()
     }
 

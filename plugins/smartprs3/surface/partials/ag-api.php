@@ -125,6 +125,8 @@ switch ($aaOp) {
                 // ADMIN tile (owner, 21 Nov 2026): anyone who can see others or decide leave / corrections
                 'admin' => $may('leave.request.decide') || $may('attendance.punch.create.manual') || hasDirectReports($store, $aaOwn === null ? null : (string) $aaOwn)],
             'unread' => $unread, 'pending_leave' => $pendingLeave,
+            // BADGES (owner, 21 Nov 2026: "custom option to badges"): each company's own list, config/badges.json
+            'badges' => array_values((array) (((array) json_decode((string) @file_get_contents(dirname(__DIR__, 2) . '/config/badges.json'), true))['badges'] ?? [])),
             // SUPPORT (owner, 21 Nov 2026): who this person can reach - their manager and their company's contact
             'support' => (static function () use ($store, $aaMe, $mgr): array {
                 $co = (string) ($aaMe['employer_company_id'] ?? '') !== '' ? $store->find('companies', (string) $aaMe['employer_company_id']) : null;

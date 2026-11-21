@@ -50,6 +50,8 @@ import androidx.compose.material.icons.outlined.EmojiEvents
 import androidx.compose.material.icons.outlined.Lightbulb
 import androidx.compose.material.icons.outlined.LocalFireDepartment
 import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.MilitaryTech
+import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material.icons.outlined.WbSunny
@@ -283,6 +285,7 @@ fun AgHome(vm: AppViewModel) {
         page == "alerts" -> AlertsPage(vm, back)
         page == "support" -> SupportPage(vm, back, go)
         page == "admin" -> AdminPage(vm, back)
+        page == "badges" -> BadgesPage(vm, back)
         page == "profile" -> ProfilePage(vm, back)
         page == "letters" -> LettersPage(vm, back)
         page == "assets" -> AssetsPage(vm, back)
@@ -554,10 +557,24 @@ private fun QuickAction(label: String, icon: ImageVector, modifier: Modifier, on
 // ---------- home: H8 "Streaks" (owner, 21 Nov 2026: picked H8 of the Home redesign canvas) ----------
 /** This month in numbers, worked out on the phone from the attendance month the Attendance screen also shows.
  *  ponytail: this month only (a streak resets on the 1st); read last month too if people ask for longer streaks. */
-private class MonthStats(val score: Int?, val streak: Int, val best: Int, val worked: Int, val goal: Int, val present: Int, val late: Int, val absent: Int,
-                         val badges: List<Triple<String, Boolean, String>>)
+/** One badge's state this month: [cur] of [target], and a line saying where the person stands. */
+private class BadgeState(val id: String, val name: String, val icon: String, val about: String, val earned: Boolean, val cur: Int, val target: Int, val detail: String)
 
-private fun monthStats(att: JsonObject?): MonthStats {
+private class MonthStats(val score: Int?, val streak: Int, val best: Int, val worked: Int, val goal: Int, val present: Int, val late: Int, val absent: Int,
+                         val badges: List<BadgeState>)
+
+/** Used when the server sends no list (an older server): the four first badges. */
+private val defaultBadges = listOf(
+    mapOf("id" to "perfect-week", "name" to "Perfect week", "icon" to "star", "type" to "streak", "n" to "5", "about" to "Be on time 5 working days in a row."),
+    mapOf("id" to "early-bird", "name" to "Early bird", "icon" to "sun", "type" to "early", "minutes" to "15", "count" to "1", "about" to "Punch in at least 15 minutes before your shift starts."),
+    mapOf("id" to "zero-late", "name" to "Zero late", "icon" to "bolt", "type" to "zero_late", "about" to "Go the whole month without a late day."),
+    mapOf("id" to "full-month", "name" to "Full month", "icon" to "trophy", "type" to "no_absent", "about" to "No absent day in the whole month."),
+).map { m -> JsonObject(m.mapValues { JsonPrimitive(it.value) }) }
+
+/** This month in numbers, worked out on the phone from the attendance month the Attendance screen also shows, and each
+ *  of the company's badges (config/badges.json, sent with home) checked against it.
+ *  ponytail: this month only (a streak resets on the 1st); read last month too if people ask for longer streaks. */
+private fun monthStats(att: JsonObject?, defs: List<JsonObject>): MonthStats {
     val today = LocalDate.now()
     val days = att?.a("days").orEmpty().sortedBy { it.s("date") }
     val shift = att?.s("shift").orEmpty().split("–", "-").map { it.trim() }
@@ -574,29 +591,60 @@ private fun monthStats(att: JsonObject?): MonthStats {
     for (d in work) { if (onTime(d)) { run++; best = maxOf(best, run) } else run = 0 }
     val byDate = days.associateBy { it.s("date") }
     val ym = YearMonth.now()
-    val workDays = (1..ym.lengthOfMonth()).map { ym.atDay(it) }.count { d ->
+    val monthDays = (1..ym.lengthOfMonth()).map { ym.atDay(it) }.filter { d ->
         val st = byDate[d.toString()]?.s("status")
         when { st in setOf("WEEKLY_OFF", "HOLIDAY") -> false; st == null && d > today && d.dayOfWeek == java.time.DayOfWeek.SUNDAY -> false; else -> true }
     }
-    val early = start != null && work.any { d -> runCatching { LocalTime.parse(d.s("in")) <= start.minusMinutes(15) }.getOrDefault(false) }
+    val worked = minutesOf(att?.s("worked").orEmpty())
     val late = work.count { it.str("late") != null }
     val absent = work.count { it.s("status") == "ABSENT" }
-    return MonthStats(score, streak, best, minutesOf(att?.s("worked").orEmpty()), workDays * shiftMin, work.count { it.s("status") == "PRESENT" }, late, absent, listOf(
-        Triple("Perfect week", best >= 5, "be on time 5 working days in a row"),
-        Triple("Early bird", early, "punch in 15 minutes before your shift starts"),
-        Triple("Zero late", work.isNotEmpty() && late == 0, "finish the month with no late day"),
-        Triple("Full month", today == ym.atEndOfMonth() && absent == 0 && work.isNotEmpty(), "go the whole month without an absent day")))
+    val present = work.count { it.s("status") == "PRESENT" }
+    val onTimeN = work.count(onTime)
+    val left = monthDays.count { it > today }
+    val badges = (defs.ifEmpty { defaultBadges }).map { b ->
+        val n = b.n("n").coerceAtLeast(1)
+        val (earned, cur, target, detail) = when (b.s("type")) {
+            "streak" -> listOf(best >= n, best, n, "Best run this month: $best of $n days · now $streak")
+            "on_time" -> listOf(onTimeN >= n, onTimeN, n, "$onTimeN of $n on-time days")
+            "present" -> listOf(present >= n, present, n, "$present of $n present days")
+            "early" -> {
+                val m = b.n("minutes").coerceAtLeast(1); val c = b.n("count").coerceAtLeast(1)
+                val e = if (start == null) 0 else work.count { d -> runCatching { LocalTime.parse(d.s("in")) <= start.minusMinutes(m.toLong()) }.getOrDefault(false) }
+                listOf(e >= c, e, c, "$e of $c day(s) in $m+ min before ${start?.toString() ?: "shift start"}")
+            }
+            "zero_late" -> listOf(work.isNotEmpty() && late == 0, if (late == 0 && work.isNotEmpty()) 1 else 0, 1,
+                if (late == 0) "No late day so far · keep it up for $left more day(s)" else "$late late day(s) this month: try again next month")
+            "no_absent" -> listOf(left == 0 && absent == 0 && work.isNotEmpty(), work.size, monthDays.size,
+                if (absent == 0) "No absence so far · $left working day(s) to go" else "$absent absent day(s) this month: try again next month")
+            "hours" -> { val h = b.n("h").coerceAtLeast(1); listOf(worked >= h * 60, worked / 60, h, "${worked / 60}h of ${h}h worked") }
+            else -> listOf(false, 0, 1, "")
+        }
+        BadgeState(b.s("id"), b.s("name"), b.s("icon"), b.s("about"), earned as Boolean, cur as Int, target as Int, detail as String)
+    }
+    return MonthStats(score, streak, best, worked, monthDays.size * shiftMin, present, late, absent, badges)
+}
+
+private fun badgeIcon(icon: String, on: Boolean): ImageVector = when {
+    !on -> Icons.Outlined.Lock
+    icon == "sun" -> Icons.Outlined.WbSunny; icon == "bolt" -> Icons.Outlined.Bolt; icon == "trophy" -> Icons.Outlined.EmojiEvents
+    icon == "fire" -> Icons.Outlined.LocalFireDepartment; icon == "clock" -> Icons.Outlined.Schedule; icon == "medal" -> Icons.Outlined.MilitaryTech
+    icon == "heart" -> Icons.Outlined.FavoriteBorder; else -> Icons.Outlined.Star
 }
 
 @Composable
-private fun Badge(name: String, on: Boolean, modifier: Modifier) {
-    Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
-        Box(Modifier.size(60.dp).clip(CircleShape).background(if (on) Brush.linearGradient(listOf(Color(0xFFF3DC95), Color(0xFFB08433))) else SolidColor(Line))
-            .border(if (on) 0.dp else 2.dp, Color(0xFFD9C9A3), CircleShape), contentAlignment = Alignment.Center) {
-            Icon(when { !on -> Icons.Outlined.Lock; name == "Early bird" -> Icons.Outlined.WbSunny; name == "Zero late" -> Icons.Outlined.Bolt
-                name == "Full month" -> Icons.Outlined.EmojiEvents; else -> Icons.Outlined.Star }, null, tint = if (on) Ink else Color(0xFFB8AA8A), modifier = Modifier.size(26.dp))
+private fun Badge(b: BadgeState, modifier: Modifier, onClick: () -> Unit) {
+    Column(modifier.clip(RoundedCornerShape(16.dp)).clickable(onClick = onClick).padding(vertical = 4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Box(Modifier.size(60.dp), contentAlignment = Alignment.Center) {
+            Box(Modifier.size(60.dp).clip(CircleShape).background(if (b.earned) Brush.linearGradient(listOf(Color(0xFFF3DC95), Color(0xFFB08433))) else SolidColor(Line))
+                .border(if (b.earned) 0.dp else 2.dp, Color(0xFFD9C9A3), CircleShape), contentAlignment = Alignment.Center) {
+                Icon(badgeIcon(b.icon, b.earned), null, tint = if (b.earned) Ink else Color(0xFFB8AA8A), modifier = Modifier.size(26.dp))
+            }
+            if (!b.earned && b.target > 0) Canvas(Modifier.fillMaxSize()) {   // how close: a gold arc round a locked badge
+                val w = 3.dp.toPx()
+                drawArc(Gold, -90f, 360f * (b.cur.toFloat() / b.target).coerceIn(0f, 1f), false, Offset(w / 2, w / 2), Size(size.width - w, size.height - w), style = Stroke(w, cap = StrokeCap.Round))
+            }
         }
-        Text(name, color = if (on) Text1 else Text2, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 6.dp))
+        Text(b.name, color = if (b.earned) Text1 else Text2, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center, maxLines = 2, modifier = Modifier.padding(top = 6.dp))
     }
 }
 
@@ -613,7 +661,7 @@ private fun Hub(vm: AppViewModel, go: (String) -> Unit) {
         val out = today.str("out") != null && !isIn
         val month = YearMonth.now().toString()
         val att = if (can.b("attendance")) rememberAg("attendance:$month") { vm.ag.get("attendance", mapOf("m" to month)) } else null
-        val st = monthStats(att)
+        val st = monthStats(att, h.a("badges"))
         val refreshing = LocalAgRefreshing.current
         val pull = rememberPullToRefreshState()
         val initials = me.s("name").split(" ").filter { it.isNotBlank() }.let { w -> (w.firstOrNull()?.take(1).orEmpty() + (if (w.size > 1) w.last().take(1) else "")).uppercase() }
@@ -718,6 +766,24 @@ private fun Hub(vm: AppViewModel, go: (String) -> Unit) {
                             }, color = if (isIn) Color(0xFFD9C9A3) else Ink.copy(alpha = 0.75f), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                         }
                     }
+                    // today: in, out, worked (always shown)
+                    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(Color.White).border(1.dp, Line, RoundedCornerShape(20.dp)).padding(vertical = 12.dp)) {
+                        listOf("Check in" to today.s("in"), "Check out" to today.s("out"), "Worked" to today.s("worked")).forEach { (k, v) ->
+                            Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(k, color = Text2, fontSize = 11.sp)
+                                Text(v.ifBlank { "—" }, color = Text1, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                    // quick actions
+                    Row(Modifier.fillMaxWidth()) {
+                        buildList {
+                            if (can.b("leave_apply")) add(Triple("Apply leave", Icons.Outlined.EventAvailable, "leave-apply"))
+                            if (can.b("corrections")) add(Triple("Correction", Icons.Outlined.EditCalendar, "correct"))
+                            if (can.b("payslips")) add(Triple("Payslips", Icons.Outlined.Payments, "payslips"))
+                            add(Triple("Support", Icons.Outlined.SupportAgent, "support"))
+                        }.forEach { (label, icon, to) -> QuickAction(label, icon, Modifier.weight(1f)) { go(to) } }
+                    }
                     val punches = today.a("punches")
                     if (punches.isNotEmpty()) Card {
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -729,16 +795,21 @@ private fun Hub(vm: AppViewModel, go: (String) -> Unit) {
                     }
                 }
             }
-            // badges
-            if (can.b("attendance")) item {
+            // badges: earned first, then the closest; all of them on the Badges page
+            if (can.b("attendance") && st.badges.isNotEmpty()) item {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("Badges this month", color = Text1, fontSize = 17.sp, fontWeight = FontWeight.ExtraBold)
-                    Row { st.badges.forEach { (n, on, _) -> Badge(n, on, Modifier.weight(1f)) } }
-                    st.badges.firstOrNull { !it.second }?.let { (n, _, how) ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("Badges this month", color = Text1, fontSize = 17.sp, fontWeight = FontWeight.ExtraBold, modifier = Modifier.weight(1f))
+                        Text("${st.badges.count { it.earned }}/${st.badges.size} · See all ›", color = Warn, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.clickable { go("badges") })
+                    }
+                    Row { st.badges.sortedWith(compareByDescending<BadgeState> { it.earned }.thenByDescending { it.cur.toFloat() / it.target }).take(4)
+                        .forEach { b -> Badge(b, Modifier.weight(1f)) { go("badges") } } }
+                    st.badges.filter { !it.earned }.maxByOrNull { it.cur.toFloat() / it.target }?.let { nb ->
+                        val n = nb.name; val how = nb.about.trimEnd('.').replaceFirstChar { it.lowercase() }
                         Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(Color(0xFFFFF7E6)).border(1.dp, Color(0xFFF3DC95), RoundedCornerShape(20.dp)).padding(14.dp),
                             verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Outlined.Lightbulb, null, tint = Warn, modifier = Modifier.size(22.dp)); Spacer(Modifier.width(12.dp))
-                            Text("Next badge: $how to earn $n.", color = Text1, fontSize = 13.sp, lineHeight = 18.sp)
+                            Text("Next badge: $how to earn $n. ${nb.detail}.", color = Text1, fontSize = 13.sp, lineHeight = 18.sp)
                         }
                     }
                 }
@@ -1537,6 +1608,56 @@ private fun ProfilePage(vm: AppViewModel, back: () -> Unit) {
         text = { Text("You'll need your employee ID and password to sign in again.") },
         confirmButton = { TextButton(onClick = { ask = false; vm.logout() }) { Text("Sign out", color = Bad) } },
         dismissButton = { TextButton(onClick = { ask = false }) { Text("Cancel") } })
+}
+
+// ---------- badges: every badge, its rule and where I stand (owner, 21 Nov 2026) ----------
+@Composable
+private fun BadgesPage(vm: AppViewModel, back: () -> Unit) {
+    val month = YearMonth.now().toString()
+    Column(Modifier.fillMaxSize().background(Cream)) {
+        TopBar("Badges", back)
+        Load(Unit, { vm.ag.get("home") }, cache = "home") { h, _ ->
+            val att = rememberAg("attendance:$month") { vm.ag.get("attendance", mapOf("m" to month)) }
+            val st = monthStats(att, h.a("badges"))
+            LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                item {
+                    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(Brush.linearGradient(listOf(Color(0xFF0B0906), Ink, Ink2))).padding(18.dp),
+                        verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Outlined.EmojiEvents, null, tint = GoldHi, modifier = Modifier.size(40.dp))
+                        Spacer(Modifier.width(14.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text("${st.badges.count { it.earned }} of ${st.badges.size} earned", color = GoldHi, fontSize = 22.sp, fontWeight = FontWeight.ExtraBold)
+                            Text(YearMonth.now().format(DateTimeFormatter.ofPattern("MMMM yyyy")) + " · score ${st.score ?: "—"} · streak ${st.streak}", color = Color(0xFFD9C9A3), fontSize = 12.sp)
+                        }
+                    }
+                }
+                if (att == null) item { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) { AgSpinner(40) } }
+                items(st.badges.sortedWith(compareByDescending<BadgeState> { it.earned }.thenByDescending { it.cur.toFloat() / it.target })) { b ->
+                    val pct = (b.cur.toFloat() / b.target).coerceIn(0f, 1f)
+                    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(Color.White).border(1.dp, if (b.earned) Gold else Line, RoundedCornerShape(20.dp)).padding(14.dp)) {
+                        Box(Modifier.size(54.dp).clip(CircleShape).background(if (b.earned) Brush.linearGradient(listOf(Color(0xFFF3DC95), Color(0xFFB08433))) else SolidColor(GoldTint)),
+                            contentAlignment = Alignment.Center) {
+                            Icon(badgeIcon(b.icon, true), null, tint = if (b.earned) Ink else Color(0xFFB8AA8A), modifier = Modifier.size(26.dp))
+                        }
+                        Spacer(Modifier.width(14.dp))
+                        Column(Modifier.weight(1f)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(b.name, color = Text1, fontSize = 15.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                                Pill(if (b.earned) "Earned" else if (b.cur > 0) "In progress" else "Locked", if (b.earned) Ok else if (b.cur > 0) Warn else Text2)
+                            }
+                            Text(b.about, color = Text2, fontSize = 12.sp, lineHeight = 16.sp, modifier = Modifier.padding(top = 2.dp))
+                            Box(Modifier.padding(top = 10.dp).fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)).background(Line)) {
+                                Box(Modifier.fillMaxWidth(if (b.earned) 1f else pct).fillMaxHeight().background(if (b.earned) Ok else Gold))
+                            }
+                            Text(b.detail, color = Text1, fontSize = 12.sp, fontWeight = FontWeight.Medium, modifier = Modifier.padding(top = 6.dp))
+                        }
+                    }
+                }
+                item { Text("Badges are counted for the current month and reset on the 1st. Your company chooses which badges there are.", color = Text2, fontSize = 12.sp,
+                    textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) }
+            }
+        }
+    }
 }
 
 // ---------- admin: team today and approvals (owner, 21 Nov 2026: "add also admin ... page") ----------
