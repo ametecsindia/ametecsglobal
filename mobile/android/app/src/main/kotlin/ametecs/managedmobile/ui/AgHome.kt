@@ -274,7 +274,10 @@ private fun RefreshBar() {
     }
 }
 
-// ---------- navigation ----------
+// ---------- navigation: the fixed shell (owner, 21 Nov 2026: "header and footer to be fixed") ----------
+/** Bumped after a punch from the footer, so Home re-reads today. */
+private val agRefresh = androidx.compose.runtime.mutableIntStateOf(0)
+
 @Composable
 fun AgHome(vm: AppViewModel) {
     val apps by vm.agApps.collectAsState()
@@ -284,32 +287,116 @@ fun AgHome(vm: AppViewModel) {
     val go: (String) -> Unit = { page = it }
     val back = { page = when { page.startsWith("payslip:") -> "payslips"; page == "leave-apply" -> "leave"; page == "correct" -> "corrections"; else -> "home" } }
     if (page != "home") BackHandler(onBack = back)
-    when {
-        page == "home" -> Hub(vm, go)
-        page == "attendance" -> AttendancePage(vm, back, go)
-        page == "leave" -> LeavePage(vm, back, go)
-        page == "leave-apply" -> LeaveApply(vm, back)
-        page == "payslips" -> PayslipsPage(vm, back, go)
-        page.startsWith("payslip:") -> PayslipPage(vm, page.removePrefix("payslip:"), back)
-        page == "corrections" -> CorrectionsPage(vm, back, go)
-        page == "correct" -> CorrectionForm(vm, back)
-        page == "productivity" -> PersonPage(vm, "smartept", "My productivity", back)
-        page == "alerts" -> AlertsPage(vm, back)
-        page == "support" -> SupportPage(vm, back, go)
-        page == "admin" -> AdminPage(vm, back)
-        page == "badges" -> BadgesPage(vm, back)
-        page == "profile" -> ProfilePage(vm, back, go)
-        page == "letters" -> LettersPage(vm, back)
-        page == "assets" -> AssetsPage(vm, back)
-        page == "field" -> Column(Modifier.fillMaxSize()) { TopBar("Field work", back); Dashboard(vm) }
-        else -> Hub(vm, go)
+    val home = rememberAg("home") { vm.ag.get("home") }
+    val punch = rememberPunch(vm) { agRefresh.intValue++; vm.refresh() }
+    Column(Modifier.fillMaxSize().background(Cream)) {
+        ShellHeader(home, go)
+        Box(Modifier.weight(1f).fillMaxWidth()) {
+            when {
+                page == "home" -> Hub(vm, go)
+                page == "attendance" -> AttendancePage(vm, back, go)
+                page == "leave" -> LeavePage(vm, back, go)
+                page == "leave-apply" -> LeaveApply(vm, back)
+                page == "payslips" -> PayslipsPage(vm, back, go)
+                page.startsWith("payslip:") -> PayslipPage(vm, page.removePrefix("payslip:"), back)
+                page == "corrections" -> CorrectionsPage(vm, back, go)
+                page == "correct" -> CorrectionForm(vm, back)
+                page == "productivity" -> PersonPage(vm, "smartept", "My productivity", back)
+                page == "alerts" -> AlertsPage(vm, back)
+                page == "support" -> SupportPage(vm, back, go)
+                page == "admin" -> AdminPage(vm, back)
+                page == "badges" -> BadgesPage(vm, back)
+                page == "profile" -> ProfilePage(vm, back, go)
+                page == "letters" -> LettersPage(vm, back)
+                page == "assets" -> AssetsPage(vm, back)
+                page == "field" -> Column(Modifier.fillMaxSize()) { TopBar("Field work", back); Dashboard(vm) }
+                else -> Hub(vm, go)
+            }
+        }
+        ShellFooter(page, home?.o("can"), go, punch)
+    }
+}
+
+/** Fixed header: who is signed in, the time now, notifications. */
+@Composable
+private fun ShellHeader(home: JsonObject?, go: (String) -> Unit) {
+    val me = home?.o("me")
+    var now by remember { mutableStateOf(java.time.LocalDateTime.now()) }
+    LaunchedEffect(Unit) { while (true) { now = java.time.LocalDateTime.now(); kotlinx.coroutines.delay((60 - now.second) * 1000L) } }
+    val unread = home?.n("unread") ?: 0
+    val initials = me?.s("name").orEmpty().split(" ").filter { it.isNotBlank() }.let { w -> (w.firstOrNull()?.take(1).orEmpty() + (if (w.size > 1) w.last().take(1) else "")).uppercase() }
+    Row(Modifier.fillMaxWidth().background(Brush.horizontalGradient(listOf(Color(0xFF0B0906), Ink, Ink2))).statusBarsPadding()
+        .padding(start = 16.dp, end = 12.dp, top = 8.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.weight(1f).clip(RoundedCornerShape(14.dp)).clickable { go("profile") }, verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(40.dp).clip(CircleShape).background(Brush.linearGradient(listOf(GoldHi, Gold))), contentAlignment = Alignment.Center) {
+                Text(initials.ifBlank { "AG" }, color = Ink, fontWeight = FontWeight.ExtraBold, fontSize = 14.sp)
+            }
+            Spacer(Modifier.width(10.dp))
+            Column {
+                Text(when (now.hour) { in 0..11 -> "Good morning"; in 12..16 -> "Good afternoon"; else -> "Good evening" }, color = Color(0xFFBFAE86), fontSize = 11.sp)
+                Text(me?.s("name")?.ifBlank { null } ?: "Ametecs Global", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        }
+        Column(horizontalAlignment = Alignment.End, modifier = Modifier.padding(end = 10.dp)) {
+            Text(now.format(DateTimeFormatter.ofPattern("hh:mm a")).uppercase(), color = GoldHi, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+            Text(now.format(DateTimeFormatter.ofPattern("EEE, dd-MM-yyyy")), color = Color(0xFFBFAE86), fontSize = 10.sp)
+        }
+        Box(Modifier.size(42.dp).clip(CircleShape).background(Color(0x1FFFFFFF)).clickable { go("alerts") }, contentAlignment = Alignment.Center) {
+            Icon(Icons.Outlined.Notifications, "Notifications", tint = GoldHi, modifier = Modifier.size(22.dp))
+            if (unread > 0) Text(if (unread > 9) "9+" else "$unread", color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold,
+                modifier = Modifier.align(Alignment.TopEnd).padding(top = 3.dp, end = 2.dp).clip(CircleShape).background(Bad).padding(horizontal = 5.dp, vertical = 1.dp))
+        }
+    }
+}
+
+/** Fixed footer: Attendance, Leave, Punch (centre), Field, Home; a line; "Powered by Ametecs". */
+@Composable
+private fun ShellFooter(page: String, can: JsonObject?, go: (String) -> Unit, punch: () -> Unit) {
+    val ctx = LocalContext.current
+    val off = { what: String -> android.widget.Toast.makeText(ctx, "$what is not switched on for you", android.widget.Toast.LENGTH_SHORT).show() }
+    Column(Modifier.fillMaxWidth().background(Color.White)) {
+        Box(Modifier.fillMaxWidth().height(1.dp).background(Line))
+        Row(Modifier.fillMaxWidth().height(64.dp), verticalAlignment = Alignment.CenterVertically) {
+            @Composable fun Item(label: String, icon: ImageVector, key: String, allowed: Boolean, active: Boolean) {
+                Column(Modifier.weight(1f).fillMaxHeight().clickable { if (allowed) go(key) else off(label) }, horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center) {
+                    Icon(icon, label, tint = when { !allowed -> Line; active -> Color(0xFFB08433); else -> Text2 }, modifier = Modifier.size(24.dp))
+                    Text(label, color = when { !allowed -> Line; active -> Text1; else -> Text2 }, fontSize = 11.sp,
+                        fontWeight = if (active) FontWeight.Bold else FontWeight.Medium, modifier = Modifier.padding(top = 2.dp))
+                    Box(Modifier.padding(top = 3.dp).size(width = 18.dp, height = 3.dp).clip(RoundedCornerShape(2.dp)).background(if (active) Gold else Color.Transparent))
+                }
+            }
+            val c = can ?: JsonObject(emptyMap())
+            val known = can != null
+            Item("Attendance", Icons.Outlined.History, "attendance", !known || c.b("attendance"), page == "attendance")
+            Item("Leave", Icons.Outlined.BeachAccess, "leave", !known || c.b("leave"), page == "leave" || page == "leave-apply")
+            // punch: raised in the centre
+            Box(Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.offset(y = (-14).dp).clip(RoundedCornerShape(20.dp))
+                    .clickable { if (!known || c.b("scan")) punch() else off("QR punch") }) {
+                    Box(Modifier.size(60.dp).clip(CircleShape).background(Brush.linearGradient(listOf(Color(0xFFF3DC95), Gold, Color(0xFF8A6A25))))
+                        .border(4.dp, Color.White, CircleShape), contentAlignment = Alignment.Center) {
+                        Icon(Icons.Outlined.QrCodeScanner, "Punch", tint = Ink, modifier = Modifier.size(28.dp))
+                    }
+                    Text("Punch", color = Text1, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+            Item("Field", Icons.Outlined.Route, "field", !known || c.b("field"), page == "field")
+            Item("Home", Icons.Outlined.Home, "home", true, page == "home")
+        }
+        Box(Modifier.fillMaxWidth().height(1.dp).background(Line))
+        Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+            Mark(14); Spacer(Modifier.width(6.dp))
+            Text("Powered by ", color = Text2, fontSize = 11.sp)
+            Text("Ametecs", color = Text1, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+        }
     }
 }
 
 // ---------- shared pieces ----------
 @Composable
 private fun TopBar(title: String, onBack: () -> Unit, action: (@Composable () -> Unit)? = null) {
-    Row(Modifier.fillMaxWidth().background(Ink).statusBarsPadding().padding(horizontal = 8.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(Modifier.fillMaxWidth().background(Ink2).padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.size(40.dp).clip(CircleShape).clickable(onClick = onBack), contentAlignment = Alignment.Center) {
             Icon(Icons.AutoMirrored.Outlined.ArrowBack, "Back", tint = GoldHi, modifier = Modifier.size(22.dp))
         }
@@ -673,7 +760,7 @@ private fun Badge(b: BadgeState, modifier: Modifier, onClick: () -> Unit) {
 private fun Hub(vm: AppViewModel, go: (String) -> Unit) {
     var tick by remember { mutableIntStateOf(0) }
     val punch = rememberPunch(vm) { tick++; vm.refresh() }
-    Load(tick, { vm.ag.get("home") }, cache = "home") { h, reload ->
+    Load(tick + agRefresh.intValue * 1000, { vm.ag.get("home") }, cache = "home") { h, reload ->
         val me = h.o("me") ?: JsonObject(emptyMap())
         val today = h.o("today") ?: JsonObject(emptyMap())
         val can = h.o("can") ?: JsonObject(emptyMap())
@@ -688,32 +775,10 @@ private fun Hub(vm: AppViewModel, go: (String) -> Unit) {
         PullToRefreshBox(refreshing, { reload(); vm.refresh(); AgCache.warm("attendance:$month") { vm.ag.get("attendance", mapOf("m" to month)) } },
             Modifier.fillMaxSize().background(Cream), state = pull, indicator = {
                 val f = pull.distanceFraction.coerceIn(0f, 1.4f)
-                if (refreshing || f > 0f) AgSpinner(34, Modifier.align(Alignment.TopCenter).statusBarsPadding()
-                    .graphicsLayer { translationY = (if (refreshing) 1f else f) * 140f; alpha = if (refreshing) 1f else f.coerceAtMost(1f) }, spinning = refreshing || f >= 1f)
+                if (refreshing || f > 0f) AgSpinner(34, Modifier.align(Alignment.TopCenter)
+                    .graphicsLayer { translationY = (if (refreshing) 1f else f) * 120f - 40f; alpha = if (refreshing) 1f else f.coerceAtMost(1f) }, spinning = refreshing || f >= 1f)
             }) {
-        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 18.dp, end = 18.dp, bottom = 28.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            // header: me, refresh, bell
-            item {
-                Row(Modifier.statusBarsPadding().padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.size(46.dp).clip(CircleShape).background(Ink).clickable { go("profile") }, contentAlignment = Alignment.Center) {
-                        Text(initials, color = GoldHi, fontWeight = FontWeight.ExtraBold, fontSize = 16.sp)
-                    }
-                    Spacer(Modifier.width(12.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text(me.s("name").ifBlank { "Welcome" }, color = Text1, fontSize = 18.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text(listOf(me.s("designation"), me.s("code")).filter { it.isNotBlank() }.joinToString(" · ").ifBlank { me.s("company") }, color = Text2, fontSize = 12.sp, maxLines = 1)
-                    }
-                    Box(Modifier.size(42.dp).clip(CircleShape).clickable { reload(); vm.refresh() }, contentAlignment = Alignment.Center) {
-                        val spin by rememberInfiniteTransition(label = "r").animateFloat(0f, 360f, infiniteRepeatable(tween(900, easing = LinearEasing)), label = "spin")
-                        Icon(Icons.Outlined.Refresh, "Refresh", tint = Color(0xFF8A6A25), modifier = Modifier.size(22.dp).graphicsLayer { rotationZ = if (refreshing) spin else 0f })
-                    }
-                    Box(Modifier.size(42.dp).clip(CircleShape).background(Color.White).border(1.dp, Line, CircleShape).clickable { go("alerts") }, contentAlignment = Alignment.Center) {
-                        Icon(Icons.Outlined.Notifications, "Notifications", tint = Text1, modifier = Modifier.size(21.dp))
-                        if (h.n("unread") > 0) Text(if (h.n("unread") > 9) "9+" else "${h.n("unread")}", color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold,
-                            modifier = Modifier.align(Alignment.TopEnd).clip(CircleShape).background(Bad).padding(horizontal = 5.dp, vertical = 1.dp))
-                    }
-                }
-            }
+        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 16.dp, bottom = 20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             // attendance score
             if (can.b("attendance")) item {
                 Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(28.dp)).background(Brush.linearGradient(listOf(Color(0xFF0B0906), Ink, Ink2)))
@@ -866,12 +931,6 @@ private fun Hub(vm: AppViewModel, go: (String) -> Unit) {
                             repeat(4 - row.size) { Spacer(Modifier.weight(1f)) }
                         }
                     }
-                }
-            }
-            item {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
-                    Mark(16); Spacer(Modifier.width(6.dp))
-                    Text("Ametecs Global · one platform, every app", color = Text2, fontSize = 11.sp)
                 }
             }
         }
@@ -1606,7 +1665,7 @@ private fun ProfilePage(vm: AppViewModel, back: () -> Unit, go: (String) -> Unit
                 // hero
                 item {
                     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(bottomStart = 32.dp, bottomEnd = 32.dp))
-                        .background(Brush.linearGradient(listOf(Color(0xFF0B0906), Ink, Ink2))).statusBarsPadding().padding(start = 8.dp, end = 20.dp, bottom = 22.dp)) {
+                        .background(Brush.linearGradient(listOf(Ink2, Ink, Color(0xFF0B0906)))).padding(start = 8.dp, end = 20.dp, bottom = 22.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Box(Modifier.size(44.dp).clip(CircleShape).clickable(onClick = back), contentAlignment = Alignment.Center) {
                                 Icon(Icons.AutoMirrored.Outlined.ArrowBack, "Back", tint = GoldHi, modifier = Modifier.size(22.dp))
