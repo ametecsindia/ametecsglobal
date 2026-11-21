@@ -123,5 +123,5 @@ document.querySelectorAll('.side a[data-q]').forEach(function(a){a.addEventListe
 function mark(h){document.querySelectorAll('.side a').forEach(function(a){a.classList.toggle('on',a.getAttribute('href')===h)})}
 window.addEventListener('popstate',function(){location.reload()});
 </script>
-<script src="assets/ui.js?v=14"></script>
+<script src="assets/ui.js?v=14"></script><script src="assets/ag-loader.js?v=1"></script>
 </body></html>

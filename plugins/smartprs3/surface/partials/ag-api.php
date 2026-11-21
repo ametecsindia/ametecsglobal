@@ -8,7 +8,7 @@
  * Only this person's own record. Returns an array; app.php prints it as JSON.
  *
  * Ops: home | attendance (&m=YYYY-MM) | leave | payslips | payslip (&period=) | corrections | person (&app=smartept|qronex|rovexy)
- *      | notifications (POST csrf = mark all read) | scan-ticket | result (after a POST action)
+ *      | notifications (POST csrf = mark all read) | admin (team today + approvals) | scan-ticket | result (after a POST action)
  */
 declare(strict_types=1);
 
@@ -121,7 +121,9 @@ switch ($aaOp) {
                 'last' => $last, 'punches' => $today['punches'] ?? []],
             'can' => ['scan' => $aaAppOn('qronex'), 'attendance' => $may('ess.attendance.punch'), 'leave' => $may('leave.request.view'),
                 'leave_apply' => $may('leave.request.submit'), 'payslips' => $aaSlips,
-                'corrections' => isset($aaHrefs['attendance-corrections']), 'letters' => isset($aaHrefs['letters-mine']), 'assets' => isset($aaHrefs['my-assets']), 'productivity' => $aaAppOn('smartept'), 'field' => $aaAppOn('rovexy')],
+                'corrections' => isset($aaHrefs['attendance-corrections']), 'letters' => isset($aaHrefs['letters-mine']), 'assets' => isset($aaHrefs['my-assets']), 'productivity' => $aaAppOn('smartept'), 'field' => $aaAppOn('rovexy'),
+                // ADMIN tile (owner, 21 Nov 2026): anyone who can see others or decide leave / corrections
+                'admin' => $may('leave.request.decide') || $may('attendance.punch.create.manual') || hasDirectReports($store, $aaOwn === null ? null : (string) $aaOwn)],
             'unread' => $unread, 'pending_leave' => $pendingLeave,
             // SUPPORT (owner, 21 Nov 2026): who this person can reach - their manager and their company's contact
             'support' => (static function () use ($store, $aaMe, $mgr): array {
@@ -202,6 +204,57 @@ switch ($aaOp) {
             error_log('ag-api person ' . $app . ': ' . $x->getMessage());
             return ['ok' => false, 'message' => 'Could not read it just now. Try again.'];
         }
+
+    case 'admin':   // ADMIN ON THE PHONE (owner, 21 Nov 2026): team today + what waits on me, within this person's own reach
+        $role = (string) ($aaUser['role'] ?? '');
+        $team = array_values(array_filter($scope->only(liveRows($store, 'employees'), $may('attendance.day.view.history')), static fn (array $e): bool
+            => Employment::code($e) !== $aaCode && in_array(strtolower(trim((string) ($e['status'] ?? 'active'))), ['active', ''], true)));
+        $leaveQ = leaveQueueFor($store, $leave, $scope, $may, null, leaveSelfApproves($role));
+        $regMay = regularisationDecidable($store, $regularisation, $scope, $may, $role);
+        $regQ = array_values(array_filter($regularisation->all('pending'), static fn (array $r): bool => isset($regMay[(string) $r['employment_id']])));
+        if ($team === [] && $leaveQ === [] && $regQ === []) {
+            return ['ok' => false, 'message' => 'There is no team or approval on your account.'];
+        }
+        $who = [];
+        foreach (liveRows($store, 'employees') as $e) { $who[Employment::code($e)] = (string) ($e['name'] ?? ''); }
+        $types = [];
+        foreach (leaveAvailability($store, $leave, $policy, $aaMe) as $tc => $t) { $types[(string) $tc] = (string) $t['name']; }
+        $today = date('Y-m-d');
+        $start = substr((string) $calendar->shiftStart(), 0, 5);
+        // ponytail: the first 400 of the team; page it when one admin's reach is bigger
+        $mus = $team === [] ? [] : $attendanceReport->muster(array_slice($team, 0, 400), $today, $today, $calendar->shiftStart(), $calendar->shiftEnd(), $today, 62, true)['rows'];
+        $count = ['in' => 0, 'out' => 0, 'absent' => 0, 'leave' => 0, 'off' => 0, 'late' => 0];
+        $rows = [];
+        foreach ($mus as $r) {
+            $st = (string) ($r['cells'][$today]['status'] ?? '');
+            $first = null;
+            $lastDir = null;
+            $n = 0;
+            foreach ($attendance->punchesFor((string) $r['code']) as $p) {
+                if (substr((string) $p['at'], 0, 10) !== $today) {
+                    continue;
+                }
+                $n++;
+                $d = strtoupper((string) $p['direction']);
+                $d === 'IN' && $first === null && $first = substr((string) $p['at'], 11, 5);
+                $lastDir = $d;
+            }
+            $state = match (true) {
+                $lastDir === 'IN' => 'in', $lastDir === 'OUT' => 'out',
+                in_array($st, ['ON_LEAVE', 'UNPAID_LEAVE'], true) => 'leave', in_array($st, ['WEEKLY_OFF', 'HOLIDAY'], true) => 'off', default => 'absent',
+            };
+            $late = $first !== null && $first > $start;
+            $count[$state]++;
+            $late && $count['late']++;
+            $rows[] = ['code' => (string) $r['code'], 'name' => (string) $r['name'], 'dept' => (string) $r['department'], 'state' => $state, 'in' => $first, 'late' => $late, 'punches' => $n];
+        }
+        return ['ok' => true, 'csrf' => $session->token(), 'date' => Dates::dmy($today), 'shift' => $start . ' – ' . substr((string) $calendar->shiftEnd(), 0, 5),
+            'team_size' => count($team), 'count' => $count, 'team' => $rows,
+            'leave' => array_map(static fn (array $q): array => ['id' => (string) $q['id'], 'code' => (string) $q['employment_id'], 'name' => $who[(string) $q['employment_id']] ?? (string) $q['employment_id'],
+                'type' => $types[(string) $q['leave_type']] ?? (string) $q['leave_type'], 'from' => Dates::dmy((string) $q['from']), 'to' => Dates::dmy((string) $q['to']),
+                'days' => (string) ($q['days'] ?? ''), 'half' => SmartPRS\Surface\Leave::HALVES[(string) ($q['half'] ?? $q['half_day'] ?? '')] ?? null, 'reason' => (string) ($q['reason'] ?? '')], $leaveQ),
+            'corrections' => array_map(static fn (array $q): array => ['id' => (string) $q['id'], 'code' => (string) $q['employment_id'], 'name' => $who[(string) $q['employment_id']] ?? (string) $q['employment_id'],
+                'date' => Dates::dmy((string) $q['date']), 'dir' => strtoupper((string) $q['direction']), 'at' => substr((string) $q['at'], 11, 5), 'reason' => (string) ($q['reason'] ?? '')], $regQ)];
 
     case 'letters':   // My Letters: each letter as issued; one that needs acknowledgement carries ack = false until signed off
         if (!isset($aaHrefs['letters-mine'])) {

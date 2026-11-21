@@ -2153,6 +2153,6 @@ document.addEventListener('keydown',function(e){if((e.ctrlKey||e.metaKey)&&e.key
 document.addEventListener('click',function(e){document.querySelectorAll('details.me[open],details.act[open]').forEach(function(d){if(!d.contains(e.target))d.removeAttribute('open')})});
 })();
 </script>
-<script src="assets/ui.js?v=14"></script>
+<script src="assets/ui.js?v=14"></script><script src="assets/ag-loader.js?v=1"></script>
 <?php endif; ?>
 </body></html>

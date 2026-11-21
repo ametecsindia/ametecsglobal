@@ -44,6 +44,7 @@ import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.Logout
 import androidx.compose.material.icons.outlined.BeachAccess
 import androidx.compose.material.icons.outlined.Campaign
+import androidx.compose.material.icons.outlined.Groups
 import androidx.compose.material.icons.outlined.SupportAgent
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.ChevronLeft
@@ -242,6 +243,7 @@ fun AgHome(vm: AppViewModel) {
         page == "productivity" -> PersonPage(vm, "smartept", "My productivity", back)
         page == "alerts" -> AlertsPage(vm, back)
         page == "support" -> SupportPage(vm, back, go)
+        page == "admin" -> AdminPage(vm, back)
         page == "profile" -> ProfilePage(vm, back)
         page == "letters" -> LettersPage(vm, back)
         page == "assets" -> AssetsPage(vm, back)
@@ -514,6 +516,7 @@ private fun Hub(vm: AppViewModel, go: (String) -> Unit) {
             add(Triple("Support", Icons.Outlined.SupportAgent, "support"))
         }
         val tiles = buildList {
+            if (can.b("admin")) add(Tile("admin", "Team & approvals", "Who's in, leave, corrections", Icons.Outlined.Groups))
             if (can.b("attendance")) add(Tile("attendance", "Attendance", "Days, punches, hours", Icons.Outlined.History))
             if (can.b("leave")) add(Tile("leave", "Leave", "Balance, apply, status", Icons.Outlined.BeachAccess, h.n("pending_leave")))
             if (can.b("payslips")) add(Tile("payslips", "Payslips", "Monthly salary slips", Icons.Outlined.Payments))
@@ -1392,6 +1395,145 @@ private fun ProfilePage(vm: AppViewModel, back: () -> Unit) {
         text = { Text("You'll need your employee ID and password to sign in again.") },
         confirmButton = { TextButton(onClick = { ask = false; vm.logout() }) { Text("Sign out", color = Bad) } },
         dismissButton = { TextButton(onClick = { ask = false }) { Text("Cancel") } })
+}
+
+// ---------- admin: team today and approvals (owner, 21 Nov 2026: "add also admin ... page") ----------
+@Composable
+private fun AdminPage(vm: AppViewModel, back: () -> Unit) {
+    val scope = rememberCoroutineScope()
+    var tab by rememberSaveable { mutableStateOf("today") }
+    var stateF by rememberSaveable { mutableStateOf("all") }
+    var ask by remember { mutableStateOf<Triple<String, String, Boolean>?>(null) }   // action, request id, approve
+    var note by remember { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
+    var msg by remember { mutableStateOf<Pair<Boolean, String>?>(null) }
+    var tick by remember { mutableIntStateOf(0) }
+    Column(Modifier.fillMaxSize().background(Cream)) {
+        TopBar("Team & approvals", back)
+        Load(tick, { vm.ag.get("admin") }, cache = "admin") { d, reload ->
+            val c = d.o("count") ?: JsonObject(emptyMap())
+            val leave = d.a("leave"); val corr = d.a("corrections"); val team = d.a("team")
+            LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                item {
+                    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(Brush.linearGradient(listOf(Color(0xFF0B0906), Ink, Ink2))).padding(18.dp)) {
+                        Row(verticalAlignment = Alignment.Bottom) {
+                            Column(Modifier.weight(1f)) {
+                                Text("Today · ${d.s("date")}", color = Color(0xFFBFAE86), fontSize = 12.sp)
+                                Text("${c.n("in") + c.n("out")} of ${d.s("team_size")} in", color = GoldHi, fontWeight = FontWeight.ExtraBold, fontSize = 28.sp)
+                            }
+                            Column(horizontalAlignment = Alignment.End) {
+                                Text("Shift", color = Color(0xFFBFAE86), fontSize = 11.sp)
+                                Text(d.s("shift"), color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                            }
+                        }
+                        Spacer(Modifier.height(12.dp))
+                        listOf(listOf("In" to "in", "Out" to "out", "Not in" to "absent"), listOf("Leave" to "leave", "Off" to "off", "Late" to "late")).forEach { row ->
+                            Row(Modifier.padding(vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                row.forEach { (l, k) ->
+                                    Column(Modifier.weight(1f).clip(RoundedCornerShape(14.dp)).background(Color(0x14FFFFFF)).clickable { tab = "today"; stateF = k }.padding(10.dp)) {
+                                        Text("${c.n(k)}", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                                        Text(l, color = Color(0xFFD9C9A3), fontSize = 11.sp)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                item {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Chip("Team today", tab == "today") { tab = "today" }
+                        Chip("Leave (${leave.size})", tab == "leave") { tab = "leave" }
+                        Chip("Corrections (${corr.size})", tab == "corr") { tab = "corr" }
+                    }
+                }
+                msg?.let { (ok, m) -> item { Text(m, color = if (ok) Ok else Bad, fontSize = 13.sp, modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
+                    .background((if (ok) Ok else Bad).copy(alpha = 0.08f)).padding(12.dp)) } }
+                when (tab) {
+                    "today" -> {
+                        item {
+                            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                items(listOf("all" to "All", "in" to "In", "out" to "Out", "absent" to "Not in", "late" to "Late", "leave" to "Leave", "off" to "Off")) { (k, l) -> Chip(l, stateF == k) { stateF = k } }
+                            }
+                        }
+                        val shown = when (stateF) { "all" -> team; "late" -> team.filter { it.b("late") }; else -> team.filter { it.s("state") == stateF } }
+                        if (shown.isEmpty()) item { Text("Nobody here.", color = Text2, modifier = Modifier.padding(8.dp)) }
+                        items(shown) { p ->
+                            val (label, tint) = when (p.s("state")) { "in" -> "In" to Ok; "out" -> "Out" to Color(0xFF2563EB); "leave" -> "Leave" to Color(0xFF7C3AED); "off" -> "Off" to Text2; else -> "Not in" to Bad }
+                            Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Color.White).border(1.dp, Line, RoundedCornerShape(16.dp)).padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                val ini = p.s("name").split(" ").filter { it.isNotBlank() }.let { w -> (w.firstOrNull()?.take(1).orEmpty() + (if (w.size > 1) w.last().take(1) else "")).uppercase() }
+                                Box(Modifier.size(40.dp).clip(CircleShape).background(GoldTint), contentAlignment = Alignment.Center) { Text(ini, color = Color(0xFF8A6A25), fontWeight = FontWeight.Bold) }
+                                Spacer(Modifier.width(12.dp))
+                                Column(Modifier.weight(1f)) {
+                                    Text(p.s("name"), color = Text1, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    Text(listOf(p.s("code"), p.s("dept")).filter { it.isNotBlank() }.joinToString(" · "), color = Text2, fontSize = 11.sp, maxLines = 1)
+                                }
+                                Column(horizontalAlignment = Alignment.End) {
+                                    Pill(label, tint)
+                                    p.str("in")?.let { Text("in $it" + if (p.b("late")) " · late" else "", color = if (p.b("late")) Color(0xFFEA580C) else Text2, fontSize = 11.sp, modifier = Modifier.padding(top = 3.dp)) }
+                                }
+                            }
+                        }
+                    }
+                    "leave" -> {
+                        if (leave.isEmpty()) item { Text("No leave waiting for you.", color = Text2, modifier = Modifier.padding(8.dp)) }
+                        items(leave) { q ->
+                            Card {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(q.s("name"), color = Text1, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                                    Pill(q.s("type"), Color(0xFF2563EB))
+                                }
+                                Text((if (q.s("from") == q.s("to")) q.s("from") else "${q.s("from")} → ${q.s("to")}") + " · ${q.s("days")} day(s)" + (q.str("half")?.let { " · $it" } ?: ""),
+                                    color = Text1, fontSize = 13.sp, modifier = Modifier.padding(top = 4.dp))
+                                if (q.s("reason").isNotBlank()) Text(q.s("reason"), color = Text2, fontSize = 12.sp, modifier = Modifier.padding(top = 2.dp))
+                                Decide { ok -> ask = Triple("leave-decide", q.s("id"), ok); note = "" }
+                            }
+                        }
+                    }
+                    else -> {
+                        if (corr.isEmpty()) item { Text("No corrections waiting for you.", color = Text2, modifier = Modifier.padding(8.dp)) }
+                        items(corr) { q ->
+                            Card {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(q.s("name"), color = Text1, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                                    Pill("${q.s("dir")} ${q.s("at")}", if (q.s("dir") == "IN") Ok else Color(0xFF2563EB))
+                                }
+                                Text(q.s("date"), color = Text1, fontSize = 13.sp, modifier = Modifier.padding(top = 4.dp))
+                                if (q.s("reason").isNotBlank()) Text(q.s("reason"), color = Text2, fontSize = 12.sp, modifier = Modifier.padding(top = 2.dp))
+                                Decide { ok -> ask = Triple("regularise-decide", q.s("id"), ok); note = "" }
+                            }
+                        }
+                    }
+                }
+            }
+            ask?.let { (action, id, ok) ->
+                AlertDialog(onDismissRequest = { if (!busy) ask = null }, title = { Text(if (ok) "Approve?" else "Reject?") },
+                    text = { OutlinedTextField(note, { note = it }, label = { Text(if (ok) "Note (optional)" else "Reason for rejecting") }, minLines = 2) },
+                    confirmButton = { TextButton(enabled = !busy && (ok || note.isNotBlank()), onClick = {
+                        busy = true
+                        scope.launch {
+                            val r = runCatching { vm.ag.action(action, mapOf("request_id" to id, "decision" to if (ok) "approve" else "reject", "note" to note)) }
+                                .getOrElse { fail(it.message ?: "Could not send. Try again.") }
+                            busy = false; ask = null
+                            msg = r.b("ok") to r.s("message")
+                            reload()
+                        }
+                    }) { Text(if (busy) "Sending…" else if (ok) "Approve" else "Reject", color = if (ok) Ok else Bad, fontWeight = FontWeight.Bold) } },
+                    dismissButton = { TextButton(enabled = !busy, onClick = { ask = null }) { Text("Cancel") } })
+            }
+        }
+    }
+}
+
+@Composable
+private fun Decide(onDecide: (Boolean) -> Unit) {
+    Row(Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Box(Modifier.weight(1f).clip(RoundedCornerShape(12.dp)).border(1.dp, Bad.copy(alpha = 0.4f), RoundedCornerShape(12.dp)).clickable { onDecide(false) }.padding(12.dp), contentAlignment = Alignment.Center) {
+            Text("Reject", color = Bad, fontWeight = FontWeight.Bold)
+        }
+        Box(Modifier.weight(1f).clip(RoundedCornerShape(12.dp)).background(Ok).clickable { onDecide(true) }.padding(12.dp), contentAlignment = Alignment.Center) {
+            Text("Approve", color = Color.White, fontWeight = FontWeight.Bold)
+        }
+    }
 }
 
 // ---------- my letters, my assets ----------

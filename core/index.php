@@ -1450,5 +1450,5 @@ document.addEventListener('click',function(e){document.querySelectorAll('details
 </script>
 <?php endif; ?>
 <?php if ($user !== null): ?><div class="foot">Ametecs Global by Ametecs India &middot; <a href="super.php">Super Admin</a></div><?php endif; ?>
-<script src="assets/ui.js?v=14"></script>
+<script src="assets/ui.js?v=14"></script><script src="assets/ag-loader.js?v=1"></script>
 </body></html>
