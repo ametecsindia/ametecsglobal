@@ -258,6 +258,45 @@ switch ($aaOp) {
             'corrections' => array_map(static fn (array $q): array => ['id' => (string) $q['id'], 'code' => (string) $q['employment_id'], 'name' => $who[(string) $q['employment_id']] ?? (string) $q['employment_id'],
                 'date' => Dates::dmy((string) $q['date']), 'dir' => strtoupper((string) $q['direction']), 'at' => substr((string) $q['at'], 11, 5), 'reason' => (string) ($q['reason'] ?? '')], $regQ)];
 
+    case 'profile':   // MY PROFILE (owner, 21 Nov 2026: "more premium ... custom features"): every field this company keeps on its
+        // people, section by section as Organization Setup lays them out - its own custom fields included - with this
+        // person's values. Numbers that identify accounts are masked to the last four.
+        $pfExtra = (new SmartPRS\Surface\EmployeeExtras($store))->forEmployment($aaCode);
+        $pfOrg = ['employer_company_id' => 'company', 'branch_id' => 'branch', 'department_id' => 'department', 'designation_id' => 'designation', 'team_id' => 'team'];
+        $pfMask = static fn (string $code, string $v): string => preg_match('/account|acc_no|pan|aadha?ar|uan|passport|pf_no|esi_no|voter|licen[cs]e/i', $code) === 1 && strlen($v) > 4
+            ? str_repeat('•', min(8, strlen($v) - 4)) . substr($v, -4) : $v;
+        $pfSections = [];
+        try {
+            foreach ($employeeFields->sections() as $sec) {
+                $rows = [];
+                foreach ((array) $sec['fields'] as $f) {
+                    if (!($f['captured'] ?? false) || ($f['document'] ?? false) || ($f['type'] ?? '') === 'Image/PDF/Doc') {
+                        continue;
+                    }
+                    $code = (string) ($f['code'] ?? '');
+                    $col = (string) ($f['column'] ?? '');
+                    $v = isset($pfOrg[$col]) ? orgValueOf($store, $aaMe, $pfOrg[$col])
+                        : ($col === 'reporting_manager_id' ? (string) ($store->find('employees', (string) ($aaMe[$col] ?? ''))['name'] ?? '')
+                        : (($f['storage'] ?? '') === 'column' && $col !== '' ? (string) ($aaMe[$col] ?? '') : (string) ($pfExtra[$code] ?? '')));
+                    $v = trim($v);
+                    if ($v === '' || in_array($col, ['ctc', 'password', 'password_hash'], true)) {
+                        continue;
+                    }
+                    ($f['type'] ?? '') === 'Date' && preg_match('/^\d{4}-\d{2}-\d{2}/', $v) === 1 && $v = Dates::dmy(substr($v, 0, 10));
+                    in_array($v, ['0', '1'], true) && in_array(($f['type'] ?? ''), ['Yes/No', 'Boolean'], true) && $v = $v === '1' ? 'Yes' : 'No';
+                    $rows[] = ['label' => (string) ($f['label'] ?? $code), 'value' => $pfMask($code, $v), 'custom' => (bool) ($f['custom'] ?? false)];
+                }
+                $rows !== [] && $pfSections[] = ['id' => (string) $sec['id'], 'title' => (string) $sec['title'], 'fields' => $rows];
+            }
+        } catch (\Throwable $x) {
+            error_log('ag-api profile: ' . $x->getMessage());
+        }
+        $pfJoined = (string) ($aaMe['date_of_joining'] ?? $aaMe['doj'] ?? '');
+        return ['ok' => true, 'code' => $aaCode, 'name' => (string) ($aaMe['name'] ?? ''), 'designation' => orgValueOf($store, $aaMe, 'designation'),
+            'company' => orgValueOf($store, $aaMe, 'company'), 'status' => ucfirst(strtolower(trim((string) ($aaMe['status'] ?? 'Active')) ?: 'Active')),
+            'joined' => $pfJoined, 'shift' => substr((string) $calendar->shiftStart(), 0, 5) . ' – ' . substr((string) $calendar->shiftEnd(), 0, 5),
+            'sections' => $pfSections];
+
     case 'letters':   // My Letters: each letter as issued; one that needs acknowledgement carries ack = false until signed off
         if (!isset($aaHrefs['letters-mine'])) {
             return ['ok' => false, 'message' => 'Letters are not available for your role.'];

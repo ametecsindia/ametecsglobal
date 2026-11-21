@@ -45,6 +45,18 @@ import androidx.compose.material.icons.automirrored.outlined.Logout
 import androidx.compose.material.icons.outlined.BeachAccess
 import androidx.compose.material.icons.outlined.Campaign
 import androidx.compose.material.icons.outlined.Groups
+import androidx.compose.material.icons.outlined.AccountBalance
+import androidx.compose.material.icons.outlined.Badge
+import androidx.compose.material.icons.outlined.Call
+import androidx.compose.material.icons.outlined.EditNote
+import androidx.compose.material.icons.outlined.ExpandLess
+import androidx.compose.material.icons.outlined.ExpandMore
+import androidx.compose.material.icons.outlined.FamilyRestroom
+import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.School
+import androidx.compose.material.icons.outlined.VerifiedUser
+import androidx.compose.material.icons.outlined.Work
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.material.icons.outlined.Bolt
 import androidx.compose.material.icons.outlined.EmojiEvents
 import androidx.compose.material.icons.outlined.Lightbulb
@@ -286,7 +298,7 @@ fun AgHome(vm: AppViewModel) {
         page == "support" -> SupportPage(vm, back, go)
         page == "admin" -> AdminPage(vm, back)
         page == "badges" -> BadgesPage(vm, back)
-        page == "profile" -> ProfilePage(vm, back)
+        page == "profile" -> ProfilePage(vm, back, go)
         page == "letters" -> LettersPage(vm, back)
         page == "assets" -> AssetsPage(vm, back)
         page == "field" -> Column(Modifier.fillMaxSize()) { TopBar("Field work", back); Dashboard(vm) }
@@ -1574,48 +1586,192 @@ private fun SupportPage(vm: AppViewModel, back: () -> Unit, go: (String) -> Unit
 }
 
 @Composable
-private fun ProfilePage(vm: AppViewModel, back: () -> Unit) {
+private fun ProfilePage(vm: AppViewModel, back: () -> Unit, go: (String) -> Unit) {
     var ask by remember { mutableStateOf(false) }
+    var idCard by remember { mutableStateOf(false) }
+    var open by rememberSaveable { mutableStateOf(setOf<String>()) }
+    val ctx = LocalContext.current
+    val launch = { uri: String -> runCatching { ctx.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(uri))) } }
     Column(Modifier.fillMaxSize().background(Cream)) {
-        TopBar("My profile", back)
         Load(Unit, { vm.ag.get("home") }, cache = "home") { h, _ ->
             val me = h.o("me") ?: JsonObject(emptyMap())
-            Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Card {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        val initials = me.s("name").split(" ").filter { it.isNotBlank() }.let { w -> (w.firstOrNull()?.take(1).orEmpty() + (if (w.size > 1) w.last().take(1) else "")).uppercase() }
-                        Box(Modifier.size(56.dp).clip(CircleShape).background(Gold), contentAlignment = Alignment.Center) { Text(initials, color = Ink, fontWeight = FontWeight.ExtraBold, fontSize = 20.sp) }
-                        Spacer(Modifier.width(14.dp))
-                        Column {
-                            Text(me.s("name"), color = Text1, fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                            Text(me.s("designation"), color = Text2, fontSize = 13.sp)
+            val pf = rememberAg("profile") { vm.ag.get("profile") }
+            val sup = h.o("support")
+            val mgr = sup?.o("manager"); val co = sup?.o("company")
+            val joined = runCatching { LocalDate.parse((pf?.s("joined") ?: me.s("joined")).take(10)) }.getOrNull()
+            val tenure = joined?.let { java.time.Period.between(it, LocalDate.now()) }?.let { p -> listOfNotNull(p.years.takeIf { it > 0 }?.let { "$it yr" }, "${p.months} mo").joinToString(" ") }
+            val initials = me.s("name").split(" ").filter { it.isNotBlank() }.let { w -> (w.firstOrNull()?.take(1).orEmpty() + (if (w.size > 1) w.last().take(1) else "")).uppercase() }
+            val sections = pf?.a("sections").orEmpty()
+            LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 28.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                // hero
+                item {
+                    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(bottomStart = 32.dp, bottomEnd = 32.dp))
+                        .background(Brush.linearGradient(listOf(Color(0xFF0B0906), Ink, Ink2))).statusBarsPadding().padding(start = 8.dp, end = 20.dp, bottom = 22.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(Modifier.size(44.dp).clip(CircleShape).clickable(onClick = back), contentAlignment = Alignment.Center) {
+                                Icon(Icons.AutoMirrored.Outlined.ArrowBack, "Back", tint = GoldHi, modifier = Modifier.size(22.dp))
+                            }
+                            Text("My profile", color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 18.sp, modifier = Modifier.weight(1f))
+                        }
+                        Column(Modifier.fillMaxWidth().padding(start = 12.dp, top = 6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                            Box(Modifier.size(104.dp).clip(CircleShape).background(Brush.sweepGradient(listOf(GoldHi, Gold, Color(0xFF8A6A25), GoldHi))).padding(4.dp)) {
+                                Box(Modifier.fillMaxSize().clip(CircleShape).background(Ink2), contentAlignment = Alignment.Center) {
+                                    Text(initials, color = GoldHi, fontSize = 34.sp, fontWeight = FontWeight.ExtraBold)
+                                }
+                            }
+                            Text(me.s("name"), color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.ExtraBold, modifier = Modifier.padding(top = 12.dp))
+                            Text(listOf(me.s("designation"), me.s("company")).filter { it.isNotBlank() }.joinToString(" · "), color = Color(0xFFD9C9A3), fontSize = 13.sp, textAlign = TextAlign.Center)
+                            Row(Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                listOfNotNull(me.s("code").takeIf { it.isNotBlank() }, pf?.s("status")?.takeIf { it.isNotBlank() } ?: "Active",
+                                    tenure?.let { "$it here" }, pf?.s("shift")?.takeIf { it.isNotBlank() }).forEachIndexed { i, t ->
+                                    Text(t, color = if (i == 1) Color(0xFF86EFAC) else GoldHi, fontSize = 11.sp, fontWeight = FontWeight.SemiBold,
+                                        modifier = Modifier.clip(RoundedCornerShape(50)).background(if (i == 1) Color(0x264ADE80) else Color(0x1FE8C977)).padding(horizontal = 10.dp, vertical = 4.dp))
+                                }
+                            }
                         }
                     }
                 }
-                Card {
-                    Field("Employee ID", me.s("code"))
-                    Field("Email", me.s("email"))
-                    Field("Mobile", me.s("mobile"))
-                    Field("Company", me.s("company"))
-                    Field("Branch", me.s("branch"))
-                    Field("Department", me.s("department"))
-                    Field("Team", me.s("team"))
-                    Field("Reports to", me.s("manager"))
-                    Field("Joined", dmy(me.s("joined")))
+                // actions
+                item {
+                    Row(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        val mgrPhone = mgr?.s("mobile").orEmpty().filter { it.isDigit() || it == '+' }
+                        val hrMail = co?.s("email").orEmpty().ifBlank { mgr?.s("email").orEmpty() }
+                        listOf(Triple("Digital ID", Icons.Outlined.Badge, { idCard = true }),
+                            Triple("Call manager", Icons.Outlined.Call, { if (mgrPhone.isNotBlank()) launch("tel:$mgrPhone") else go("support") }),
+                            Triple("Request change", Icons.Outlined.EditNote, {
+                                if (hrMail.isNotBlank()) launch("mailto:$hrMail?subject=" + android.net.Uri.encode("Profile change request – ${me.s("name")} (${me.s("code")})")) else go("support")
+                            })).forEach { (label, icon, act) ->
+                            Column(Modifier.weight(1f).clip(RoundedCornerShape(20.dp)).background(Color.White).border(1.dp, Line, RoundedCornerShape(20.dp))
+                                .clickable { act() }.padding(vertical = 14.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                Box(Modifier.size(42.dp).clip(RoundedCornerShape(14.dp)).background(GoldTint), contentAlignment = Alignment.Center) {
+                                    Icon(icon, null, tint = Color(0xFFB08433), modifier = Modifier.size(22.dp))
+                                }
+                                Text(label, color = Text1, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 8.dp))
+                            }
+                        }
+                    }
                 }
-                Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).border(1.dp, Bad.copy(alpha = 0.4f), RoundedCornerShape(16.dp)).clickable { ask = true }.padding(16.dp),
-                    horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.AutoMirrored.Outlined.Logout, null, tint = Bad)
-                    Spacer(Modifier.width(8.dp))
-                    Text("Sign out", color = Bad, fontWeight = FontWeight.Bold)
+                // details: the company's own sections and fields (custom ones too)
+                if (pf == null) item { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) { AgSpinner(40) } }
+                val shown = sections.ifEmpty {
+                    if (pf == null) emptyList() else listOf(JsonObject(mapOf("id" to JsonPrimitive("basic"), "title" to JsonPrimitive("My details"),
+                        "fields" to JsonArray(listOf("Employee ID" to "code", "Email" to "email", "Mobile" to "mobile", "Company" to "company", "Branch" to "branch",
+                            "Department" to "department", "Team" to "team", "Reports to" to "manager").filter { me.s(it.second).isNotBlank() }
+                            .map { JsonObject(mapOf("label" to JsonPrimitive(it.first), "value" to JsonPrimitive(me.s(it.second)))) }))))
+                }
+                items(shown.size) { i ->
+                    val sec = shown[i]
+                    val id = sec.s("id")
+                    val isOpen = i < 2 && id !in open || i >= 2 && id in open   // first two open by default; a tap flips it
+                    val fields = sec.a("fields")
+                    Column(Modifier.padding(horizontal = 16.dp).fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(Color.White).border(1.dp, Line, RoundedCornerShape(22.dp))) {
+                        Row(Modifier.fillMaxWidth().clickable { open = if (id in open) open - id else open + id }.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Box(Modifier.size(36.dp).clip(RoundedCornerShape(11.dp)).background(GoldTint), contentAlignment = Alignment.Center) {
+                                Icon(sectionIcon(sec.s("title")), null, tint = Color(0xFFB08433), modifier = Modifier.size(19.dp))
+                            }
+                            Spacer(Modifier.width(12.dp))
+                            Text(sec.s("title"), color = Text1, fontWeight = FontWeight.Bold, fontSize = 15.sp, modifier = Modifier.weight(1f))
+                            Text("${fields.size}", color = Text2, fontSize = 12.sp, modifier = Modifier.padding(end = 8.dp))
+                            Icon(if (isOpen) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore, null, tint = Text2)
+                        }
+                        if (isOpen) fields.forEachIndexed { j, f ->
+                            Box(Modifier.padding(horizontal = 16.dp).fillMaxWidth().height(1.dp).background(Line))
+                            Row(Modifier.fillMaxWidth().clickable {
+                                val cm = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                                cm.setPrimaryClip(android.content.ClipData.newPlainText(f.s("label"), f.s("value")))
+                                android.widget.Toast.makeText(ctx, "${f.s("label")} copied", android.widget.Toast.LENGTH_SHORT).show()
+                            }.padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Column(Modifier.weight(1f)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(f.s("label"), color = Text2, fontSize = 12.sp)
+                                        if (f.b("custom")) Text("Custom", color = Color(0xFF8A6A25), fontSize = 9.sp, fontWeight = FontWeight.Bold,
+                                            modifier = Modifier.padding(start = 6.dp).clip(RoundedCornerShape(50)).background(GoldTint).padding(horizontal = 6.dp, vertical = 1.dp))
+                                    }
+                                    Text(f.s("value"), color = Text1, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 2.dp))
+                                }
+                            }
+                            if (j == fields.size - 1) Spacer(Modifier.height(4.dp))
+                        }
+                    }
+                }
+                // more
+                item {
+                    Column(Modifier.padding(horizontal = 16.dp).fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(Color.White).border(1.dp, Line, RoundedCornerShape(22.dp))) {
+                        listOf(Triple("My badges", Icons.Outlined.EmojiEvents, "badges"), Triple("Notifications", Icons.Outlined.Notifications, "alerts"),
+                            Triple("Help & support", Icons.Outlined.SupportAgent, "support")).forEachIndexed { i, (l, ic, to) ->
+                            if (i > 0) Box(Modifier.padding(horizontal = 16.dp).fillMaxWidth().height(1.dp).background(Line))
+                            Row(Modifier.fillMaxWidth().clickable { go(to) }.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Icon(ic, null, tint = Color(0xFFB08433), modifier = Modifier.size(21.dp)); Spacer(Modifier.width(12.dp))
+                                Text(l, color = Text1, fontSize = 15.sp, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
+                                Icon(Icons.Outlined.ChevronRight, null, tint = Text2)
+                            }
+                        }
+                    }
+                }
+                item {
+                    Row(Modifier.padding(horizontal = 16.dp).fillMaxWidth().clip(RoundedCornerShape(18.dp)).border(1.dp, Bad.copy(alpha = 0.4f), RoundedCornerShape(18.dp))
+                        .clickable { ask = true }.padding(16.dp), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.AutoMirrored.Outlined.Logout, null, tint = Bad); Spacer(Modifier.width(8.dp))
+                        Text("Sign out", color = Bad, fontWeight = FontWeight.Bold)
+                    }
+                }
+                item {
+                    Text("Ametecs Global ${ametecs.managedmobile.BuildConfig.VERSION_NAME} · tap any detail to copy it", color = Text2, fontSize = 11.sp,
+                        textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
                 }
             }
+            if (idCard) DigitalId(me, pf, onClose = { idCard = false })
         }
     }
     if (ask) AlertDialog(onDismissRequest = { ask = false }, title = { Text("Sign out?") },
         text = { Text("You'll need your employee ID and password to sign in again.") },
         confirmButton = { TextButton(onClick = { ask = false; vm.logout() }) { Text("Sign out", color = Bad) } },
         dismissButton = { TextButton(onClick = { ask = false }) { Text("Cancel") } })
+}
+
+private fun sectionIcon(title: String): ImageVector = title.lowercase().let { t ->
+    when {
+        "bank" in t || "pay" in t || "salary" in t -> Icons.Outlined.AccountBalance
+        "statutory" in t || "tax" in t || "compliance" in t || "id" in t.split(" ") -> Icons.Outlined.VerifiedUser
+        "contact" in t || "address" in t -> Icons.Outlined.Home
+        "family" in t || "emergency" in t || "nominee" in t -> Icons.Outlined.FamilyRestroom
+        "job" in t || "employment" in t || "work" in t || "organi" in t -> Icons.Outlined.Work
+        "education" in t || "qualif" in t -> Icons.Outlined.School
+        else -> Icons.Outlined.Person
+    }
+}
+
+/** The employee's digital ID: the card and a QR of their employee code, to show at a gate or desk. */
+@Composable
+private fun DigitalId(me: JsonObject, pf: JsonObject?, onClose: () -> Unit) {
+    val qr = remember(me.s("code")) {
+        runCatching { com.journeyapps.barcodescanner.BarcodeEncoder().encodeBitmap(me.s("code"), com.google.zxing.BarcodeFormat.QR_CODE, 512, 512) }.getOrNull()
+    }
+    Dialog(onDismissRequest = onClose) {
+        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(28.dp)).background(Brush.linearGradient(listOf(Color(0xFFF3DC95), Color(0xFFD6AE55), Color(0xFFB08433))))
+            .padding(22.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                Mark(30); Spacer(Modifier.width(10.dp))
+                Column(Modifier.weight(1f)) {
+                    Text("AMETECS GLOBAL", color = Ink.copy(alpha = 0.6f), fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
+                    Text(me.s("company"), color = Ink, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+            }
+            Spacer(Modifier.height(18.dp))
+            Box(Modifier.size(200.dp).clip(RoundedCornerShape(20.dp)).background(Color.White).padding(12.dp), contentAlignment = Alignment.Center) {
+                if (qr != null) Image(qr.asImageBitmap(), "QR code of ${me.s("code")}", Modifier.fillMaxSize())
+                else Text(me.s("code"), color = Ink, fontWeight = FontWeight.Bold)
+            }
+            Text(me.s("name"), color = Ink, fontSize = 22.sp, fontWeight = FontWeight.ExtraBold, modifier = Modifier.padding(top = 16.dp))
+            Text(me.s("designation"), color = Ink.copy(alpha = 0.75f), fontSize = 13.sp)
+            Text(listOfNotNull(me.s("code"), me.s("department").takeIf { it.isNotBlank() }, pf?.s("status")).joinToString(" · "), color = Ink.copy(alpha = 0.75f), fontSize = 12.sp,
+                modifier = Modifier.padding(top = 4.dp))
+            Spacer(Modifier.height(16.dp))
+            Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Ink).clickable(onClick = onClose).padding(14.dp), contentAlignment = Alignment.Center) {
+                Text("Close", color = GoldHi, fontWeight = FontWeight.Bold)
+            }
+        }
+    }
 }
 
 // ---------- badges: every badge, its rule and where I stand (owner, 21 Nov 2026) ----------
