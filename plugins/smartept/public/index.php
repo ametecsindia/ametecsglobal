@@ -16,7 +16,7 @@ if (file_exists($maintenance = __DIR__.'/../storage/framework/maintenance.php'))
 // hit a POST-only route as GET and got 405 ("licence not active (http_405)").
 // Serve them directly instead: strip the slug prefix BEFORE Laravel routes.
 // Same method, same body, no redirect — works for every HTTP client.
-// AmetecsGlobal (19-Nov-2026): the app may sit in a sub-folder (/AmetecsGlobal/plugins/smartept/public): the slug
+// Ametecs Global (19-Nov-2026): the app may sit in a sub-folder (/AmetecsGlobal/plugins/smartept/public): the slug
 // is the first segment AFTER that folder, which stays in place.
 $agBase = rtrim(str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'] ?? '')), '/');
 $agUri = $_SERVER['REQUEST_URI'] ?? '';

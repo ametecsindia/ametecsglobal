@@ -252,7 +252,7 @@ final class SqlStore implements RowStore
             return $this->pdo->query("SELECT * FROM `{$table}`")->fetchAll();
         }
 
-        [$agWhere, $agBind] = $this->whereFor($table, [], '');   // AmetecsGlobal: the same tenancy clause, plus app access
+        [$agWhere, $agBind] = $this->whereFor($table, [], '');   // Ametecs Global: the same tenancy clause, plus app access
         $statement = $this->pdo->prepare("SELECT * FROM `{$table}`{$agWhere}");
         $statement->execute($agBind);
 
@@ -327,6 +327,7 @@ final class SqlStore implements RowStore
             $conditions[] = 'tenant_id = ?';
             $bind[] = $this->tenantId;
             if ($table === 'employees' && !empty($GLOBALS['ametecs_hidden_employees'])) { $conditions[] = 'id NOT IN (' . implode(',', array_map('intval', $GLOBALS['ametecs_hidden_employees'])) . ')'; }   // AmetecsGlobal: employees not enabled for this app
+            if ($table === 'employees' && !empty($GLOBALS['ametecs_hidden_employees'])) { $conditions[] = 'id NOT IN (' . implode(',', array_map('intval', $GLOBALS['ametecs_hidden_employees'])) . ')'; }   // Ametecs Global: employees not enabled for this app
         }
 
         if ($searchColumns !== [] && $needle !== '') {

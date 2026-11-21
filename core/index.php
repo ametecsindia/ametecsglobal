@@ -2,7 +2,7 @@
 /**
  * AMETECSGLOBAL — CLIENT VIEW (the front door). Sign in once, see every Ametecs app; the ones Super Admin
  * switched on for this company open, the rest are greyed out. Same login and same cookie as SmartPRS3
- * inside AmetecsGlobal (session name AMETECSGLOBAL), so "Open" goes straight in without a second sign-in.
+ * inside Ametecs Global (session name AMETECSGLOBAL), so "Open" goes straight in without a second sign-in.
  */
 declare(strict_types=1);
 
@@ -50,7 +50,10 @@ if ($session !== null && ($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     } elseif (($_POST['do'] ?? '') === 'signin') {
         $r = $badLink ? ['ok' => false, 'why' => 'This sign-in link is not valid.'] : $session->signIn((string) ($_POST['email'] ?? ''), (string) ($_POST['password'] ?? ''), $ws === null ? null : (string) $ws['id']);
         if ($r['ok']) {
-            header('Location: ' . $cq());
+            // ONE LOGIN (19 Nov 2026): came from an app's sign-in? Straight back into it (asked for in the last 15 minutes).
+            $next = (array) ($_SESSION['ag_next'] ?? []);
+            unset($_SESSION['ag_next']);
+            header('Location: ' . (($next[1] ?? 0) > time() - 900 ? 'open.php?app=' . rawurlencode((string) $next[0]) . (($next[2] ?? '') !== '' ? '&to=' . rawurlencode((string) $next[2]) : '') : $cq()));
             exit;
         }
         $problem = $r['why'];
@@ -72,7 +75,7 @@ if ($session !== null && ($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             $q->execute([$email, (string) ($ws['id'] ?? ''), (string) ($ws['id'] ?? '')]);
             foreach ($q->fetchAll(\PDO::FETCH_ASSOC) as $u) {
                 $sent = AmetecsMail::resetLink($pdo, (string) $u['tenant_id'], (string) $u['id']);
-                $sent['ok'] || error_log('AmetecsGlobal forgot-password mail not sent: ' . $sent['why']);
+                $sent['ok'] || error_log('Ametecs Global forgot-password mail not sent: ' . $sent['why']);
             }
             $notice = 'If ' . $email . ' has a login, a link to set a new password is on its way. Check your inbox (and spam).';
         }
@@ -98,6 +101,8 @@ if ($session !== null && ($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         }
     } elseif (($_POST['do'] ?? '') === 'signout') {
         $session->signOut();
+        // ONE LOGIN (19 Nov 2026): drop the cookie too, so every app opened from this session sees it end (their AgSession).
+        setcookie(session_name(), '', ['expires' => time() - 3600, 'path' => '/', 'httponly' => true, 'samesite' => 'Lax']);
         header('Location: ' . $cq());
         exit;
     }
@@ -120,16 +125,16 @@ if ($user !== null && $platform !== null && in_array((string) ($platform->find('
     $session->signOut();
     $user = null;
     $tenant = '';
-    $problem = 'Your company\'s AmetecsGlobal account is suspended. Please contact Ametecs.';
+    $problem = 'Your company\'s Ametecs Global account is suspended. Please contact Ametecs.';
 }
 $all = AmetecsAccess::all();
 $company = $user !== null && $platform !== null ? (string) ($platform->find('tenants', $tenant)['name'] ?? '') : '';
 $used = $user !== null && $platform !== null ? AmetecsAccess::employeesUsed($platform, $tenant) : 0;
 // LICENCE LOCK (owner, 19 Nov 2026): an app whose licence is not active sends administrators straight to its licence -
-// enter a code, upload a .lic or pay; employees are told to ask them. Same for every app that opens through AmetecsGlobal.
+// enter a code, upload a .lic or pay; employees are told to ask them. Same for every app that opens through Ametecs Global.
 if (($_GET['blocked'] ?? '') !== '' && $user !== null && ($blr = AmetecsLicences::row($tenant, (string) $_GET['blocked'])) !== null
     && (AmetecsLicences::stateOf($blr) !== 'on' || $blr['status'] !== 'active')) {
-    if (strtolower((string) ($user['role'] ?? '')) !== 'employee') {
+    if (AmetecsRoles::isAdmin($user)) {
         header('Location: ?v=licences&app=' . rawurlencode((string) $_GET['blocked']) . '&lock=1#lp');
         exit;
     }
@@ -138,7 +143,7 @@ if (($_GET['blocked'] ?? '') !== '' && $user !== null && ($blr = AmetecsLicences
 if (($_GET['blocked'] ?? '') !== '' && $user !== null) {
     $bp = AmetecsAccess::plugins()[(string) $_GET['blocked']]['name'] ?? 'That app';
     $problem ??= AmetecsAccess::state($tenant, (string) $_GET['blocked']) === 'on' && (!AmetecsLicences::installed(AmetecsLicences::row($tenant, (string) $_GET['blocked'])) || AmetecsLicences::maintenance($tenant, (string) $_GET['blocked']))
-        ? $bp . (AmetecsLicences::maintenance($tenant, (string) $_GET['blocked']) ? ' is in maintenance mode while it is being installed or updated. ' : ' is enabled for your company but not installed yet. ') . ($isAdminEarly = strtolower((string) ($user['role'] ?? '')) !== 'employee' ? 'Click Download on it in My applications.' : 'Your administrator installs it from My applications.')
+        ? $bp . (AmetecsLicences::maintenance($tenant, (string) $_GET['blocked']) ? ' is in maintenance mode while it is being installed or updated. ' : ' is enabled for your company but not installed yet. ') . ($isAdminEarly = AmetecsRoles::isAdmin($user) ? 'Click Download on it in My applications.' : 'Your administrator installs it from My applications.')
         : $bp . ' is not switched on for ' . ($company ?: 'your company') . ', or its licence has expired. Ask Ametecs to switch it on.';
 }
 
@@ -150,7 +155,7 @@ $hour = (int) $now->format('G');
 $greet = $hour < 12 ? 'Good morning' : ($hour < 17 ? 'Good afternoon' : 'Good evening');
 $who = trim((string) ($user['name'] ?? '')) ?: ucfirst((string) strtok((string) ($user['email'] ?? ''), '@'));
 $initials = strtoupper(implode('', array_map(static fn (string $w): string => mb_substr($w, 0, 1), array_slice(preg_split('/[\s._-]+/', $who) ?: ['U'], 0, 2))));
-$isAdmin = $user !== null && strtolower((string) ($user['role'] ?? '')) !== 'employee';
+$isAdmin = AmetecsRoles::isAdmin($user);
 $groups = ['live' => [], 'install' => [], 'soon' => [], 'other' => []];
 if ($user !== null) {
     foreach (AmetecsAccess::plugins() as $code => $p) {
@@ -164,10 +169,24 @@ if ($user !== null) {
 // UPDATES (Phase 2, 18 Nov 2026): what each licensed app is offered. Cloud = the version Ametecs' server runs; on-premise = what
 // the client's server last reported. Only administrators see this; only apps this client holds.
 // PHASE 4 (18 Nov 2026): every section of the client administrator's panel (core/shell.php draws the menu).
-$adminViews = ['apps', 'plugins', 'updates', 'licences', 'billing', 'invoice', 'activity'];
+$adminViews = ['apps', 'plugins', 'updates', 'licences', 'billing', 'invoice', 'activity', 'people', 'reports'];
 // PHASE 6 (18 Nov 2026): fewer pages - old addresses land on the page that now holds their content.
 $view = ['plans' => 'licences', 'installs' => 'apps', 'upgrades' => 'activity'][(string) ($_GET['v'] ?? '')] ?? (string) ($_GET['v'] ?? 'home');
-$view = $user !== null && (in_array($view, ['notifications', 'support', 'account'], true) || ($isAdmin && in_array($view, $adminViews, true))) ? $view : 'home';
+// TEAM LEADS AND MANAGERS (19 Nov 2026, one role map): Employee 360 for the people who report to them, at any depth.
+$p3scope = null;
+$myLevel = 'employee';
+if ($user !== null && !$isAdmin && (string) ($user['employee_id'] ?? '') !== '' && $pdo !== null) {
+    $p3all = (new \SmartPRS\Surface\SqlStore($pdo))->forTenant($tenant)->all('employees');
+    $myLevel = AmetecsRoles::levels($p3all)[(string) $user['employee_id']] ?? 'employee';
+    $myLevel !== 'employee' && $p3scope = AmetecsRoles::team($p3all, (string) $user['employee_id']);
+}
+// MY SPACE (20 Nov 2026): every person with an employee record has it; it is an employee's home.
+$hasMe = $user !== null && (string) ($user['employee_id'] ?? '') !== '' && $pdo !== null;
+$view === 'home' && $hasMe && !$isAdmin && $myLevel === 'employee' && $view = 'me';
+$view = $user !== null && (($view === 'me' && $hasMe) || in_array($view, ['notifications', 'support', 'account'], true) || ($isAdmin && in_array($view, $adminViews, true)) || (in_array($view, ['people', 'reports'], true) && $p3scope !== null)) ? $view : 'home';
+if ($view === 'reports' && isset($_GET['csv'])) {   // REPORTS download: the file, before any page is drawn
+    require __DIR__ . '/reports.php';
+}
 $upd = [];
 if ($user !== null && $isAdmin && AmetecsReleases::ready()) {
     $upd = AmetecsShell::updates($tenant);
@@ -190,7 +209,7 @@ if ($user !== null && $isAdmin && AmetecsReleases::ready()) {
             exit;
         }
         AmetecsLicences::$actor = (string) ($user['email'] ?? 'client');
-        AmetecsReleases::event($dr, (string) $dr['app'], $tenant, 'downloaded', $dl['current'], (string) $dr['version'], 'from the AmetecsGlobal panel', (string) $dl['l']['id']);
+        AmetecsReleases::event($dr, (string) $dr['app'], $tenant, 'downloaded', $dl['current'], (string) $dr['version'], 'from the Ametecs Global panel', (string) $dl['l']['id']);
         header('Content-Type: application/zip');
         header('Content-Length: ' . filesize(AmetecsReleases::path($dr)));
         header('Content-Disposition: attachment; filename="' . basename(AmetecsReleases::path($dr)) . '"');
@@ -215,7 +234,7 @@ if ($user !== null && $isAdmin && $session !== null && ($_SERVER['REQUEST_METHOD
         ($res['phase'] ?? '') === 'done' && ($_POST['step'] ?? '') === 'activate'
             && AmetecsData::log((string) ($user['email'] ?? ''), 'Downloaded and installed ' . AmetecsAccess::plugins()[$ia]['name'], $tenant, (string) ($res['version'] ?? ''));
     } catch (\Throwable $x) {
-        error_log('AmetecsGlobal install ' . $ia . ': ' . $x->getMessage());
+        error_log('Ametecs Global install ' . $ia . ': ' . $x->getMessage());
         $res = ['ok' => false, 'message' => 'The installation stopped. Try again in a minute, or contact Ametecs.'];
     }
     echo json_encode($res + ['open' => (string) (AmetecsAccess::plugins()[$ia]['open'] ?? '')]);
@@ -395,7 +414,7 @@ if ($user !== null && $isAdmin && $session !== null && ($_SERVER['REQUEST_METHOD
             AmetecsData::log((string) ($user['email'] ?? ''), $move ? 'Requested a server move' : 'Sent a server fingerprint', $tenant, $what);
             AmetecsLicences::event($sr, $move ? 'Client asked for a server move' : 'Client sent a server fingerprint', ($sn !== '' ? $sn . ' ' : '') . ($fp !== '' ? substr($fp, 0, 16) . '...' : ''));
             $to = (string) (AmetecsBilling::settings()['support_email'] ?? '') ?: (string) AmetecsBilling::settings()['email'];
-            $to !== '' && AmetecsMail::box($pdo)->ready() && AmetecsMail::send($pdo, $to, '[AmetecsGlobal] ' . ($move ? 'Server move request' : 'Licence file request') . ': ' . $company, 'From: ' . ($user['email'] ?? '') . ' (' . $company . ', client #' . $tenant . ")\n\n" . $what);
+            $to !== '' && AmetecsMail::box($pdo)->ready() && AmetecsMail::send($pdo, $to, '[Ametecs Global] ' . ($move ? 'Server move request' : 'Licence file request') . ': ' . $company, 'From: ' . ($user['email'] ?? '') . ' (' . $company . ', client #' . $tenant . ")\n\n" . $what);
             $_SESSION['flash_notice'] = 'Sent to Ametecs. ' . ($move ? 'They release the old server and bind the new one' : 'They issue your .lic file') . ' from Super Admin; it shows here when done.';
         }
     }
@@ -418,7 +437,7 @@ if ($user !== null && $isAdmin && $session !== null && ($_SERVER['REQUEST_METHOD
         $what = $rName . ': ' . ucfirst($rp) . ', ' . $rs . ' seats' . ($rn !== '' ? ' - ' . $rn : '');
         AmetecsData::log((string) ($user['email'] ?? ''), 'Requested a plan change', $tenant, $what);
         $to = (string) (AmetecsBilling::settings()['support_email'] ?? '') ?: (string) AmetecsBilling::settings()['email'];
-        $to !== '' && AmetecsMail::box($pdo)->ready() && AmetecsMail::send($pdo, $to, '[AmetecsGlobal] Plan change request: ' . $company, "From: " . ($user['email'] ?? '') . " (" . $company . ", client #" . $tenant . ")\n\n" . $what);
+        $to !== '' && AmetecsMail::box($pdo)->ready() && AmetecsMail::send($pdo, $to, '[Ametecs Global] Plan change request: ' . $company, "From: " . ($user['email'] ?? '') . " (" . $company . ", client #" . $tenant . ")\n\n" . $what);
         $_SESSION['flash_notice'] = 'Request sent to Ametecs: ' . rtrim($what, '.') . '. They confirm the price and update your plan.';
     }
     header('Location: ?v=licences');
@@ -446,7 +465,7 @@ if ($user !== null && $session !== null && ($_SERVER['REQUEST_METHOD'] ?? '') ==
         } elseif ($to === '' || !AmetecsMail::box($pdo)->ready()) {
             $problem = 'Messages cannot be sent from here yet. Please email or call Ametecs using the details on this page.';
         } else {
-            $sent = AmetecsMail::send($pdo, $to, '[AmetecsGlobal support] ' . $company . ': ' . $subj, "From: " . ($user['email'] ?? '') . " (" . $company . ", client #" . $tenant . ")\n\n" . $msg);
+            $sent = AmetecsMail::send($pdo, $to, '[Ametecs Global support] ' . $company . ': ' . $subj, "From: " . ($user['email'] ?? '') . " (" . $company . ", client #" . $tenant . ")\n\n" . $msg);
             $sent['ok'] ? ($okMsg = 'Your message was sent to Ametecs. They reply to ' . ($user['email'] ?? 'your email') . '.') : ($problem = 'The message was not sent: ' . $sent['why']);
             $sent['ok'] && AmetecsData::log((string) ($user['email'] ?? ''), 'Sent a support request', $tenant, $subj);
         }
@@ -476,8 +495,8 @@ if ($user !== null && $isAdmin && $view === 'home' && $pdo !== null) {
     require __DIR__ . '/dashboard.php';
 }
 ?><!DOCTYPE html>
-<html lang="en"><head><meta charset="utf-8"><script>try{var R=document.documentElement,T=localStorage.getItem("agTheme");R.classList.add("t-gold");(T==="navy"||T==="classic")&&R.classList.add("th-navy");T==="light"&&R.classList.add("th-light");T==="dark"&&R.classList.add("th-dark");localStorage.getItem("agSb")==="1"&&document.documentElement.classList.add("sb-mini")}catch(e){document.documentElement.classList.add("t-gold")}</script><meta name="viewport" content="width=device-width, initial-scale=1">
-<title><?= $user !== null ? 'Home' : 'Sign in' ?> · AmetecsGlobal</title>
+<html lang="en"><head><meta charset="utf-8"><link rel="icon" href="assets/brand/favicon.svg" type="image/svg+xml"><link rel="icon" href="assets/brand/favicon-32x32.png" sizes="32x32"><link rel="apple-touch-icon" href="assets/brand/apple-touch-icon.png"><script>try{var R=document.documentElement,T=localStorage.getItem("agTheme");R.classList.add("t-gold");(T==="navy"||T==="classic")&&R.classList.add("th-navy");T==="light"&&R.classList.add("th-light");T==="dark"&&R.classList.add("th-dark");localStorage.getItem("agSb")==="1"&&document.documentElement.classList.add("sb-mini")}catch(e){document.documentElement.classList.add("t-gold")}</script><meta name="viewport" content="width=device-width, initial-scale=1">
+<title><?= $user !== null ? 'Home' : 'Sign in' ?> · Ametecs Global</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 <style>
 :root{--navy:#1F3A5F;--navy-2:#16304f;--navy-3:#0f2440;--gold:#B8893B;--gold-2:#d4a65a;--ink:#0f172a;--ink-2:#334155;--mute:#64748b;--line:#e5e9f0;--bg:#f5f7fb;--card:#fff;
@@ -799,7 +818,7 @@ a{color:inherit}
 .ucnt{margin-left:auto;font-style:normal;font-size:11px;background:var(--gold);color:#fff;padding:1px 8px;border-radius:99px}.lic-t td.r,.lic-t th.r{text-align:right}
 .lp{display:inline-block;padding:2px 10px;border-radius:99px;font-size:12px;font-weight:600}.lp-green{background:var(--ok-bg);color:var(--ok)}.lp-amber{background:#fffbeb;color:#b45309}.lp-red{background:var(--bad-bg);color:var(--bad)}.lp-grey{background:#f1f5f9;color:var(--mute)}
 </style>
-<link rel="stylesheet" href="assets/shell.css?v=26"><link rel="stylesheet" href="assets/theme-gold.css?v=2"><link rel="stylesheet" href="assets/theme-clean.css?v=10"><link rel="stylesheet" href="assets/theme-alt.css?v=11"></head><body>
+<link rel="stylesheet" href="assets/shell.css?v=30"><link rel="stylesheet" href="assets/theme-gold.css?v=2"><link rel="stylesheet" href="assets/theme-clean.css?v=10"><link rel="stylesheet" href="assets/theme-alt.css?v=11"></head><body>
 <?php if ($user === null): ?>
 <div class="auth">
   <aside class="auth-side">
@@ -834,7 +853,7 @@ a{color:inherit}
       </form>
     <?php else: ?>
       <h2>Welcome back</h2><p class="lead"><?= $ws !== null ? 'Sign in to ' . ag_h((string) $ws['name']) . '&rsquo;s workspace.' : 'Sign in to your organisation&rsquo;s workspace.' ?></p>
-      <?php if ($ws !== null && in_array((string) $ws['status_code'], ['suspended', 'closed'], true)) { $problem ??= 'This company\'s AmetecsGlobal account is suspended. Please contact Ametecs.'; } ?>
+      <?php if ($ws !== null && in_array((string) $ws['status_code'], ['suspended', 'closed'], true)) { $problem ??= 'This company\'s Ametecs Global account is suspended. Please contact Ametecs.'; } ?>
       <?php if ($badLink) { $problem ??= 'This sign-in link is not valid. Check the link with your company administrator.'; } ?>
       <?php if ($problem !== null): ?><div class="msg"><i class="fas fa-circle-exclamation"></i><span><?= ag_h($problem) ?></span></div><?php endif; ?>
       <?php if ($session !== null && $session->needsEnrolment()): ?>
@@ -865,14 +884,14 @@ a{color:inherit}
       foreach (AmetecsSetup::CORE as $grp => $items) { foreach ($items as $label => $it) { $paletteItems[] = ['t' => $label, 'h' => 'org.php' . str_replace('?r=', '?s=', AmetecsSetup::href($it)), 'i' => $it[2], 's' => $grp]; } }
   } ?>
 <div class="shell">
-<?= AmetecsShell::nav($company, $isAdmin, $view === 'invoice' ? 'billing' : $view, ['updates' => $updCount, 'invoices' => $billOn ? count(AmetecsBilling::invoices($tenant, 'pending')) : 0, 'notifications' => count($notes)]) ?>
+<?= AmetecsShell::nav($company, $isAdmin, $view === 'invoice' ? 'billing' : $view, ['lead' => $p3scope !== null ? 1 : 0, 'updates' => $updCount, 'invoices' => $billOn ? count(AmetecsBilling::invoices($tenant, 'pending')) : 0, 'notifications' => count($notes)], '', $pdo, $user) ?>
 <div class="mainc">
 <header class="top"><div class="top-in">
   <button type="button" class="drawer-btn" data-drawer aria-label="Menu"><i class="fas fa-bars"></i></button>
-  <div class="crumb"><?= ag_h($company ?: 'AmetecsGlobal') ?> <i class="fas fa-chevron-right"></i> <?= ag_h(['home' => 'Dashboard', 'apps' => 'My applications', 'updates' => 'Updates', 'plugins' => 'Modules & plugins', 'licences' => 'Licences & plans', 'billing' => 'Payments & invoices', 'activity' => 'Activity history', 'support' => 'Support & help', 'account' => 'Account settings', 'notifications' => 'Notifications'][$view] ?? 'Dashboard') ?></div>
+  <div class="crumb"><?= ag_h($company ?: 'Ametecs Global') ?> <i class="fas fa-chevron-right"></i> <?= ag_h(['home' => 'Dashboard', 'apps' => 'My applications', 'updates' => 'Updates', 'plugins' => 'Modules & plugins', 'licences' => 'Licences & plans', 'billing' => 'Payments & invoices', 'activity' => 'Activity history', 'people' => 'Employee 360', 'me' => 'My space', 'reports' => 'Reports', 'support' => 'Support & help', 'account' => 'Account settings', 'notifications' => 'Notifications'][$view] ?? 'Dashboard') ?></div>
   <a class="bell" href="?v=notifications" title="Notifications"><i class="far fa-bell"></i><?= $notes !== [] ? '<em>' . count($notes) . '</em>' : '' ?></a>
   <div class="clock"><i class="far fa-clock"></i><span id="clock"><?= $now->format('h:i A') ?></span></div>
-  <details class="user"><summary><span class="av"><?= ag_h($initials) ?></span><span class="nm"><?= ag_h($who) ?><small><?= ag_h(ucfirst((string) ($user['role'] ?? ''))) ?></small></span><i class="fas fa-chevron-down" style="font-size:11px;color:var(--mute)"></i></summary>
+  <details class="user"><summary><span class="av"><?= ag_h($initials) ?></span><span class="nm"><?= ag_h($who) ?><small><?= ag_h($isAdmin ? 'Administrator' : (AmetecsRoles::LABELS[$myLevel] ?? 'Employee')) ?></small></span><i class="fas fa-chevron-down" style="font-size:11px;color:var(--mute)"></i></summary>
     <div class="menu"><div class="mh"><b><?= ag_h($who) ?></b><span><?= ag_h((string) ($user['email'] ?? '')) ?></span></div>
       <a href="?v=account"><i class="fas fa-user-gear"></i>Account settings</a><div class="throw"><span>Theme</span><a data-theme-set="gold" title="Golden"><span class="sw" style="background:linear-gradient(135deg,#f3dc95,#d6ae55 45%,#b08433);color:#14100a"><i class="fas fa-crown"></i></span></a><a data-theme-set="navy" title="Navy"><span class="sw" style="background:linear-gradient(145deg,#132b50,#0a1a33);color:#e8c977"><i class="fas fa-gem"></i></span></a><a data-theme-set="light" title="Light"><span class="sw" style="background:#fff;color:#d6ae55"><i class="fas fa-sun"></i></span></a><a data-theme-set="dark" title="Dark"><span class="sw" style="background:#0d0b08;color:#e8c977"><i class="fas fa-moon"></i></span></a></div>
       <?php if ($isAdmin): ?><a href="org.php?s=users"><i class="fas fa-user-shield"></i>User Management</a><?php endif; ?>
@@ -999,7 +1018,7 @@ a{color:inherit}
         <?php elseif ($next !== null): ?><i class="fas fa-cloud-arrow-down"></i> <b><?= ag_h((string) $next['version']) ?> available</b><?= $next['mandatory'] ? ' <span class="lp lp-red">Mandatory</span>' : '' ?><a class="btn2 primary" href="?v=updates&amp;app=<?= ag_h($code) ?>">Update</a>
         <?php elseif ($u !== null && $u['offer']['rollback'] !== null): ?><i class="fas fa-rotate-left"></i> <b>Your version was withdrawn</b><a class="btn2 primary" href="?v=updates&amp;app=<?= ag_h($code) ?>">See fix</a>
         <?php else: ?><i class="fas fa-circle-check"></i> Up to date<?php endif; ?></div><?php endif; ?>
-      <footer><?php if ($live): ?><a class="btn2 primary" href="<?= ag_h((string) $p['open']) ?>"><i class="fas fa-arrow-up-right-from-square"></i>Open</a><?php elseif ($arriving): ?><span class="lp lp-grey">Arriving on AmetecsGlobal soon</span><?php elseif ($op && $st === 'on' && ($l['fingerprint'] ?? '') !== ''): ?><span class="muted2" style="font-size:12.5px"><i class="fas fa-server"></i> Open it on your own server</span><?php endif; ?>
+      <footer><?php if ($live): ?><a class="btn2 primary" href="<?= ag_h((string) $p['open']) ?>"><i class="fas fa-arrow-up-right-from-square"></i>Open</a><?php elseif ($arriving): ?><span class="lp lp-grey">Arriving on Ametecs Global soon</span><?php elseif ($op && $st === 'on' && ($l['fingerprint'] ?? '') !== ''): ?><span class="muted2" style="font-size:12.5px"><i class="fas fa-server"></i> Open it on your own server</span><?php endif; ?>
         <?php if ($op && ($l['fingerprint'] ?? '') === '' && $st === 'on'): ?><span class="muted2" style="font-size:12px">Activate: enter the licence key on the app's activation screen on your server.</span><?php endif; ?></footer>
     </article>
   <?php endforeach; ?>
@@ -1143,7 +1162,7 @@ a{color:inherit}
         <em class="lbar"><i style="width:<?= $upc ?? 100 ?>%;<?= $upc === null ? 'opacity:.25' : ($upc >= 90 ? 'background:#dc2626' : ($upc >= 75 ? 'background:#d97706' : '')) ?>"></i></em></div>
       <div class="lmeter"><div class="lmh"><span>Valid till</span><b><?= $until === '' ? 'No end date' : ag_h(date('d M Y', (int) strtotime($until))) ?> <small class="<?= $days !== null && $days < 0 ? 'tred' : ($days !== null && $days <= 30 ? 'tamb' : '') ?>"><?= $days === null ? '' : ($days < 0 ? 'ended ' . -$days . ' days ago' : $days . ' days left') ?></small></b></div>
         <em class="lbar t"><i style="width:<?= $tpc ?>%;<?= $days !== null && $days <= 30 ? 'background:#d97706' : '' ?>"></i></em></div>
-      <?php // FULL LICENCE DETAILS (owner, 19 Nov 2026: shown here, not inside each app - apps read their licence from AmetecsGlobal)
+      <?php // FULL LICENCE DETAILS (owner, 19 Nov 2026: shown here, not inside each app - apps read their licence from Ametecs Global)
         $verL = $l['deployment'] === 'onprem' ? (string) ($l['app_version'] ?? '') : AmetecsReleases::platformVersion($code);
         $keyFull = $op ? AmetecsLicences::keyOf($l) : 'AG-' . $tenant . '-' . strtoupper($code);
         $keyL = $keyFull === '' ? 'not issued yet' : ($op ? substr($keyFull, 0, 5) . str_repeat('•', 8) . substr($keyFull, -4) : $keyFull);
@@ -1156,7 +1175,7 @@ a{color:inherit}
             'Renews' => !empty($l['auto_renew']) ? 'Automatically' : 'When renewed',
             'Price' => (float) ($l['price'] ?? 0) > 0 ? ag_h($l['currency'] . ' ' . number_format((float) $l['price'], 2)) . ' / ' . (['monthly' => 'month', 'yearly' => 'year'][$l['plan']] ?? 'period') . ' + GST' : 'As agreed with Ametecs',
             'Version' => $verL !== '' ? ag_h($verL) : '&mdash;',
-            'Source' => 'AmetecsGlobal &mdash; managed by Ametecs (Super Admin)']; ?>
+            'Source' => 'Ametecs Global &mdash; managed by Ametecs (Super Admin)']; ?>
       <?php $tbl = static function (array $rows): string { $h = '<table class="lkv">'; foreach ($rows as $k => $v) { $h .= '<tr><th>' . ag_h($k) . '</th><td>' . $v . '</td></tr>'; } return $h . '</table>'; };
         $hid = '<input type="hidden" name="csrf" value="' . ag_h($session->token()) . '"><input type="hidden" name="app" value="' . ag_h($code) . '">';
         $evs = AmetecsLicences::events((string) $l['id'], null, 50);
@@ -1254,6 +1273,10 @@ a{color:inherit}
       <footer><?= $planForm($code, null, 'Buy ' . $p['name']) ?></footer></article>
   <?php endforeach; ?></div><?php endif; ?>
 
+<?php elseif ($view === 'people'): require __DIR__ . '/people.php'; ?>
+<?php elseif ($view === 'me'): require __DIR__ . '/me.php'; ?>
+<?php elseif ($view === 'reports'): require __DIR__ . '/reports.php'; ?>
+
 <?php elseif ($view === 'notifications'): ?>
   <div class="pgh"><div><h1>Notifications</h1><p>Updates, invoices, renewals and installation alerts for <?= ag_h($company ?: 'your company') ?>, most urgent first. They clear by themselves once handled.</p></div></div>
   <div class="panel"><?= AmetecsShell::notificationList($notes) ?></div>
@@ -1337,12 +1360,12 @@ a{color:inherit}
   </div>
 
 <?php elseif ($view === 'account'): ?>
-  <div class="pgh"><div><h1>Account settings</h1><p>Your own login to AmetecsGlobal.</p></div></div>
+  <div class="pgh"><div><h1>Account settings</h1><p>Your own login to Ametecs Global.</p></div></div>
   <?php if ($okMsg !== null): ?><div class="okmsg"><i class="fas fa-circle-check"></i><?= ag_h($okMsg) ?></div><?php endif; ?>
   <?php if ($problem !== null): ?><div class="msg"><i class="fas fa-circle-exclamation"></i><span><?= ag_h($problem) ?></span></div><?php endif; ?>
   <div class="grid2c">
     <div class="ibox"><h3><i class="fas fa-user" style="color:var(--gold)"></i>Profile</h3><dl><dt>Name</dt><dd><?= ag_h($who) ?></dd><dt>Email</dt><dd><?= ag_h((string) ($user['email'] ?? '')) ?></dd>
-      <dt>Role</dt><dd><?= ag_h(ucfirst((string) ($user['role'] ?? ''))) ?></dd><dt>Company</dt><dd><?= ag_h($company) ?></dd></dl>
+      <dt>Role</dt><dd><?= ag_h($isAdmin ? 'Administrator' : (AmetecsRoles::LABELS[$myLevel] ?? 'Employee')) ?></dd><dt>Company</dt><dd><?= ag_h($company) ?></dd></dl>
       <p class="muted2" style="font-size:12.5px;margin:12px 0 0">Your name and email are kept with your employee record<?= $isAdmin ? ' (Organization &rarr; Employee directory)' : '; ask your administrator to change them' ?>.</p></div>
     <div class="ibox"><h3><i class="fas fa-lock" style="color:var(--gold)"></i>Change password</h3>
       <form method="post" class="frm"><input type="hidden" name="csrf" value="<?= ag_h($session->token()) ?>"><input type="hidden" name="do" value="account-password">
@@ -1395,7 +1418,7 @@ a{color:inherit}
     </section>
   <?php endforeach; ?>
   <?php if ($groups['install'] !== []): ?><p class="dnote later"><i class="fas fa-download"></i> Enabled for your company, ready to download: <?= ag_h(implode(', ', array_map(static fn ($r) => (string) $r['p']['name'], $groups['install']))) ?>.<?= $isAdmin ? ' <a href="?v=apps">Download in My applications</a>' : ' Your administrator installs ' . (count($groups['install']) > 1 ? 'them' : 'it') . ' from My applications.' ?></p><?php endif; ?>
-  <?php if ($later !== []): ?><p class="dnote later"><i class="fas fa-hourglass-half"></i> Also in your plan, arriving on AmetecsGlobal soon: <?= ag_h(implode(', ', $later)) ?>.</p><?php endif; ?>
+  <?php if ($later !== []): ?><p class="dnote later"><i class="fas fa-hourglass-half"></i> Also in your plan, arriving on Ametecs Global soon: <?= ag_h(implode(', ', $later)) ?>.</p><?php endif; ?>
   <?php if ($dashApps === []): ?><div class="lic-t"><div class="empty2" style="padding:30px">No applications are switched on for your company yet.<?= $isAdmin ? ' <a href="?v=support">Contact Ametecs</a>.' : '' ?></div></div><?php endif; ?>
   <?php endif; ?>
 <?php endif; ?>
@@ -1426,6 +1449,6 @@ document.addEventListener('click',function(e){document.querySelectorAll('details
 })();
 </script>
 <?php endif; ?>
-<?php if ($user !== null): ?><div class="foot">AmetecsGlobal by Ametecs India &middot; <a href="super.php">Super Admin</a></div><?php endif; ?>
+<?php if ($user !== null): ?><div class="foot">Ametecs Global by Ametecs India &middot; <a href="super.php">Super Admin</a></div><?php endif; ?>
 <script src="assets/ui.js?v=14"></script>
 </body></html>

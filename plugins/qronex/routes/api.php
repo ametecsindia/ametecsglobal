@@ -43,4 +43,6 @@ Route::prefix('v1')->group(function () {
     Route::get('openapi.json', \App\Http\Controllers\Api\OpenApiController::class)->name('openapi');
 });
 
+// Ametecs Global: the QRONEX scanner inside Ametecs Global (core/scan.php) - one-time ticket from core, QRONEX's own checks
+Route::post('ag/scan', [\App\Http\Controllers\AgScanController::class, 'scan'])->middleware('throttle:20,1');
 Route::post('razorpay/webhook', RazorpayWebhookController::class)->middleware('throttle:120,1');

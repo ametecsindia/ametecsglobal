@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\Schema;
 
 /**
  * AMETECSGLOBAL UPDATE HUB (owner, 18 Nov 2026 - Phase 2). Releases, patches and plugins for EVERY app, published
- * from AmetecsGlobal Super Admin (core/releases.php). Nothing existing is altered or dropped.
+ * from Ametecs Global Super Admin (core/releases.php). Nothing existing is altered or dropped.
  *
  * - `ag_releases`: app, version, kind (full | patch | plugin), notes, requirements, package SHA-256 + signature,
  *   status (draft | published | disabled | withdrawn), scheduled publish time, mandatory, download allowed,

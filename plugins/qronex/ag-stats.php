@@ -2,7 +2,7 @@
 /**
  * QRONEX'S FIGURES FOR THE AMETECSGLOBAL DASHBOARD (19 Nov 2026). Contract: plugins/smartprs3/ag-stats.php.
  * Reads QRONEX's own database (plugins/qronex/.env); the client's company is the one linked to it (tenants.ag_tenant).
- * Employee filters map through hrms_ref "ag-<employee id>". Also pulls new punches into AmetecsGlobal attendance.
+ * Employee filters map through hrms_ref "ag-<employee id>". Also pulls new punches into Ametecs Global attendance.
  */
 declare(strict_types=1);
 
@@ -43,7 +43,7 @@ return static function (\PDO $agPdo, string $tenant, array $f = []): array {
     [$staff] = $one("SELECT COUNT(*) FROM employees WHERE tenant_id = ? AND status = 'active'" . str_replace('employee_id', 'id', $who));
     [$pending] = $one("SELECT COUNT(*) FROM devices WHERE tenant_id = ?{$who} AND status = 'pending'");
     [$phones] = $one("SELECT COUNT(*) FROM devices WHERE tenant_id = ?{$who} AND status = 'approved'");
-    // a dashboard visit also brings new punches into AmetecsGlobal attendance (QRONEX pings after each punch as well)
+    // a dashboard visit also brings new punches into Ametecs Global attendance (QRONEX pings after each punch as well)
     try {
         is_file($pull = dirname(__DIR__, 2) . '/core/attendance/qronex-pull.php') && (require $pull)($tenant);
     } catch (\Throwable) {

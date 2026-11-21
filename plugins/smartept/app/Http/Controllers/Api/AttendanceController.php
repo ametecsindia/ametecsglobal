@@ -133,7 +133,7 @@ class AttendanceController extends Controller
                 $employee->company_id, $employee, $punch, $at, $data['device_uuid'], 'AGENT'
             );
         } catch (\Throwable $e) { /* relay is never allowed to fail the punch */ }
-        // AmetecsGlobal: the same punch into its attendance (SmartPRS 3 payroll, late marks), after the agent's answer
+        // Ametecs Global: the same punch into its attendance (SmartPRS 3 payroll, late marks), after the agent's answer
         try {
             \App\Services\AgBridge::punch($employee->company ?? \App\Models\Company::find($employee->company_id), $employee, $punch, $at, $data['device_uuid']);
         } catch (\Throwable $e) { /* never fails the punch */ }

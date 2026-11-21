@@ -17,7 +17,7 @@ set_exception_handler(static function (\Throwable $x): void {
 $dir = dirname(__DIR__);
 $opt = getopt('', ['root-user::', 'root-password::', 'url::']) + ['root-user' => 'root', 'root-password' => ''];
 foreach (['storage/app/public', 'storage/framework/cache/data', 'storage/framework/sessions', 'storage/framework/views', 'storage/logs', 'bootstrap/cache'] as $d) {
-    is_dir($dir . '/' . $d) || mkdir($dir . '/' . $d, 0775, true);   // storage/ is never on GitHub (AmetecsGlobal .gitignore)
+    is_dir($dir . '/' . $d) || mkdir($dir . '/' . $d, 0775, true);   // storage/ is never on GitHub (Ametecs Global .gitignore)
 }
 $envFile = $dir . '/.env';
 is_file($envFile) || copy($dir . '/.env.example', $envFile);

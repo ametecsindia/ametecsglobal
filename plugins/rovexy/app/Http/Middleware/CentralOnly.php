@@ -13,7 +13,7 @@ final class CentralOnly
 {
     public function handle(Request $request, Closure $next)
     {
-        // AmetecsGlobal: its Super Admin, billing and website are AmetecsGlobal's - ROVEXY's own are closed (no second place to sell or issue licences).
+        // Ametecs Global: its Super Admin, billing and website are Ametecs Global's - ROVEXY's own are closed (no second place to sell or issue licences).
         if (\App\Services\AgBridge::managed()) {
             return $request->isMethod('GET') && $request->path() === '/' ? redirect()->away(dirname($request->getBasePath(), 3) . '/core/') : abort(404);
         }

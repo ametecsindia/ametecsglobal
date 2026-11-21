@@ -47,6 +47,15 @@ if (isset($_GET['applogin'], $_GET['device']) && (string) $_GET['applogin'] !== 
     } catch (\Throwable $alX) {
         error_log('boot-hooks app login link: ' . $alX->getMessage());
     }
+    // Ametecs Global one app (Phase 4): r=open-<app> goes on into that app with the same sign-in.
+    if (preg_match('/^open-(qronex|smartept)$/', (string) ($_GET['r'] ?? ''), $alApp) === 1) {
+        header('Location: ' . $hookBase . '/../../../core/open.php?app=' . $alApp[1]);
+        exit;
+    }
+    if (in_array((string) ($_GET['r'] ?? ''), ['open-me', 'open-scan'], true)) {   // My space, Scan QR attendance (core)
+        header('Location: ' . $hookBase . '/../../../core/' . ($_GET['r'] === 'open-me' ? '?v=me' : 'scan.php?go=1'));
+        exit;
+    }
     header('Location: ' . $hookBase . '/app.php?r=' . rawurlencode(preg_match('/^[a-z0-9-]{1,60}$/', (string) ($_GET['r'] ?? '')) === 1 ? (string) $_GET['r'] : 'dashboard'));
     exit;
 }
@@ -102,7 +111,7 @@ try {
     $hookUser = $session->user();
     $hookTenant = (string) ($hookUser['tenant_id'] ?? '');
 
-    // Inside AmetecsGlobal the licence is AmetecsGlobal Super Admin's (core/gate.php), never SmartPRS3's own subscription rows.
+    // Inside Ametecs Global the licence is Ametecs Global Super Admin's (core/gate.php), never SmartPRS3's own subscription rows.
     $hookInAg = is_file(__DIR__ . '/../../../../core/gate.php');
     if ($hookUser !== null && $hookTenant !== '' && !$licence->isOnPrem() && $pdo !== null) {
         $t = $platform->find('tenants', $hookTenant);

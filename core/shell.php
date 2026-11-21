@@ -1,7 +1,7 @@
 <?php
 /**
  * THE CLIENT SHELL (owner, 18 Nov 2026 - Phase 4): one sidebar and one notification list for every client page
- * (core/index.php and core/org.php), grouped the way the AmetecsGlobal spec lists the administrator's sections:
+ * (core/index.php and core/org.php), grouped the way the Ametecs Global spec lists the administrator's sections:
  *
  *   Overview      Dashboard · My applications
  *   Software      Modules & plugins · Available updates · Upgrade history · Installations
@@ -94,7 +94,7 @@ final class AmetecsShell
                     'people' => is_array($raw['people'] ?? null) ? $raw['people'] : null, 'range' => $raw['range'] ?? null]);
                 @file_put_contents($cf, json_encode($out), LOCK_EX);
             } catch (\Throwable $x) {
-                error_log('AmetecsGlobal dashboard figures for ' . $code . ': ' . $x->getMessage());
+                error_log('Ametecs Global dashboard figures for ' . $code . ': ' . $x->getMessage());
                 $out = ['tiles' => [], 'error' => 'The summary could not be read just now.'];
             }
         } elseif (($j = json_decode((string) ($licence['stats_json'] ?? ''), true)) !== null && is_array($j)) {
@@ -179,57 +179,49 @@ final class AmetecsShell
      * The sidebar. $base = how this page reaches core/index.php ('' from index.php itself, './' from org.php).
      * $active = view key (home, apps, updates, ... ) or 'org:<route>' on Organization Setup.
      */
-    public static function nav(string $company, bool $isAdmin, string $active, array $counts = [], string $base = ''): string
+    public static function nav(string $company, bool $isAdmin, string $active, array $counts = [], string $base = '', ?\PDO $pdo = null, ?array $user = null): string
     {
-        $v = static fn (string $k): string => $k === 'home' ? ($base === '' ? './' : $base) : $base . '?v=' . $k;
-        $item = static function (string $href, string $icon, string $label, bool $on, int $count = 0, string $extra = ''): string {
-            return '<a class="nv' . ($on ? ' on' : '') . '" href="' . ag_h($href) . '" title="' . ag_h($label) . '"' . $extra . '><i class="fas ' . $icon . '"></i><span>' . ag_h($label) . '</span>'
-                . ($count > 0 ? '<em class="ucnt">' . $count . '</em>' : '') . '</a>';
-        };
         // MENU, 18 Nov 2026 (owner: "redesign left side menu and toggle option like hide and unhide"): the arrow by the
         // brand folds the menu to an icon rail and back (remembered in this browser, html.sb-mini; ui.js).
-        $h = '<aside class="side cside"><div class="brandrow"><a class="brand" href="' . ag_h($v('home')) . '"><span class="logo-mark">AG</span><span>Ametecs<b>Global</b></span></a>'
+        $h = '<aside class="side cside"><div class="brandrow"><a class="brand" href="' . ag_h($base === '' ? './' : $base) . '"><span class="logo-mark">AG</span><span>Ametecs <b>Global</b></span></a>'
             . '<button type="button" class="sbtog" data-sbtog title="Hide menu" aria-label="Hide or show the menu"><i class="fas fa-angles-left"></i></button></div>';
         if ($company !== '') {
             $h .= '<div class="ws"><span class="ws-i">' . ag_h(mb_strtoupper(mb_substr($company, 0, 1))) . '</span><span><b>' . ag_h($company) . '</b><small>Workspace</small></span></div>';
         }
-        // Phase 6 (owner, 18 Nov 2026: "remove repeated information, keep navigation simple"): updates, versions and
-        // installations live on My applications; upgrade history is part of Activity; plans are part of Licences;
-        // notifications are the bell; account settings are under the user menu.
-        $h .= '<nav class="snav">' . $item($v('home'), 'fa-gauge-high', 'Dashboard', $active === 'home');
-        if ($isAdmin) {
-            // MENU v3, 19 Nov 2026 (owner: "redesign left menu", grouped by task): People, Applications, Billing, Settings.
-            $orgIcons = ['Organization' => 'fa-sitemap', 'Employees' => 'fa-users', 'Logins & access' => 'fa-id-card', 'Attendance devices' => 'fa-fingerprint'];
-            $grp = [];
-            foreach (AmetecsSetup::CORE as $g => $items) {
-                $open = false;
-                $subs = '';
-                foreach ($items as $label => $it) {
-                    $route = 'org:' . $it[0] . ($it[1] !== '' ? ':' . $it[1] : '');
-                    $open = $open || $route === $active;
-                    $q = AmetecsSetup::href($it);
-                    $subs .= '<a class="sub' . ($route === $active ? ' on' : '') . '" href="' . ag_h($base . 'org.php' . str_replace('?r=', '?s=', $q)) . '" data-q="' . ag_h($q) . '"><i class="fas ' . ag_h($it[2]) . '"></i><span>' . ag_h($label) . '</span></a>';
-                }
-                $grp[$g] = '<details class="grp"' . ($open ? ' open' : '') . '><summary title="' . ag_h($g) . '"><i class="fas ' . ($orgIcons[$g] ?? 'fa-folder') . '"></i><span>' . ag_h($g) . '</span><i class="fas fa-chevron-down car"></i></summary>' . $subs . '</details>';
+        // ONE MENU (owner, 20 Nov 2026): every task of every licensed app, grouped by work area (core/menu.php) - the same
+        // list ag-topbar.js draws inside the apps. A group opens when it holds the page on screen.
+        $m = $pdo !== null && $user !== null ? AmetecsMenu::groups($pdo, $user, AmetecsMenu::root()) : ['groups' => [], 'prs_pending' => false];
+        $keyOf = static function (string $href): string {
+            if (preg_match('/[?&]v=([a-z0-9-]+)/', $href, $x) === 1) { return $x[1]; }
+            if (preg_match('/org\.php\?s=([a-z0-9-]+)/', $href, $x) === 1) { return 'org:' . $x[1]; }
+            return str_ends_with($href, '/core/') ? 'home' : '';
+        };
+        $alias = ['updates' => 'apps', 'invoice' => 'billing', 'notifications' => 'home', 'account' => 'home'];
+        $want = $alias[$active] ?? $active;
+        // FIND A PAGE (redesign, 20 Nov 2026): type to filter every task in every work area - no hunting through groups
+        $h .= '<div class="sfind"><i class="fas fa-magnifying-glass"></i><input type="search" placeholder="Find a page…" aria-label="Find a page" data-sfind></div>'
+            . '<script>document.addEventListener("input",function(e){if(!e.target.matches("[data-sfind]"))return;var q=e.target.value.trim().toLowerCase(),n=e.target.closest("aside").querySelector(".snav");'
+            . 'n.querySelectorAll("details.grp").forEach(function(g){var any=false;g.querySelectorAll("a.sub").forEach(function(a){var m=!q||a.textContent.toLowerCase().indexOf(q)>=0;a.hidden=!m;any=any||m;});g.hidden=!any;if(q)g.open=any;});'
+            . 'n.querySelectorAll(":scope > a.nv").forEach(function(a){a.hidden=!!q&&a.textContent.toLowerCase().indexOf(q)<0;});});</script>';
+        $h .= '<nav class="snav">';
+        foreach ($m['groups'] as $g) {
+            $subs = '';
+            $open = false;
+            foreach ($g['items'] as $it) {
+                $on = $it['app'] === 'core' && $keyOf($it['href']) === $want;
+                $open = $open || $on;
+                $subs .= '<a class="sub' . ($on ? ' on' : '') . '" href="' . ag_h($it['href']) . '"' . (str_contains($it['href'], 'org.php?s=') ? ' data-q="?r=' . ag_h(substr($it['href'], strpos($it['href'], 's=') + 2)) . '"' : '')
+                    . '><i class="fas ' . ag_h($it['icon']) . '"></i><span>' . ag_h($it['label']) . '</span>' . (!empty($it['count']) ? '<em class="ucnt">' . (int) $it['count'] . '</em>' : '') . '</a>';
             }
-            $h .= '<div class="nav-l">People</div>' . ($grp['Employees'] ?? '') . ($grp['Attendance devices'] ?? '') . ($grp['Logins & access'] ?? '')
-                . $item($base . 'org.php?s=users', 'fa-user-shield', 'Users & permissions', $active === 'org:users')
-                . '<div class="nav-l">Applications</div>'
-                . $item($v('apps'), 'fa-grip', 'My applications', in_array($active, ['apps', 'updates'], true), (int) ($counts['updates'] ?? 0))
-                . $item($v('plugins'), 'fa-puzzle-piece', 'Modules & plugins', $active === 'plugins')
-                . $item($base . 'org.php?s=ag-apps', 'fa-toggle-on', 'App access', $active === 'org:ag-apps')
-                . '<div class="nav-l">Billing</div>'
-                . $item($v('licences'), 'fa-key', 'Licences & plans', $active === 'licences')
-                . $item($v('billing'), 'fa-file-invoice', 'Payments & invoices', $active === 'billing', (int) ($counts['invoices'] ?? 0))
-                . '<div class="nav-l">Settings</div>'
-                . $item($base . 'org.php?s=setup-companies', 'fa-building', 'Company profile', $active === 'org:setup-companies', 0, ' data-q="?r=setup-companies"')
-                . ($grp['Organization'] ?? '');
-            foreach (array_diff_key($grp, array_flip(['Employees', 'Attendance devices', 'Logins & access', 'Organization'])) as $g) { $h .= $g; }   // any group added later
+            if ($g['key'] === 'home' && count($g['items']) === 1) {   // a Home with only the dashboard is one plain item
+                $it = $g['items'][0];
+                $h .= '<a class="nv' . ($want === 'home' ? ' on' : '') . '" href="' . ag_h($it['href']) . '"><i class="fas fa-gauge-high"></i><span>Dashboard</span></a>';
+                continue;
+            }
+            $h .= '<details class="grp"' . ($open ? ' open' : '') . ' data-k="' . ag_h($g['key']) . '"><summary title="' . ag_h($g['label']) . '"><i class="fas ' . ag_h($g['icon']) . '"></i><span>' . ag_h($g['label']) . '</span><i class="fas fa-chevron-down car"></i></summary>' . $subs . '</details>';
         }
-        $h .= '<div class="nav-l">Help</div>'
-            . ($isAdmin ? $item($v('activity'), 'fa-clock-rotate-left', 'Activity history', $active === 'activity') : '')
-            . $item($v('support'), 'fa-life-ring', 'Support & help', $active === 'support')
-            . '</nav><div class="side-foot"><span class="dotlive"></span><span>All systems normal</span><button type="button" class="sbtog2" data-sbtog title="Hide / show menu"><i class="fas fa-angles-left"></i></button></div></aside>';
+        $h .= '</nav>' . (!empty($m['prs_pending']) ? '<script>try{if(!sessionStorage.agPrsNav){sessionStorage.agPrsNav=1;fetch(' . json_encode($m['prs_nav']) . ',{credentials:"same-origin"}).then(function(){location.reload()})}}catch(e){}</script>' : '')
+            . '<div class="side-foot"><span class="dotlive"></span><span>All systems normal</span><button type="button" class="sbtog2" data-sbtog title="Hide / show menu"><i class="fas fa-angles-left"></i></button></div></aside>';
         return $h;
     }
 }

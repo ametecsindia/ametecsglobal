@@ -1,0 +1,92 @@
+/* ONE TOP BAR + LIGHT SIDEBAR (19 Nov 2026): loaded by ag-topbar.js inside ROVEXY, QRONEX and SmartEPT so their top bar
+   looks like Ametecs Global's and follows the theme chosen there. */
+.agtb{position:sticky;top:0;z-index:60;display:flex;align-items:center;gap:14px;height:58px;padding:0 24px;box-sizing:border-box;
+  background:rgba(255,251,240,.94);border-bottom:1px solid #ecdcb6;backdrop-filter:blur(8px);font:500 13px/1.3 Inter,"Segoe UI",system-ui,sans-serif;color:#17130c}
+.agtb *{box-sizing:border-box}
+.agtb .c{font-weight:600;color:#7a6e5b;display:flex;align-items:center;gap:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.agtb .c a{color:inherit;text-decoration:none}.agtb .c a:hover{color:#17130c}.agtb .c svg{width:9px;height:9px;opacity:.6;flex:none}.agtb .c b{color:#17130c;font-weight:600}
+.agtb .bl{position:relative;margin-left:auto;width:38px;height:38px;border-radius:10px;display:grid;place-items:center;border:1px solid #ece3d1;background:#fff;color:#8a6420;text-decoration:none}
+.agtb .bl em{position:absolute;top:-6px;right:-6px;min-width:18px;height:18px;padding:0 5px;border-radius:99px;background:#8b1e2d;color:#fff;font:700 10.5px/18px system-ui;text-align:center;font-style:normal}
+.agtb .ck{display:flex;align-items:center;gap:6px;color:#7a6e5b;margin-left:6px;white-space:nowrap}
+.agtb svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.agtb details{position:relative;margin-left:8px}.agtb summary{list-style:none;display:flex;align-items:center;gap:10px;cursor:pointer;padding:4px 6px;border-radius:10px}
+.agtb summary::-webkit-details-marker{display:none}.agtb summary:hover{background:rgba(214,174,85,.12)}
+.agtb .av{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;background:linear-gradient(135deg,#f3dc95,#d6ae55 45%,#b08433);color:#14100a;font-weight:800;font-size:13px}
+.agtb .nm{display:flex;flex-direction:column;font-weight:700;color:#17130c;line-height:1.2}.agtb .nm small{font-weight:500;font-size:11.5px;color:#7a6e5b}
+.agtb .mn{position:absolute;right:0;top:calc(100% + 8px);width:250px;background:#fff;border:1px solid #ece3d1;border-radius:12px;box-shadow:0 18px 40px -12px rgba(20,16,10,.35);padding:6px;z-index:70}
+.agtb .mn .h{padding:10px 10px 8px;border-bottom:1px solid #f1e9d8;margin-bottom:4px}.agtb .mn .h b{display:block;color:#17130c}.agtb .mn .h span{font-size:12px;color:#7a6e5b}
+.agtb .mn a,.agtb .mn button{display:flex;width:100%;align-items:center;gap:10px;padding:9px 10px;border-radius:8px;color:#3d3426;text-decoration:none;background:none;border:0;font:inherit;cursor:pointer;text-align:left}
+.agtb .mn a:hover,.agtb .mn button:hover{background:#fbf3e2;color:#17130c}
+.agtb .th{display:flex;align-items:center;gap:8px;padding:8px 10px;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#a8946c}
+.agtb .th span{margin-right:auto}.agtb .th i{width:26px;height:26px;border-radius:50%;cursor:pointer;border:2px solid transparent;box-shadow:0 0 0 1px #e6dac2}
+.agtb .th i.on{border-color:#b08433}
+/* themes */
+html.th-navy .agtb{background:rgba(250,251,253,.94);border-bottom-color:#dfe5ee}html.th-navy .agtb .av{background:linear-gradient(145deg,#132b50,#0a1a33);color:#e8c977}
+html.th-light .agtb{background:rgba(255,255,255,.95);border-bottom-color:#ece4d2}
+html.th-dark .agtb{background:rgba(20,17,12,.94);border-bottom-color:#2a241a;color:#e9e1cf}
+html.th-dark .agtb .c,html.th-dark .agtb .ck,html.th-dark .agtb .nm small{color:#a89b82}html.th-dark .agtb .c b,html.th-dark .agtb .nm{color:#f3e7c9}
+html.th-dark .agtb .bl{background:#17140f;border-color:#3a3120;color:#e8c977}
+html.th-dark .agtb .mn{background:#17140f;border-color:#3a3120}html.th-dark .agtb .mn .h{border-color:#2a241a}html.th-dark .agtb .mn .h b{color:#f3e7c9}
+html.th-dark .agtb .mn a,html.th-dark .agtb .mn button{color:#d9cdb3}html.th-dark .agtb .mn a:hover,html.th-dark .agtb .mn button:hover{background:#221c13;color:#f3e7c9}
+.agtb~.org-bar{margin-top:10px!important}
+.agtb .mn button{justify-content:flex-start}
+/* EASY WAY BACK (owner, 19 Nov 2026): a visible Ametecs Global button at the start of every app's top bar */
+.agtb .hm{display:inline-flex;align-items:center;gap:8px;flex:none;height:36px;padding:0 12px 0 5px;border-radius:10px;background:#14100a;color:#f3e7c9;font-weight:700;font-size:12.5px;text-decoration:none;box-shadow:0 6px 14px -8px rgba(20,16,10,.6)}
+.agtb .hm span{width:26px;height:26px;border-radius:7px;display:grid;place-items:center;background:linear-gradient(135deg,#f3dc95,#d6ae55 45%,#b08433);color:#14100a;font-weight:800;font-size:11px}
+.agtb .hm:hover{background:#2a2012}
+html.th-navy .agtb .hm{background:#0a1a33}html.th-dark .agtb .hm{background:#221c13;border:1px solid #3a3120}
+@media (max-width:700px){.agtb .hm{font-size:0;gap:0;padding:0 5px}.agtb .nm{display:none}}
+
+/* ONE MENU (owner, 20 Nov 2026: "all app left menu like Ametecs Global"): every app's left menu gets Ametecs Global's look -
+   its background, gold section labels, icons in small gold tiles, and the gold pill for the open page - in all four themes.
+   ag-topbar.js marks the page html.ag-<app>; only colours, spacing and shapes change, never what the menu does. */
+html[class*="ag-"]{--sb-bg:linear-gradient(170deg,#1d170e 0%,#110d07 55%,#0a0704 100%);--sb-bd:rgba(232,201,119,.14);--sb-tx:#d8cbb2;--sb-hv:rgba(232,201,119,.08);--sb-hvtx:#fff7e6;
+  --sb-ic:rgba(232,201,119,.08);--sb-icc:#d6ae55;--sb-lb:#b8964f;--sb-on:linear-gradient(135deg,#f3dc95 0%,#d6ae55 45%,#b08433 100%);--sb-ontx:#14100a}
+html.th-navy[class*="ag-"]{--sb-bg:radial-gradient(420px 260px at 0% 0%,rgba(214,174,85,.16),transparent 60%),linear-gradient(170deg,#0f2342 0%,#0a1a33 50%,#06101f 100%);--sb-bd:rgba(214,174,85,.35);--sb-tx:#d7dfeb;--sb-hvtx:#fff;--sb-ic:rgba(214,174,85,.10);--sb-icc:#e8c977;--sb-lb:#c9a24c}
+html.th-dark[class*="ag-"]{--sb-bg:#0d0b08;--sb-bd:#2a241a}
+html.th-light[class*="ag-"]{--sb-bg:#fff;--sb-bd:#ece3d1;--sb-tx:#3d3426;--sb-hv:#fbf3e2;--sb-hvtx:#17130c;--sb-ic:#faf3e3;--sb-icc:#b08433;--sb-lb:#a8946c}
+:is(html.ag-qronex aside.sidebar,html.ag-smartept .side,html.ag-rovexy .sidebar,html.ag-smartprs3 aside.sidebar){background:var(--sb-bg)!important;border-right:1px solid var(--sb-bd)!important;box-shadow:inset 0 2px 0 #d6ae55!important;font-family:Inter,"Segoe UI",system-ui,sans-serif}
+:is(html.ag-qronex aside.sidebar nav a,html.ag-smartept .side .nav,html.ag-rovexy .sidebar :is(a.top,button.nav-head,a.sub),html.ag-smartprs3 aside.sidebar .nav-item){align-items:center!important;gap:11px!important;padding:4px 8px!important;border-radius:10px!important;color:var(--sb-tx)!important;background:transparent!important;
+  font-size:13.5px!important;font-weight:500!important;text-decoration:none!important;box-shadow:none!important;border:0!important;transition:background .15s,color .15s}
+:is(html.ag-qronex aside.sidebar nav a,html.ag-smartept .side .nav,html.ag-rovexy .sidebar :is(a.top,button.nav-head,a.sub),html.ag-smartprs3 aside.sidebar .nav-item) :is(span,b,small){color:inherit!important}
+:is(html.ag-qronex aside.sidebar nav a,html.ag-smartept .side .nav,html.ag-rovexy .sidebar :is(a.top,button.nav-head,a.sub),html.ag-smartprs3 aside.sidebar .nav-item):hover{background:var(--sb-hv)!important;color:var(--sb-hvtx)!important}
+:is(html.ag-qronex aside.sidebar nav a>svg,html.ag-smartept .side .nav>.ic,html.ag-rovexy .sidebar :is(a.top,button.nav-head,a.sub)>svg:first-child,html.ag-smartprs3 aside.sidebar .nav-item>i:first-child){width:28px!important;height:28px!important;min-width:28px;border-radius:8px!important;background:var(--sb-ic)!important;color:var(--sb-icc)!important;display:grid!important;place-items:center;
+  box-sizing:border-box!important;padding:7px!important;font-size:13px!important;flex:none;margin:0!important;line-height:1!important;stroke:currentColor}
+html.ag-smartept .side .nav>.ic svg,html.ag-smartprs3 aside.sidebar .nav-item>i:first-child{padding:0!important}
+html.ag-smartept .side .nav>.ic{padding:0!important}html.ag-smartept .side .nav>.ic svg{width:15px;height:15px;color:inherit;stroke:currentColor}
+:is(html.ag-qronex aside.sidebar nav a.on,html.ag-smartept .side .nav.active,html.ag-rovexy .sidebar a.active,html.ag-smartprs3 aside.sidebar a.nav-item.active){background:var(--sb-on)!important;color:var(--sb-ontx)!important;font-weight:700!important;box-shadow:0 8px 20px -10px rgba(220,182,97,.9)!important}
+:is(html.ag-qronex aside.sidebar nav a.on>svg:first-child,html.ag-smartept .side .nav.active>svg:first-child,html.ag-rovexy .sidebar a.active>svg:first-child,html.ag-smartprs3 aside.sidebar a.nav-item.active>svg:first-child,html.ag-qronex aside.sidebar nav a.on>i:first-child,html.ag-smartept .side .nav.active>i:first-child,html.ag-rovexy .sidebar a.active>i:first-child,html.ag-smartprs3 aside.sidebar a.nav-item.active>i:first-child,html.ag-smartept .side .nav.active>.ic){background:rgba(20,16,10,.14)!important;color:#1c1408!important}
+:is(html.ag-qronex aside.sidebar nav a.on,html.ag-smartept .side .nav.active,html.ag-rovexy .sidebar a.active,html.ag-smartprs3 aside.sidebar a.nav-item.active) *{color:inherit!important}
+:is(html.ag-qronex aside.sidebar nav a.on,html.ag-smartept .side .nav.active,html.ag-rovexy .sidebar a.active,html.ag-smartprs3 aside.sidebar a.nav-item.active)::before,:is(html.ag-qronex aside.sidebar nav a.on,html.ag-smartept .side .nav.active,html.ag-rovexy .sidebar a.active,html.ag-smartprs3 aside.sidebar a.nav-item.active)::after{display:none!important}
+:is(html.ag-qronex aside.sidebar .uppercase.tracking-widest,html.ag-smartept .side .navgrp-t,html.ag-smartept .side .navgrp-t *){color:var(--sb-lb)!important;font-size:10.5px!important;font-weight:700!important;letter-spacing:1.4px!important;text-transform:uppercase}
+html.ag-qronex aside.sidebar nav a{margin:1px 0}
+html.th-light .side img[src*="smartept-logo-h-dark"]{content:url(../../plugins/smartept/public/img/smartept-logo-h-light.png)}
+html.th-light:is(.ag-qronex,.ag-rovexy,.ag-smartprs3,.ag-smartept) :is(html.ag-qronex aside.sidebar,html.ag-smartept .side,html.ag-rovexy .sidebar,html.ag-smartprs3 aside.sidebar) :is(.text-white,.brand,.brand *,.nav-user,.nav-user *,.foot,.foot *,p,small){color:#3d3426!important}
+/* the apps hide menu items themselves (permissions, licences, Ametecs Global's own screens): never override that */
+html.ag-smartept .side .nav[data-view="org"],html.ag-smartept .side .nav[data-view="users"],html.ag-smartept .side .nav[data-view="biometric"]{display:none!important}
+/* ONE MENU (20 Nov 2026): Ametecs Global's grouped menu in place of each app's own (ag-topbar.js drawMenu) */
+.agm{display:flex;flex-direction:column;gap:2px;padding:10px 10px 18px;overflow-y:auto;flex:1;min-height:0;font-family:Inter,"Segoe UI",system-ui,sans-serif;font-size:13.5px}
+.agm a{text-decoration:none}
+.agm-b{display:flex;align-items:center;gap:10px;padding:6px 6px 14px;color:#f3e7c9;font-size:16px;font-weight:600;letter-spacing:.2px}
+.agm-b b{color:#e8c977;font-weight:800}
+.agm-b span{width:32px;height:32px;border-radius:9px;display:grid;place-items:center;background:var(--sb-on);color:#14100a;font-weight:800;font-size:12px;flex:none}
+html.th-light .agm-b{color:#17130c}html.th-light .agm-b b{color:#b08433}
+.agm-g summary{list-style:none;display:flex;align-items:center;gap:11px;padding:7px 8px;border-radius:10px;cursor:pointer;color:var(--sb-tx);font-weight:600;user-select:none}
+.agm-g summary::-webkit-details-marker{display:none}
+.agm-g summary:hover{background:var(--sb-hv);color:var(--sb-hvtx)}
+.agm-g summary>i:first-child,.agm-i>i{width:28px;height:28px;min-width:28px;border-radius:8px;display:grid;place-items:center;background:var(--sb-ic);color:var(--sb-icc);font-size:12.5px}
+.agm-g summary span{flex:1}.agm-g summary .car{font-size:10px;color:var(--sb-lb);transition:transform .2s}
+.agm-g[open] summary .car{transform:rotate(180deg)}
+.agm-g[open] summary{color:var(--sb-hvtx)}
+.agm-i{display:flex;align-items:center;gap:10px;margin:1px 0 1px 14px;padding:4px 8px;border-radius:10px;color:var(--sb-tx);font-weight:500;line-height:1.25}
+.agm-i>i{width:24px;height:24px;min-width:24px;font-size:11px;border-radius:7px}
+.agm-i span{flex:1;min-width:0}
+.agm-i em{font-style:normal;font-size:10.5px;font-weight:700;background:#d6ae55;color:#14100a;border-radius:999px;padding:1px 7px}
+.agm-i:hover{background:var(--sb-hv);color:var(--sb-hvtx)}
+.agm-i.on{background:var(--sb-on);color:var(--sb-ontx);font-weight:700;box-shadow:0 8px 20px -10px rgba(220,182,97,.9)}
+.agm-i.on>i{background:rgba(20,16,10,.12);color:#14100a}
+/* the app's sidebar keeps its own size, position and phone drawer; only its contents are Ametecs Global's */
+html.ag-rovexy .sidebar.mini .agm :is(span,.car,em),html.ag-rovexy .sidebar.mini .agm-b{display:none}
+.agm-f{position:relative;margin:0 2px 10px}.agm-f i{position:absolute;left:11px;top:50%;transform:translateY(-50%);font-size:12px;color:var(--sb-lb)}
+.agm-f input{width:100%;box-sizing:border-box;padding:8px 10px 8px 30px;border-radius:10px;border:1px solid rgba(201,162,76,.25);background:rgba(255,255,255,.06);color:var(--sb-tx);font:inherit;font-size:13px;outline:none}
+.agm-f input:focus{border-color:#c9a24c}

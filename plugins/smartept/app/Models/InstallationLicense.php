@@ -57,7 +57,7 @@ class InstallationLicense extends Model
      */
     public static function governing(?Company $company): self
     {
-        \App\Services\AgBridge::isAg($company) && \App\Services\AgBridge::licence($company);   // AmetecsGlobal: live from its Super Admin
+        \App\Services\AgBridge::isAg($company) && \App\Services\AgBridge::licence($company);   // Ametecs Global: live from its Super Admin
 
         return ($company && $company->deployment_model === 'AMETECS_SAAS')
             ? static::forCompany($company->id)
@@ -82,7 +82,7 @@ class InstallationLicense extends Model
      */
     public function fromFile(): bool
     {
-        // AmetecsGlobal's licence is self-authoritative too: SmartEPT Central has nothing to add to it
+        // Ametecs Global's licence is self-authoritative too: SmartEPT Central has nothing to add to it
         return in_array($this->bundle['source'] ?? null, ['file', 'ametecsglobal'], true);
     }
 

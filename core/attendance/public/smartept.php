@@ -1,6 +1,6 @@
 <?php
 /**
- * SMARTEPT -> AMETECSGLOBAL ATTENDANCE (owner, 19 Nov 2026). SmartEPT inside AmetecsGlobal (AgBridge::punch) posts every
+ * SMARTEPT -> AMETECSGLOBAL ATTENDANCE (owner, 19 Nov 2026). SmartEPT inside Ametecs Global (AgBridge::punch) posts every
  * agent log-in / log-out here, signed with the shared key core/data/ag-sso.key. Same mapping as SmartEPT's webhook
  * (SmartEpt::punchesFor) and the same one door (PunchIngest, source "smartept"): never twice, unknown codes held.
  */

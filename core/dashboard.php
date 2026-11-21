@@ -190,7 +190,15 @@ $dialog = static function (string $key, string $title) use ($lists, $range): str
     return $h . '</tbody></table></div><aside class="kdet" hidden></aside></div></dialog>';
 };
 
+// QUICK ACTIONS (redesign, 20 Nov 2026: "important features directly from the main dashboard"): the daily jobs, one click
+// from home, only those this person's role and licences allow (taken from the one menu, core/menu.php).
+$qaWant = ['Approvals Inbox', 'Employees', 'Employee Attendance', 'Leave Approvals', 'Generate Payroll', 'All reports',
+    'Field dashboard', 'QR attendance today', 'Productivity dashboard', 'Employee 360', 'Licences & plans', 'App access'];
+$qaAll = [];
+foreach (AmetecsMenu::groups($pdo, $user, AmetecsMenu::root())['groups'] as $qg) { foreach ($qg['items'] as $qi) { $qaAll[strtolower((string) $qi['label'])] ??= $qi; } }
+$qa = array_values(array_filter(array_map(static fn ($l) => $qaAll[strtolower($l)] ?? null, $qaWant)));
 ob_start(); ?>
+<?php if ($qa !== [] && !isset($_GET['frag'])): ?><div class="dqa"><?php foreach ($qa as $q): ?><a href="<?= ag_h((string) $q['href']) ?>"><i class="fas <?= ag_h((string) $q['icon']) ?>"></i><span><?= ag_h((string) $q['label']) ?></span><?= !empty($q['count']) ? '<em>' . (int) $q['count'] . '</em>' : '' ?></a><?php endforeach; ?></div><?php endif; ?>
 <form class="dfilters" id="dfilters" method="get" autocomplete="off">
   <div class="df"><label><i class="far fa-calendar"></i> Date</label><select name="d"><?php foreach ($presets as $k => $v): ?><option value="<?= $k ?>"<?= $k === $preset ? ' selected' : '' ?>><?= $v ?></option><?php endforeach; ?></select></div>
   <div class="df dcust"<?= $preset === 'custom' ? '' : ' hidden' ?>><label>From</label><input type="date" name="from" value="<?= ag_h($from) ?>" max="<?= ag_h($today) ?>"></div>
@@ -209,6 +217,63 @@ ob_start(); ?>
 <?php if ($notes !== [] && !$filtered && $f['app'] === ''): ?>
 <details class="panel attn"<?= count(array_filter($notes, static fn ($n) => $n['level'] === 'red')) > 0 ? ' open' : '' ?>><summary><i class="fas fa-bell" style="color:var(--gold)"></i> Needs attention <em><?= count($notes) ?></em><a href="?v=notifications">All &rarr;</a></summary><?= AmetecsShell::notificationList($notes, 4) ?></details>
 <?php endif; ?>
+
+<?php
+// TODAY ACROSS APPS (owner, 19 Nov 2026 - unified dashboard, layout A): one strip that reads every app at once -
+// present by ANY source (biometric, QR, QRONEX, SmartEPT PC log-in, web/app punch), people on a PC now, on calls or
+// visits, late and absent - then one licence row per app. Figures come from the core attendance and each app's tiles.
+$tileOf = static function (string $code, string $key) use ($held): ?array {
+    foreach ((array) ($held[$code]['s']['tiles'] ?? []) as $t) { if (($t['key'] ?? '') === $key) { return $t; } }
+    return null;
+};
+$bySrc = [];
+$anyIn = 0;
+try {
+    $codes = array_values(array_filter(array_map(static fn ($e) => (string) ($e['emp_code'] ?? ''), $chosen)));
+    if ($codes !== []) {
+        $in = implode(',', array_fill(0, count($codes), '?'));
+        $st = $pdo->prepare("SELECT COALESCE(NULLIF(source, ''), 'web') src, COUNT(DISTINCT emp_code) n FROM attendance_logs WHERE tenant_id = ? AND log_date BETWEEN ? AND ? AND direction = 'in' AND emp_code IN ($in) GROUP BY src");
+        $st->execute([$tenant, $from, $to, ...$codes]);
+        foreach ($st->fetchAll(\PDO::FETCH_KEY_PAIR) as $src => $n) {
+            $lab = ['push' => 'Biometric', 'pull' => 'Biometric', 'sbb' => 'Biometric', 'qr' => 'QR', 'qronex' => 'QRONEX', 'smartept' => 'PC', 'caller' => 'ROVEXY', 'web' => 'Web/app', 'mobile' => 'App'][$src] ?? ucfirst((string) $src);
+            $bySrc[$lab] = ($bySrc[$lab] ?? 0) + (int) $n;
+        }
+        $st = $pdo->prepare("SELECT COUNT(DISTINCT emp_code) FROM attendance_logs WHERE tenant_id = ? AND log_date BETWEEN ? AND ? AND direction = 'in' AND emp_code IN ($in)");
+        $st->execute([$tenant, $from, $to, ...$codes]);
+        $anyIn = (int) $st->fetchColumn();
+    }
+} catch (\Throwable) {
+}
+arsort($bySrc);
+$presentAny = max($anyIn, (int) ($tot['present'] ?? 0));
+$pc = $tileOf('smartept', 'eptonline');
+$duty = $tileOf('rovexy', 'rxduty');
+$calls = $tileOf('rovexy', 'rxcalls');
+?>
+<section class="xapp">
+  <div class="xa"><span><i class="fas fa-user-check"></i>Present <small>any source</small></span><b><?= $presentAny ?><em> / <?= count($chosen) ?></em></b>
+    <small><?= $bySrc !== [] ? ag_h(implode(' · ', array_map(static fn ($k, $n) => $k . ' ' . $n, array_keys($bySrc), $bySrc))) : 'no punches ' . ($oneDay ? 'yet' : 'in range') ?></small></div>
+  <div class="xa"><span><i class="fas fa-desktop"></i>On a PC now <small>SmartEPT</small></span><b><?= $pc !== null ? ag_h((string) $pc['value']) : '&mdash;' ?></b><small><?= $pc !== null ? ag_h((string) $pc['sub']) : (isset($held['smartept']) ? 'agents not reporting yet' : 'SmartEPT not in your plan') ?></small></div>
+  <div class="xa"><span><i class="fas fa-phone-volume"></i>On duty · calls <small>ROVEXY</small></span><b><?= $duty !== null ? ag_h((string) $duty['value']) : '&mdash;' ?><?= $calls !== null ? '<em> · ' . ag_h((string) $calls['value']) . ' calls</em>' : '' ?></b><small><?= $calls !== null ? ag_h((string) $calls['sub']) : (isset($held['rovexy']) ? 'no calls yet' : 'ROVEXY not in your plan') ?></small></div>
+  <div class="xa<?= ((int) ($tot['late'] ?? 0) + (int) ($tot['absent'] ?? 0)) > 0 ? ' warn' : '' ?>"><span><i class="fas fa-clock"></i>Late · Absent <small>SmartPRS rules</small></span><b><?= (int) ($tot['late'] ?? 0) ?> · <?= (int) ($tot['absent'] ?? 0) ?></b><small><?= count($lists['notmarked']) ?> not marked</small></div>
+</section>
+<?php
+// LICENCES AT A GLANCE: one row per app, the same facts as Licences & plans (Super Admin decides them).
+$licRows = '';
+foreach ($held as $code => $h) {
+    $l = $h['l']; $st2 = AmetecsLicences::stateOf($l); [$sl, $sc] = AmetecsLicences::STATES[$st2];
+    $until = (string) ($l['valid_until'] ?? ''); $dl = $until === '' ? null : (int) floor((strtotime($until) - strtotime($today)) / 86400);
+    $use = null;
+    foreach ((array) ($h['s']['tiles'] ?? []) as $t) { if (preg_match('/(users|employees)$/', (string) ($t['key'] ?? '')) && is_numeric($t['value'])) { $use = (int) $t['value']; break; } }
+    $code === 'smartprs3' && $use = count($everyone);
+    $seats = (int) $l['seats'];
+    $pill = $st2 !== 'on' ? '<span class="lp lp-' . $sc . '">' . ag_h($sl) . '</span>' : ($dl !== null && $dl <= 30 ? '<span class="lp lp-amber">' . $dl . ' days left</span>' : '<span class="lp lp-green">Active</span>');
+    $licRows .= '<a class="xl" href="?v=licences&amp;app=' . ag_h($code) . '#lp"><b><i style="background:' . ag_h((string) ($h['p']['color'] ?? '#B8893B')) . '"></i>' . ag_h((string) $h['p']['name']) . '</b>'
+        . '<span>' . ($use !== null ? $use . ' / ' : '') . ($seats > 0 ? $seats : '&infin;') . ' <small>' . ag_h((string) ($h['p']['unit'] ?? 'users')) . '</small>' . ($use !== null && $seats > 0 ? '<em class="xbar"><i style="width:' . min(100, (int) round(100 * $use / $seats)) . '%"></i></em>' : '') . '</span>'
+        . '<span>' . ($until === '' ? 'No end date' : 'till ' . ag_h(date('d M Y', (int) strtotime($until)))) . '</span>' . $pill
+        . '<span class="xgo">' . ($st2 !== 'on' || ($dl !== null && $dl <= 30) ? 'Renew' : 'Details') . ' <i class="fas fa-arrow-right"></i></span></a>';
+}
+?>
 
 <section class="kpis">
   <?= $tile('Employees', (string) count($chosen), $filtered ? 'in this selection' : 'active', '', 'fa-users', 'employees') ?>
@@ -323,6 +388,7 @@ $cols = ['Present' => '#c9a24c', 'On leave' => '#1f3a5f', 'Absent' => '#8b1e2d']
 
 <h2 class="dsec"><i class="fas fa-grip"></i>Applications<span><?= count($held) ?> in your plan</span></h2>
 
+<div class="dapps">
 <?php $later = []; foreach ($held as $code => $h): $p = $h['p']; $s = $h['s'];
     $extra = array_values(array_filter((array) ($s['tiles'] ?? []), static fn ($t) => !isset($combine[$t['key']]) && $t['key'] !== 'employees' && $t['key'] !== 'rate'));
     if (!$h['live'] && empty($s['tiles']) && $h['l']['deployment'] !== 'onprem') { $later[] = (string) $p['name']; continue; } ?>
@@ -340,21 +406,20 @@ $cols = ['Present' => '#c9a24c', 'On leave' => '#1f3a5f', 'Absent' => '#8b1e2d']
     <?php if (!empty($s['range']) && $s['range'][0] !== $from): ?><p class="dnote">Shows <?= ag_h(date('d M', (int) strtotime($s['range'][0]))) ?> onwards: at most 62 days at a time.</p><?php endif; ?>
   </section>
 <?php endforeach; ?>
-<?php if ($later !== []): ?><p class="dnote later"><i class="fas fa-hourglass-half"></i> Also in your plan, arriving on AmetecsGlobal soon: <?= ag_h(implode(', ', $later)) ?>.</p><?php endif; ?>
+</div>
+<?php if ($later !== []): ?><p class="dnote later"><i class="fas fa-hourglass-half"></i> Also in your plan, arriving on Ametecs Global soon: <?= ag_h(implode(', ', $later)) ?>.</p><?php endif; ?>
 <?php if ($held === []): ?><div class="lic-t"><div class="empty2" style="padding:30px">No applications are switched on for your company yet. <a href="?v=support">Contact Ametecs</a>.</div></div><?php endif; ?>
 
-<section class="ins3 eq dbot">
+<section class="ins3 eq dbot" style="grid-template-columns:repeat(auto-fit,minmax(320px,1fr))">
   <div class="chart"><h3><i class="fas fa-calendar-day"></i>Coming up<span class="muted2">next 30 days</span></h3>
     <?php if ($moments === []): ?><div class="emp3"><i class="fas fa-mug-hot"></i>No birthdays, anniversaries, probation ends or expiring documents in the next 30 days.</div>
     <?php else: ?><ul class="mom"><?php foreach (array_slice($moments, 0, 7) as [$n, $ic, $tn, $who, $what]): ?><li><span class="mi <?= $tn ?>"><i class="fas <?= $ic ?>"></i></span><div><b><?= ag_h($who) ?></b><small><?= ag_h($what) ?></small></div><em><?= $n === 0 ? 'Today' : ($n === 1 ? 'Tomorrow' : ($n < 0 ? -$n . 'd ago' : 'in ' . $n . 'd')) ?></em></li><?php endforeach; ?></ul><?php endif; ?></div>
-  <div class="chart"><h3><i class="fas fa-key"></i>Your plan<a class="more2" href="?v=licences">Licences <i class="fas fa-arrow-right"></i></a></h3>
-    <ul class="seatl"><?php foreach ($held as $code => $h): $l = $h['l']; $seats = (int) $l['seats']; $usedN = $code === 'smartprs3' ? count($everyone) : null; $until = (string) ($l['valid_until'] ?? ''); $left = $until !== '' ? (int) floor((strtotime($until) - strtotime($today)) / 86400) : null; ?>
-      <li><div class="logo"><?= $logoOf($code, $h['p']) ?></div><div class="sinfo"><span><?= $usedN !== null ? $usedN . ' / ' : '' ?><?= $seats > 0 ? $seats : '&infin;' ?> <?= ag_h((string) $h['p']['unit']) ?><small><?= $left === null ? 'no end date' : ($left < 0 ? 'ended' : $left . ' days left') ?></small></span>
-        <?php if ($usedN !== null && $seats > 0): $pc = min(100, (int) round(100 * $usedN / $seats)); ?><em class="sbar"><i style="width:<?= $pc ?>%;background:<?= $pc >= 90 ? '#dc2626' : ($pc >= 75 ? '#d97706' : '#16a34a') ?>"></i></em><?php endif; ?></div></li>
-    <?php endforeach; ?></ul></div>
+  <?php /* 'Your plan' moved to the Licences row at the top (19 Nov 2026: no duplicate information) */ ?>
   <div class="chart">    <h3><i class="fas fa-clock-rotate-left"></i>Recent activity<a class="more2" href="?v=activity">All <i class="fas fa-arrow-right"></i></a></h3>
     <?php if ($acts === []): ?><div class="emp3 sm">No changes yet.</div><?php else: ?><ul class="ract"><?php foreach ($acts as $r): ?><li><b><?= ag_h($r['what']) ?></b><small><?= ag_h($r['who']) ?> &middot; <time data-at="<?= ag_h($r['at']) ?>"><?= ag_h($r['at']) ?></time></small></li><?php endforeach; ?></ul><?php endif; ?></div>
 </section>
+<?php /* Licences: at the bottom of the dashboard (owner, 19 Nov 2026: "arrange to bottom") */ ?>
+<?php if ($licRows !== '' && $f['app'] === ''): ?><details class="xlic" open style="margin-top:14px"><summary><i class="fas fa-key"></i>Licences <em><?= count($held) ?> apps</em><a href="?v=licences">Licences &amp; plans &rarr;</a></summary><div class="xls"><?= $licRows ?></div></details><?php endif; ?>
 <?php
 $dashHtml = (string) ob_get_clean();
 if (isset($_GET['frag'])) {

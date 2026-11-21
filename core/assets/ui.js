@@ -1,4 +1,4 @@
-/* AmetecsGlobal UI helpers (Phase 4, 18 Nov 2026) - shared by the client panel, Organization Setup and Super Admin.
+/* Ametecs Global UI helpers (Phase 4, 18 Nov 2026) - shared by the client panel, Organization Setup and Super Admin.
  *  - mobile menu: any [data-drawer] button toggles body.nav-open (the sidebar slides in; tap outside closes it)
  *  - busy buttons: a submitted form's button shows a spinner and cannot be pressed twice
  *  - pagination: tables with class "paged" (or "sortable") show 25 rows a page, with a pager under them;

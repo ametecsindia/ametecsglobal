@@ -5,7 +5,7 @@ use Illuminate\Support\Facades\Route;
 
 // The admin SPA (React build output copied to public/admin). Served from the company's own origin so cookies,
 // CSRF and CSP stay same-origin. The Electron desktop app loads this URL.
-// AMETECSGLOBAL (19 Nov 2026): inside AmetecsGlobal the server lives in a sub-folder (/AmetecsGlobal/plugins/rovexy/public),
+// AMETECSGLOBAL (19 Nov 2026): inside Ametecs Global the server lives in a sub-folder (/AmetecsGlobal/plugins/rovexy/public),
 // so the console page is given its <base> and the folder (window.__ROOT__); the console prefixes every address with it.
 $agConsole = static function () {
     $index = public_path('admin/index.html');
@@ -13,12 +13,15 @@ $agConsole = static function () {
     $root = rtrim(request()->getBasePath(), '/');
     // No inline script and no <base>: the Content-Security-Policy (SecurityHeaders) forbids both. A <meta> carries the folder.
     $html = str_replace(['<head>', '"./assets/', '"../brand/', '"../favicon.ico"'],
-        ['<head><meta name="ag-root" content="' . e($root) . '">' . (\App\Services\AgBridge::managed() ? '<meta name="ag-managed" content="1">' : ''), '"' . $root . '/admin/assets/', '"' . $root . '/brand/', '"' . $root . '/favicon.ico"'], (string) file_get_contents($index));
+        ['<head><meta name="ag-root" content="' . e($root) . '">' . (\App\Services\AgBridge::managed() ? '<meta name="ag-managed" content="1"><link rel="stylesheet" href="' . e($root) . '/ag-brand.css?v=4"><script src="' . e($root) . '/ag-theme.js?v=1"></script>' : ''), '"' . $root . '/admin/assets/', '"' . $root . '/brand/', '"' . $root . '/favicon.ico"'], (string) file_get_contents($index));
+    if (\App\Services\AgBridge::managed()) {   // one brand: the Ametecs Global button, back to the panel
+        $html = preg_replace('/<body([^>]*)>/', '<body$1><a class="ag-home" href="' . e(preg_replace('#/plugins/rovexy/public$#', '', $root) . '/core/') . '" title="Back to Ametecs Global" target="_top">AG</a><script src="' . e(preg_replace('#/plugins/rovexy/public$#', '', $root) . '/core/assets/ag-topbar.js?v=10') . '" defer></script>', $html, 1);
+    }
     return response($html, 200, ['Content-Type' => 'text/html; charset=UTF-8', 'Cache-Control' => 'no-store']);
 };
 Route::get('/admin/{path?}', $agConsole)->where('path', '.*'); // real files (admin/assets/*) are served by the web server before Laravel
 
-// AMETECSGLOBAL one sign-in: AmetecsGlobal posts a signed hand-over (core/open.php); see AgSsoController.
+// AMETECSGLOBAL one sign-in: Ametecs Global posts a signed hand-over (core/open.php); see AgSsoController.
 Route::match(['get', 'post'], '/ag/sso', [\App\Http\Controllers\AgSsoController::class, 'enter'])->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\PreventRequestForgery::class]);
 
 // A company's console by path: /w/<slug>/admin (the only console address on the shared server).

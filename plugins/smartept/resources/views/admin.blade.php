@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+@if(\App\Services\AgBridge::managed())<link rel="stylesheet" href="{{ rtrim(request()->getBasePath(), '/') }}/ag-brand.css?v=9"><script>(function(h){function s(){var t;try{t=localStorage.getItem("agTheme")}catch(e){}h.classList.remove("th-navy","th-light","th-dark");if(t&&t!="gold")h.classList.add("th-"+t)}s();addEventListener("storage",s)})(document.documentElement)</script>@endif
   <link rel="icon" href="{{ rtrim(request()->getBasePath(), '/') }}/favicon.ico?v=2" sizes="any">
   <link rel="icon" type="image/png" sizes="32x32" href="{{ rtrim(request()->getBasePath(), '/') }}/favicon-32x32.png?v=2">
   <link rel="apple-touch-icon" href="{{ rtrim(request()->getBasePath(), '/') }}/apple-touch-icon.png?v=2">
@@ -571,6 +572,7 @@
 </style>
 </head>
 <body>
+@if(\App\Services\AgBridge::managed())<a class="ag-home" href="{{ \App\Services\AgBridge::agUrl('core/') }}" title="Back to Ametecs Global" target="_top">AG</a><script src="{{ \App\Services\AgBridge::agUrl('core/assets/ag-topbar.js') }}?v=10" defer></script>@endif
 
 <!-- LOGIN -->
 <div class="login" id="login">
@@ -581,6 +583,7 @@
     <label>Password</label><input id="password" type="password" value="password">
     <button class="primary" id="btn-login">Sign in</button>
     <div class="err" id="login-err"></div>
+    @if(\App\Services\AgBridge::managed())<a class="primary ag-sso" href="{{ \App\Services\AgBridge::agUrl('core/open.php?app=smartept') }}" target="_top" style="display:block;text-align:center;padding:11px;border-radius:10px;text-decoration:none;margin-top:8px">Sign in through Ametecs Global</a>@endif
     <a href="#" id="fp-link" style="display:block;text-align:center;margin-top:10px;font-size:12.5px;color:#006699;font-weight:700;text-decoration:none">Forgot password?</a>
     <div id="fp-box" style="display:none;margin-top:10px;border-top:1px solid #E5EAEC;padding-top:10px">
       <div id="fp-step1">
@@ -2754,9 +2757,9 @@ The full report with every employee is in your email.</code><br>Submit it and wa
 </script>
 <style>.t12-pair{display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap}.t12.t12-bad{border-color:#C0392B !important}</style>
 <script>
-// AmetecsGlobal (19-Nov-2026): the console may live in a sub-folder (/AmetecsGlobal/plugins/smartept/public).
+// Ametecs Global (19-Nov-2026): the console may live in a sub-folder (/AmetecsGlobal/plugins/smartept/public).
 const BASE = window.EPT_BASE || '';
-const AG_LOCK = window.EPT_AG_LOCK || null;   // licence page in AmetecsGlobal (set above the verbatim block)
+const AG_LOCK = window.EPT_AG_LOCK || null;   // licence page in Ametecs Global (set above the verbatim block)
 const API = BASE + '/api';
 // Per-client branded console: the first path segment (e.g. /abcdindia) is the
 // tenant slug. Empty on /admin. Drives the branded, tenant-locked login.
@@ -2827,6 +2830,18 @@ function toast(msg, onClick, ms) { // 30-Sep-2026: optional click action + durat
   el._t = setTimeout(() => { el.style.opacity = '0'; el.style.transform = 'translateY(8px)'; }, ms || 3000);
 }
 
+// Ametecs Global: no separate SmartEPT sign-in - go (back) through Ametecs Global's one sign-in. Not again within 30 s,
+// so a failure shows the page (with its "Sign in through Ametecs Global" button) instead of a loop.
+// Ametecs Global: the sign-in box stays hidden ("Opening SmartEPT…") while a saved sign-in or ticket is checked; shown only
+// if that really failed (ag-brand.css). Also shown after 12 s whatever happens, so the page can never stay blank.
+function agShowLogin() { const l = document.getElementById('login'); if (l) l.classList.add('ag-show'); }
+setTimeout(agShowLogin, 12000);
+function agResso() {
+  if (Date.now() - Number(sessionStorage.getItem('ag-resso') || 0) <= 30000) return false;
+  sessionStorage.setItem('ag-resso', String(Date.now()));
+  window.top.location.href = AG_LOCK.split('/core/')[0] + '/core/open.php?app=smartept';
+  return true;
+}
 async function api(path, opts = {}) {
   const isForm = opts.body instanceof FormData;
   const r = await fetch(API + path, {
@@ -2847,7 +2862,9 @@ async function api(path, opts = {}) {
     // wall once, rather than letting every screen fail with its own error toast.
     // TOKEN check: on the sign-in screen the inline error is enough — the wall is
     // for someone already inside the console when the licence stops.
-    if (r.status === 403 && e?.error?.code === 'LICENSE_BLOCKED' && TOKEN && AG_LOCK) { window.top.location.href = AG_LOCK; }   // AmetecsGlobal: renew there
+    // ONE LOGIN (19 Nov 2026): signed out in Ametecs Global (or the session ended) - back through Ametecs Global's sign-in
+    if (r.status === 401 && TOKEN && AG_LOCK) { TOKEN = null; sessionStorage.removeItem('ept_token'); agResso(); }
+    if (r.status === 403 && e?.error?.code === 'LICENSE_BLOCKED' && TOKEN && AG_LOCK) { window.top.location.href = AG_LOCK; }   // Ametecs Global: renew there
     else if (r.status === 403 && e?.error?.code === 'LICENSE_BLOCKED' && TOKEN) licenceWall(e.error);
     const err = new Error(msg); err.status = r.status; err.body = e; throw err;
   }
@@ -3331,6 +3348,8 @@ $('#signout').onclick = async () => {
   // A signed ?sso= ticket from SmartEPT Central signs the tenant admin straight in.
   const ssoTicket = new URLSearchParams(location.search).get('sso');
   if (ssoTicket) {
+    const agBtn = document.querySelector('.ag-sso');   // Ametecs Global: say what is happening while the ticket is checked
+    if (agBtn) { agBtn.textContent = 'Signing you in…'; agBtn.style.pointerEvents = 'none'; }
     try {
       const res = await api('/auth/sso', { method: 'POST', body: JSON.stringify({ ticket: ssoTicket }) });
       TOKEN = res.token; ME = res.user;
@@ -3340,15 +3359,21 @@ $('#signout').onclick = async () => {
       return;
     } catch (e) {
       history.replaceState(null, '', location.pathname);
+      if (AG_LOCK && agResso()) return;   // a used or old ticket (page reloaded): get a fresh one from Ametecs Global, once
+      if (agBtn) { agBtn.textContent = 'Sign in through Ametecs Global'; agBtn.style.pointerEvents = ''; }
+      agShowLogin();
       const le = $('#login-err'); if (le) le.textContent = e.message || 'Sign-in link invalid or expired.';
       // fall through to the normal login screen
     }
   }
   const saved = sessionStorage.getItem('ept_token');
-  if (!saved) return;
+  // Ametecs Global: no separate SmartEPT sign-in - a new tab or ended session signs in again through Ametecs Global
+  // (guard: not again within 30 s, so a failure shows the normal page instead of a loop).
+  if (!saved && AG_LOCK && agResso()) return;
+  if (!saved) { agShowLogin(); return; }
   TOKEN = saved;
   try { const res = await api('/auth/me'); ME = res.user; enterApp(); }
-  catch (e) { TOKEN = null; sessionStorage.removeItem('ept_token'); }
+  catch (e) { TOKEN = null; sessionStorage.removeItem('ept_token'); if (!(AG_LOCK && agResso())) agShowLogin(); }
 })();
 
 // ---- nav ----

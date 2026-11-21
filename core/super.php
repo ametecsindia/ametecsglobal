@@ -714,8 +714,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && $pdo !== null) {
                 $back('?p=apps', null, 'There is already an app called ' . $name . '.');
             }
         }
-        // LOGO (owner, 17 Nov 2026): a web address or a file in AmetecsGlobal (assets/logos/x.png). Best: a white logo with a transparent
-        // background - it sits on a white card on the client's home (add " inv" after the address for a white-only logo). Empty = AmetecsGlobal's built-in logo for that app, if any.
+        // LOGO (owner, 17 Nov 2026): a web address or a file in Ametecs Global (assets/logos/x.png). Best: a white logo with a transparent
+        // background - it sits on a white card on the client's home (add " inv" after the address for a white-only logo). Empty = Ametecs Global's built-in logo for that app, if any.
         $logo = trim((string) ($_POST['logo'] ?? ''));
         if ($logo !== '' && preg_match('~^(https?://[^\s"<>]+|[A-Za-z0-9._/\-]+\.(png|svg|webp|jpe?g))( inv)?$~i', $logo) !== 1) {
             $back('?p=apps', null, 'The logo must be a web address (https://…) or a file like assets/logos/myapp.png.');
@@ -750,7 +750,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && $pdo !== null) {
         if (filter_var($to, FILTER_VALIDATE_EMAIL) === false) {
             $back('?p=email', null, '"' . $to . '" is not a valid email address.');
         }
-        $r = AmetecsMail::send($pdo, $to, 'AmetecsGlobal test email', "This is a test from AmetecsGlobal.\nIf you can read this, password reset emails will work.");
+        $r = AmetecsMail::send($pdo, $to, 'Ametecs Global test email', "This is a test from Ametecs Global.\nIf you can read this, password reset emails will work.");
         $r['ok'] && AmetecsData::log($meEmail, 'Sent a test email', '', $to);
         $back('?p=email', $r['ok'] ? 'Test email sent to ' . $to . '. Check the inbox (and spam).' : null, $r['ok'] ? null : 'The test email to ' . $to . ' failed: ' . $r['why']);
     }
@@ -861,7 +861,7 @@ $licenceRows = static function (string $tid, array $prefill = []) use ($plugins,
         $a = $prefill[$c] ?? AmetecsAccess::get($tid, $c, $all);
         $st = $tid === '' ? (!empty($a['on']) ? 'on' : 'off') : AmetecsAccess::state($tid, $c, $all);
         $h .= '<tr><td><span class="dot" style="background:' . ag_h($p['color']) . '"></span><b>' . ag_h($p['name']) . '</b>'
-            . ($p['open'] === null ? ' <span class="pill grey">not on AmetecsGlobal yet</span>' : '') . '</td>'
+            . ($p['open'] === null ? ' <span class="pill grey">not on Ametecs Global yet</span>' : '') . '</td>'
             . '<td><label class="sw"><input type="checkbox" name="p[' . $c . '][on]"' . (!empty($a['on']) ? ' checked' : '') . '> On</label></td>'
             . '<td><input type="number" min="0" name="p[' . $c . '][seats]" value="' . (int) ($a['seats'] ?? 0) . '"> ' . ag_h($p['unit'])
             . ($c === 'smartprs3' && $tid !== '' ? ' <span class="muted">(' . (int) ($used[$tid] ?? 0) . ' in use)</span>' : '') . '</td>'
@@ -874,8 +874,8 @@ $licenceRows = static function (string $tid, array $prefill = []) use ($plugins,
 $statusPill = static fn (string $s): string => '<span class="pill ' . (['active' => 'green', 'suspended' => 'amber', 'closed' => 'red'][$s] ?? 'grey') . '">' . ag_h(ucfirst($s ?: 'unknown')) . '</span>';
 $f = static fn (string $k, string $default = '') => ag_h((string) ($form[$k] ?? $default));
 ?><!DOCTYPE html>
-<html lang="en"><head><meta charset="utf-8"><script>try{var R=document.documentElement,T=localStorage.getItem("agTheme");R.classList.add("t-gold");(T==="navy"||T==="classic")&&R.classList.add("th-navy");T==="light"&&R.classList.add("th-light");T==="dark"&&R.classList.add("th-dark")}catch(e){document.documentElement.classList.add("t-gold")}</script><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Super Admin · AmetecsGlobal</title>
+<html lang="en"><head><meta charset="utf-8"><link rel="icon" href="assets/brand/favicon.svg" type="image/svg+xml"><link rel="icon" href="assets/brand/favicon-32x32.png" sizes="32x32"><link rel="apple-touch-icon" href="assets/brand/apple-touch-icon.png"><script>try{var R=document.documentElement,T=localStorage.getItem("agTheme");R.classList.add("t-gold");(T==="navy"||T==="classic")&&R.classList.add("th-navy");T==="light"&&R.classList.add("th-light");T==="dark"&&R.classList.add("th-dark")}catch(e){document.documentElement.classList.add("t-gold")}</script><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Super Admin · Ametecs Global</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 <style>
 :root{--navy:#1F3A5F;--navy2:#16304f;--navy3:#0c1f38;--gold:#B8893B;--gold2:#d4a65a;--ink:#0f172a;--ink2:#334155;--mute:#64748b;--line:#e6eaf1;--bg:#f4f6fa;--card:#fff;
@@ -1020,7 +1020,7 @@ main{max-width:1560px;padding:16px 26px 20px}
 @media (max-width:1100px){.kstrip{grid-template-columns:repeat(3,1fr)}.dgrid2{grid-template-columns:1fr}}
 .cn b{white-space:nowrap}.mxt td:last-child,.mxt th:last-child{padding-right:16px;white-space:nowrap}.mxt th.ac{padding-left:4px;padding-right:4px}.mxt th:first-child{width:30%}
 </style>
-<link rel="stylesheet" href="assets/shell.css?v=26"><link rel="stylesheet" href="assets/super.css?v=13"><link rel="stylesheet" href="assets/theme-gold.css?v=3"><link rel="stylesheet" href="assets/theme-sa-light.css?v=6"><link rel="stylesheet" href="assets/theme-alt.css?v=11"></head><body>
+<link rel="stylesheet" href="assets/shell.css?v=29"><link rel="stylesheet" href="assets/super.css?v=13"><link rel="stylesheet" href="assets/theme-gold.css?v=3"><link rel="stylesheet" href="assets/theme-sa-light.css?v=6"><link rel="stylesheet" href="assets/theme-alt.css?v=11"></head><body>
 <?php
 $myName = trim((string) ($me['name'] ?? '')) ?: ucfirst((string) strtok($meEmail, '@'));
 $myIni = strtoupper(implode('', array_map(static fn (string $w): string => mb_substr($w, 0, 1), array_slice(preg_split('/[\s._-]+/', $myName) ?: ['S'], 0, 2))));
@@ -1038,7 +1038,7 @@ $myIni = strtoupper(implode('', array_map(static fn (string $w): string => mb_su
     <?php if ($problem !== null): ?><div class="msg bad"><i class="fas fa-circle-exclamation"></i><span><?= ag_h($problem) ?></span></div><?php endif; ?>
     <?php $noStaff = $pdo !== null && (int) $pdo->query('SELECT COUNT(*) FROM platform_users')->fetchColumn() === 0; ?>
     <?php if ($noStaff): ?>
-      <p>No Super Admin exists yet. In the Laragon Terminal, in the AmetecsGlobal folder, run:<br><code>php plugins\smartprs3\tools\make-super-admin.php you@company.com "Your Name"</code><br>It prints a one-time password.</p>
+      <p>No Super Admin exists yet. In the Laragon Terminal, in the Ametecs Global folder, run:<br><code>php plugins\smartprs3\tools\make-super-admin.php you@company.com "Your Name"</code><br>It prints a one-time password.</p>
     <?php elseif ($pdo !== null): ?>
     <form method="post" class="stack"><?= $csrf() ?><input type="hidden" name="do" value="signin">
       <label>Email</label><input type="email" name="email" required autofocus autocomplete="username" placeholder="you@ametecsindia.com">
@@ -1088,7 +1088,7 @@ $myIni = strtoupper(implode('', array_map(static fn (string $w): string => mb_su
 <?php if (is_array($reveal)): ?><div class="reveal"><b><i class="fas fa-key"></i> Shown once — copy it now.</b> Sign-in: <code><?= ag_h($reveal['email']) ?></code> Password: <code><?= ag_h($reveal['password']) ?></code><br>
   <span style="font-size:13px"><?php if ($reveal['tid'] === 'staff'): ?>They sign in at this Super Admin page.<?php else:
       $rl = $reveal['link'] ?? (($rt = $tenant((string) $reveal['tid'])) !== null && ($rt['subdomain'] ?? '') !== '' ? AmetecsMail::clientLink((string) $rt['subdomain']) : ''); ?>
-      They sign in at <?= $rl !== '' ? 'their company link <code>' . ag_h($rl) . '</code>' : 'the AmetecsGlobal front door' ?> and can change the password from their profile.<?php endif; ?></span></div><?php endif; ?>
+      They sign in at <?= $rl !== '' ? 'their company link <code>' . ag_h($rl) . '</code>' : 'the Ametecs Global front door' ?> and can change the password from their profile.<?php endif; ?></span></div><?php endif; ?>
 
 <?php if ($page === 'dashboard'):
     // PHASE 7 (owner, 18 Nov 2026: "redesign and add required features on dashboard"): the business at a glance -
@@ -1100,7 +1100,7 @@ $myIni = strtoupper(implode('', array_map(static fn (string $w): string => mb_su
     $saMark = static fn (string $c, array $p): string => '<span class="am" style="--c:' . ag_h((string) $p['color']) . '"><i class="fas ' . ag_h($saIcons[$c] ?? 'fa-cube') . '"></i></span>';
     $chk = static fn (string $st, bool $live): string => match (true) {
         $st === 'on' && $live => '<span class="chk on" title="Licensed - live"><i class="fas fa-check"></i></span>',
-        $st === 'on' => '<span class="chk soon" title="Licensed - app arriving on AmetecsGlobal soon"><i class="fas fa-check"></i></span>',
+        $st === 'on' => '<span class="chk soon" title="Licensed - app arriving on Ametecs Global soon"><i class="fas fa-check"></i></span>',
         $st === 'expired' => '<span class="chk bad" title="Licence expired"><i class="fas fa-xmark"></i></span>',
         $st === 'suspended' => '<span class="chk bad" title="Licence suspended" style="background:#d97706"><i class="fas fa-pause"></i></span>',
         default => '<span class="chk off" title="Not licensed"></span>' };
@@ -1260,7 +1260,7 @@ $myIni = strtoupper(implode('', array_map(static fn (string $w): string => mb_su
     $q = strtolower(trim((string) ($_GET['q'] ?? '')));
     $sf = (string) ($_GET['s'] ?? '');
     $list = array_filter($tenants, static fn ($t) => ($q === '' || str_contains(strtolower($t['name'] . ' ' . $t['code'] . ' ' . ($t['subdomain'] ?? '')), $q)) && ($sf === '' || $t['status_code'] === $sf)); ?>
-  <h1>Clients</h1><p class="sub">Every company on AmetecsGlobal. Open one to change its apps, licences and logins.</p>
+  <h1>Clients</h1><p class="sub">Every company on Ametecs Global. Open one to change its apps, licences and logins.</p>
   <form class="toolbar"><input type="hidden" name="p" value="clients"><span class="si"><i class="fas fa-magnifying-glass"></i><input name="q" data-live="#clients-t" placeholder="Search name, code or sign-in link" value="<?= ag_h($q) ?>" autocomplete="off"></span>
     <select name="s"><option value="">All statuses</option><?php foreach ($statuses as $k => $v): ?><option value="<?= $k ?>"<?= $sf === $k ? ' selected' : '' ?>><?= $v ?></option><?php endforeach; ?></select>
     <button class="btn ghost"><i class="fas fa-filter"></i>Filter</button><a class="btn gold" href="?p=client-new" style="margin-left:auto"><i class="fas fa-plus"></i>New client</a></form>
@@ -1273,7 +1273,7 @@ $myIni = strtoupper(implode('', array_map(static fn (string $w): string => mb_su
   <?php endforeach; ?><?php if ($list === []): ?><tr><td colspan="7" class="muted">No clients match.</td></tr><?php endif; ?></table></div>
 
 <?php elseif ($page === 'client-new'): ?>
-  <h1>New client</h1><p class="sub">Creates the company, its first administrator login and its app licences in one step. The administrator signs in at the AmetecsGlobal front door.</p>
+  <h1>New client</h1><p class="sub">Creates the company, its first administrator login and its app licences in one step. The administrator signs in at the Ametecs Global front door.</p>
   <form method="post"><?= $csrf() ?><input type="hidden" name="do" value="client-create">
   <div class="box"><div class="hd"><h2><span class="stepn">1</span>Company</h2></div><div class="bd grid2">
     <div><label>Company name <span class="req">*</span></label><input name="name" required value="<?= $f('name') ?>" placeholder="ABC Collections Pvt Ltd"></div>
@@ -1875,13 +1875,13 @@ $myIni = strtoupper(implode('', array_map(static fn (string $w): string => mb_su
     $relBytes = 0; foreach (glob(__DIR__ . '/data/releases/*/*.zip') ?: [] as $rf) { $relBytes += filesize($rf); }
     $logF = __DIR__ . '/../sync-log.txt'; $logTail = is_file($logF) ? implode("\n", array_slice(file($logF, FILE_IGNORE_NEW_LINES) ?: [], -40)) : '';
     $mb = static fn ($b) => $b >= 1073741824 ? round($b / 1073741824, 1) . ' GB' : ($b >= 1048576 ? round($b / 1048576, 1) . ' MB' : max(0, (int) round($b / 1024)) . ' KB'); ?>
-  <h1>System &amp; health</h1><p class="sub">Is this AmetecsGlobal server healthy, safe and backed up? Checked live every time you open this page.</p>
+  <h1>System &amp; health</h1><p class="sub">Is this Ametecs Global server healthy, safe and backed up? Checked live every time you open this page.</p>
   <div class="dgrid2">
     <div class="dcol2">
       <div class="box"><div class="hd"><h2><i class="fas fa-heart-pulse"></i>Health checks</h2></div><ul class="chk-l">
         <?= $ok('ok', 'Database connected', ag_h((string) ($env['DB_DATABASE'] ?? '')) . ' on ' . ag_h((string) ($env['DB_HOST'] ?? '')) ) ?>
-        <?= $missing === [] ? $ok('ok', 'All AmetecsGlobal tables present', count($tables) . ' tables: licences, releases, billing') : $ok('bad', 'Tables missing: ' . implode(', ', $missing), 'Run SYNC.bat (or wait for AUTO-SYNC) so the database changes are applied.') ?>
-        <?= version_compare(PHP_VERSION, '8.2', '>=') ? $ok('ok', 'PHP ' . PHP_VERSION) : $ok('bad', 'PHP ' . PHP_VERSION, 'AmetecsGlobal needs PHP 8.2 or newer.') ?>
+        <?= $missing === [] ? $ok('ok', 'All Ametecs Global tables present', count($tables) . ' tables: licences, releases, billing') : $ok('bad', 'Tables missing: ' . implode(', ', $missing), 'Run SYNC.bat (or wait for AUTO-SYNC) so the database changes are applied.') ?>
+        <?= version_compare(PHP_VERSION, '8.2', '>=') ? $ok('ok', 'PHP ' . PHP_VERSION) : $ok('bad', 'PHP ' . PHP_VERSION, 'Ametecs Global needs PHP 8.2 or newer.') ?>
         <?= $exts === [] ? $ok('ok', 'PHP extensions', 'pdo_mysql, openssl, zip, curl, mbstring') : $ok('bad', 'Missing PHP extensions: ' . implode(', ', $exts), 'Enable them in php.ini.') ?>
         <?= $ok('ok', 'Upload limit ' . ini_get('upload_max_filesize') . ' (post ' . ini_get('post_max_size') . ')', 'Bigger release packages go through core\data\releases\incoming.') ?>
         <?= $dataW ? $ok('ok', 'core\data is writable', 'release packages: ' . $mb($relBytes)) : $ok('bad', 'core\data is NOT writable', 'Uploads, activity log and settings cannot be saved.') ?>
@@ -1906,10 +1906,10 @@ $myIni = strtoupper(implode('', array_map(static fn (string $w): string => mb_su
         <?php if ($backups === []): ?><tr><td colspan="4"><div class="empty"><i class="fas fa-box-archive"></i>No installs on this server yet.</div></td></tr><?php endif; ?></table>
         <div class="bd muted" style="font-size:12.5px">Database: each PC's MySQL holds its own data. Back it up with Laragon (Menu → MySQL → Backup) or <code>mysqldump</code> before big changes; on the live server use the hosting provider's daily backups.</div></div>
       <?php $smp = AmetecsSample::present(); $houseT = array_values(array_filter($tenants, static fn ($t) => ($t['subdomain'] ?? '') === 'ametecs'))[0]['id'] ?? ($tenants[0]['id'] ?? ''); ?>
-      <div class="box"><div class="hd"><h2><i class="fas fa-flask"></i>Sample data</h2><span class="muted">for demos and testing on this PC only: 100 employees in 20 companies with 30 days of attendance, and 20 demo clients with licences and invoices</span></div><div class="bd">
+      <div class="box"><div class="hd"><h2><i class="fas fa-flask"></i>Sample data</h2><span class="muted">for demos and testing on this PC only: 100 employees in Ametecs India Pvt Ltd (4 managers, 12 team leads) with 30 days of attendance, and 20 demo clients with licences and invoices</span></div><div class="bd">
         <?php if ($prod): ?><p class="muted" style="margin:0">Switched off: this server runs as production (APP_ENV).</p>
         <?php else: ?><div class="row" style="gap:10px;flex-wrap:wrap;align-items:center">
-          <form method="post" class="row" style="gap:8px" onsubmit="return confirm('Add 100 sample employees in 20 companies and 20 demo clients to this PC\'s database?')"><?= $csrf() ?><input type="hidden" name="do" value="sample-add">
+          <form method="post" class="row" style="gap:8px" onsubmit="return confirm('Add 100 sample employees in Ametecs India Pvt Ltd and 20 demo clients to this PC\'s database?')"><?= $csrf() ?><input type="hidden" name="do" value="sample-add">
             <label class="muted" style="font-size:12.5px">Employees go to</label><select name="tenant"><?php foreach ($tenants as $t): if (str_starts_with((string) $t['code'], 'DEMO')) { continue; } ?><option value="<?= (int) $t['id'] ?>"<?= (string) $t['id'] === (string) $houseT ? ' selected' : '' ?>><?= ag_h($t['name']) ?></option><?php endforeach; ?></select>
             <button class="btn gold"><i class="fas fa-wand-magic-sparkles"></i>Add sample data</button></form>
           <?php if ($smp !== []): ?><form method="post" onsubmit="return confirm('Remove all sample employees, attendance, demo clients and their invoices?')"><?= $csrf() ?><input type="hidden" name="do" value="sample-remove"><button class="btn danger"><i class="fas fa-trash"></i>Remove sample data</button></form>
@@ -2007,7 +2007,7 @@ $myIni = strtoupper(implode('', array_map(static fn (string $w): string => mb_su
     $aq = static fn (array $o) => '?' . http_build_query(array_filter($o + ['p' => 'activity', 'k' => $fk, 'pd' => $fp, 'who' => $fw, 'c' => $fc], static fn ($v) => $v !== ''));
     $dayName = static fn (string $d) => $d === $today ? 'Today' : ($d === date('Y-m-d', strtotime('-1 day')) ? 'Yesterday' : date('l, d M Y', (int) strtotime($d)));
     $kcol = ['client' => 'k-access', 'licence' => 'k-licence', 'billing' => 'k-billing', 'update' => 'k-update', 'settings' => 'k-settings', 'signin' => 'k-settings']; ?>
-  <div class="lph"><div><h1>Activity log</h1><p class="sub">Every change made in AmetecsGlobal, by Ametecs staff and by clients, newest first. Entries are never edited or removed.</p></div>
+  <div class="lph"><div><h1>Activity log</h1><p class="sub">Every change made in Ametecs Global, by Ametecs staff and by clients, newest first. Entries are never edited or removed.</p></div>
     <button type="button" class="btn ghost" data-csv="#satl" data-name="ametecsglobal-activity-<?= ag_h($today) ?>.csv"><i class="fas fa-file-arrow-down"></i>Download CSV</button></div>
   <section class="akpis seven">
     <a class="<?= $fk === '' ? 'on' : '' ?>" href="<?= ag_h($aq(['k' => ''])) ?>"><i class="fas fa-layer-group"></i><b><?= count($inP) - (int) ($byK['signin'] ?? 0) ?></b><span>All changes</span></a>
@@ -2043,7 +2043,7 @@ $myIni = strtoupper(implode('', array_map(static fn (string $w): string => mb_su
     $recent = array_filter($staff, static fn ($u) => ($u['last_login_at'] ?? '') !== '' && strtotime((string) $u['last_login_at']) > $nowTs - 7 * 86400);
     $emails = array_map(static fn ($u) => strtolower((string) $u['email']), $staff);
     $feed = array_slice(array_values(array_filter(AmetecsData::activity('', 400), static fn ($r) => in_array(strtolower((string) $r['who']), $emails, true) && $r['what'] !== 'Signed in')), 0, 8); ?>
-  <div class="lph"><div><h1>Super Admins</h1><p class="sub">Ametecs staff who run this console: clients, licences, releases and billing for every company on AmetecsGlobal.</p></div>
+  <div class="lph"><div><h1>Super Admins</h1><p class="sub">Ametecs staff who run this console: clients, licences, releases and billing for every company on Ametecs Global.</p></div>
     <button type="button" class="btn gold" onclick="document.getElementById('addsa').showModal()"><i class="fas fa-user-plus"></i>Add Super Admin</button></div>
   <section class="lsum" style="grid-template-columns:repeat(4,1fr)">
     <div class="ls split"><span class="li"><i class="fas fa-user-shield"></i></span><span><b><?= count($staff) ?></b><small>Super Admins</small></span></div>
@@ -2082,7 +2082,7 @@ $myIni = strtoupper(implode('', array_map(static fn (string $w): string => mb_su
     <footer><button type="button" class="btn ghost" onclick="this.closest('dialog').close()">Cancel</button><button class="btn gold"><i class="fas fa-check"></i>Add Super Admin</button></footer></form></dialog>
 
 <?php elseif ($page === 'email'): $mc = AmetecsMail::box($pdo)->config(); ?>
-  <h1>Email settings</h1><p class="sub">The mailbox AmetecsGlobal sends from: password reset links for clients. Use your company mail server (SMTP) details.</p>
+  <h1>Email settings</h1><p class="sub">The mailbox Ametecs Global sends from: password reset links for clients. Use your company mail server (SMTP) details.</p>
   <div class="msg <?= AmetecsMail::box($pdo)->ready() ? 'ok' : 'bad' ?>"><?= AmetecsMail::box($pdo)->ready() ? 'Email is ON.' : 'Email is OFF: "Email reset link" and "Forgot password?" will not work until this is set up and switched on.' ?></div>
   <form method="post" class="box"><?= $csrf() ?><input type="hidden" name="do" value="email-save">
     <div class="hd"><h2><i class="fas fa-server"></i>Mail server (SMTP)</h2></div><div class="bd grid2">
@@ -2093,7 +2093,7 @@ $myIni = strtoupper(implode('', array_map(static fn (string $w): string => mb_su
       <div><label>Username</label><input name="username" value="<?= ag_h((string) $mc['username']) ?>" autocomplete="off"></div>
       <div><label>Password</label><input type="password" name="password" placeholder="<?= $mc['has_password'] ? 'saved - leave empty to keep' : '' ?>" autocomplete="new-password"></div>
       <div><label>From email</label><input type="email" name="from_email" value="<?= ag_h((string) $mc['from_email']) ?>" placeholder="noreply@ametecsindia.com"></div>
-      <div><label>From name</label><input name="from_name" value="<?= ag_h((string) $mc['from_name'] === 'SmartPRS' ? 'AmetecsGlobal' : (string) $mc['from_name']) ?>"></div>
+      <div><label>From name</label><input name="from_name" value="<?= ag_h((string) $mc['from_name'] === 'SmartPRS' ? 'Ametecs Global' : (string) $mc['from_name']) ?>"></div>
       <div><label>Reply-to (optional)</label><input type="email" name="reply_to" value="<?= ag_h((string) $mc['reply_to']) ?>"></div>
     </div><div class="ft"><button class="btn navy">Save</button></div></form>
   <form method="post" class="box"><?= $csrf() ?><input type="hidden" name="do" value="email-test">

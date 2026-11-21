@@ -1,0 +1,54 @@
+/* SMARTPRS 3 INSIDE AMETECSGLOBAL (19 Nov 2026, owner: same everywhere): Ametecs Global's black and gold, the theme chosen
+   in the Ametecs Global menu (Golden / Navy / Light / Dark), and Ametecs Global's top bar (ag-topbar.js). Colours only. */
+html:root:root{--navy:#14100a;--navy2:#1d160c;--navy3:#2a2012;--accent:#c9a24c;--accent2:#e8c977;--accent-soft:rgba(201,162,76,.12)}
+html.th-navy:root:root{--navy:#0a1a33;--navy2:#10284a;--navy3:#132b50}
+html.th-light:root:root{--bg:#fbfaf7}
+html.th-light .sidebar img.sp-logo{content:url(../../plugins/smartprs3/public/images/smartprs-logo-navy.png)}
+html.th-light #ag-back{background:#faf3e3!important}
+.topbar .theme-wrap,.topbar .topbar-avatar{display:none!important}   /* theme and account: Ametecs Global's top bar */
+.main-wrap>.agtb~.topbar{top:58px!important}
+/* MAIN THEME ON SMARTPRS TILES AND CHIPS (owner, 20 Nov 2026: "also smartprs"): SmartPRS colours each card, chip and tile
+   with its own --k (blue, green, purple...). Inside Ametecs Global every one of them is gold - one look with the rest. */
+[style*="--k"],.dc-card,.ch{--k:#c9a24c!important}
+.dc-card{background:linear-gradient(160deg,#fffaf0 0%,#fff 60%)!important;border-color:#ecdcb6!important}
+.dc-card .dc-ic{background:linear-gradient(135deg,#f3dc95,#d6ae55 45%,#b08433)!important;color:#14100a!important}.dc-card .dc-ic i{color:#14100a!important}
+.dc-card .dc-lab{color:#7a6e5b!important}.dc-card .dc-val{color:#17130c!important}
+.ch{color:#8a6420!important;border-color:#e6d2a4!important}.ch:hover,.ch.on,.ch.active{background:#fbf3e2!important;color:#14100a!important}
+html.th-dark .dc-card{background:#17130d!important;border-color:#2e2618!important}html.th-dark .dc-card .dc-val{color:#f3e7c9!important}html.th-dark .dc-card .dc-lab{color:#a89b82!important}
+html.th-dark .ch{color:#e8c977!important;border-color:#3a3120!important}
+
+/* DARK THEME = AMETECSGLOBAL'S DARK (owner, 20 Nov 2026): SmartPRS's own dark mode is navy; with Ametecs Global's Dark
+   theme it uses Ametecs Global's warm black and gold instead (its colour settings, then its few fixed navy shades). */
+html.th-dark[data-mode="dark"]:root{--bg:#0d0b08!important;--card:#17130d!important;--border:#2e2618!important;--text1:#efe6d2!important;--text2:#c9bc9f!important;--text3:#a89a7e!important;--muted:#a89a7e!important;--navy:#14100a!important}
+html.th-dark[data-mode="dark"] .sidebar,html.th-dark[data-mode="dark"] .toast{background:#0a0805!important}
+html.th-dark[data-mode="dark"] .topbar-btn:hover{background:#211c13!important}
+html.th-dark[data-mode="dark"] .role-tab{background:#1d1810!important}
+html.th-dark[data-mode="dark"] .form-group input:focus{background:#221c13!important}
+html.th-dark[data-mode="dark"] .sp-acct-row:hover{background:#211c13!important}
+html.th-dark[data-mode="dark"] thead{background:#1d1810!important}
+html.th-dark[data-mode="dark"] td{border-bottom-color:#211c13!important}
+html.th-dark[data-mode="dark"] .badge-gray{background:#211c13!important}
+html.th-dark[data-mode="dark"] .payslip-emp,html.th-dark[data-mode="dark"] .fg input,html.th-dark[data-mode="dark"] .fg select,html.th-dark[data-mode="dark"] .fg textarea,html.th-dark[data-mode="dark"] .fld2 input,html.th-dark[data-mode="dark"] .fld2 select,html.th-dark[data-mode="dark"] .fld2 textarea{background:#1d1810!important}
+html.th-dark[data-mode="dark"] .fg input:focus,html.th-dark[data-mode="dark"] .fg select:focus,html.th-dark[data-mode="dark"] .fg textarea:focus,html.th-dark[data-mode="dark"] .fld2 input:focus,html.th-dark[data-mode="dark"] .fld2 select:focus,html.th-dark[data-mode="dark"] .fld2 textarea:focus{background:#221c13!important}
+html.th-dark[data-mode="dark"] .payslip-table td{border-bottom-color:#211c13!important}
+html.th-dark[data-mode="dark"] .mini-list .mini-item{border-bottom-color:#211c13!important}
+html.th-dark[data-mode="dark"] .chart-placeholder{background:linear-gradient(135deg,#131c2b,#1d1810)!important}
+html.th-dark[data-mode="dark"] .form-group input{background:#1d1810!important}
+html.th-dark[data-mode="dark"] code{background:#211c13!important}
+/* checkboxes, radios and sliders in gold; the "All apps" button readable on the light menu */
+input[type=checkbox],input[type=radio],input[type=range],progress{accent-color:#b08433}
+html.th-light #ag-back{color:#8a6420!important;border-color:#ecdcb6!important}
+/* every module icon tile (a coloured box holding one icon) in gold with a dark icon, like Ametecs Global's tiles */
+[style*="background"]:has(> i.fas:only-child),[style*="background"]:has(> i.fa-solid:only-child){background:linear-gradient(135deg,#f3dc95,#d6ae55 45%,#b08433)!important;color:#14100a!important}
+[style*="background"]:has(> i.fas:only-child)>i,[style*="background"]:has(> i.fa-solid:only-child)>i{color:#14100a!important}
+/* TABLES LIKE AMETECSGLOBAL'S (owner, 20 Nov 2026: "many pages pending"): SmartPRS paints every table column its own pastel
+   (table th/td:nth-child(8n+k)). Inside Ametecs Global every table has one look: light gold header, white rows, a faint stripe. */
+html[class*="ag-"] table th{background:#fbf6ea!important;color:#7a6e5b!important;border-color:#efe6d4!important}
+html[class*="ag-"] table td{background:#fff!important;border-color:#f4eee2!important}
+html[class*="ag-"] table tbody tr:nth-child(even)>td{background:#fdfbf6!important}
+html[class*="ag-"] table tbody tr:hover>td{background:#fffaf0!important}
+html.th-navy table th{background:#eef1f6!important;color:#3d4b63!important}
+html.th-dark table th{background:#1d1810!important;color:#a89b82!important;border-color:#2e2618!important}
+html.th-dark table td{background:#17130d!important;border-color:#2a241a!important}
+html.th-dark table tbody tr:nth-child(even)>td{background:#1a150f!important}
+html.th-dark table tbody tr:hover>td{background:#221c13!important}

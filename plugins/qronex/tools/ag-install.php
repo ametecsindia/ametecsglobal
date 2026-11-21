@@ -17,7 +17,7 @@ set_exception_handler(static function (\Throwable $x): void {
 $dir = dirname(__DIR__);
 $opt = getopt('', ['root-user::', 'root-password::', 'url::']) + ['root-user' => 'root', 'root-password' => ''];
 foreach (['storage/app/public', 'storage/framework/cache/data', 'storage/framework/sessions', 'storage/framework/views', 'storage/logs', 'bootstrap/cache'] as $d) {
-    is_dir($dir . '/' . $d) || mkdir($dir . '/' . $d, 0775, true);   // storage/ is never on GitHub (AmetecsGlobal .gitignore)
+    is_dir($dir . '/' . $d) || mkdir($dir . '/' . $d, 0775, true);   // storage/ is never on GitHub (Ametecs Global .gitignore)
 }
 $envFile = $dir . '/.env';
 is_file($envFile) || copy($dir . '/.env.example', $envFile);
@@ -79,7 +79,7 @@ foreach ([
     'APP_NAME' => 'QRONEX', 'APP_ENV' => 'staging', 'APP_DEBUG' => 'false', 'APP_URL' => $url, 'APP_TIMEZONE' => 'UTC',
     'DB_CONNECTION' => 'mysql', 'DB_HOST' => '127.0.0.1', 'DB_DATABASE' => $db, 'DB_USERNAME' => $user, 'DB_PASSWORD' => $pass,
     'CACHE_STORE' => 'file', 'QUEUE_CONNECTION' => 'sync', 'SESSION_DRIVER' => 'file', 'SESSION_SECURE_COOKIE' => 'false',
-    // its own cookie, only under its own folder: ROVEXY and AmetecsGlobal sign-ins on the same address are not disturbed
+    // its own cookie, only under its own folder: ROVEXY and Ametecs Global sign-ins on the same address are not disturbed
     'SESSION_COOKIE' => 'qronex_session', 'SESSION_PATH' => rtrim((string) parse_url(dirname($url), PHP_URL_PATH), '/') . '/',
     'MAIL_MAILER' => 'log',
 ] as $k => $v) {

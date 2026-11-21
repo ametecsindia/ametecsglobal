@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\Schema;
 
 /**
  * AMETECSGLOBAL LICENSING (owner, 18 Nov 2026 - Phase 1). One licence per client per app, for EVERY app on
- * AmetecsGlobal (not only SmartPRS3), on-premise or cloud. Replaces core/data/access.json, which core/licensing.php
+ * Ametecs Global (not only SmartPRS3), on-premise or cloud. Replaces core/data/access.json, which core/licensing.php
  * imports once. Nothing existing is altered or dropped.
  *
  * - `ag_licences`: client x app: deployment (cloud | onprem), plan (trial | monthly | yearly | perpetual),

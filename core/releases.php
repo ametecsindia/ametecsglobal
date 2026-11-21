@@ -442,7 +442,7 @@ final class AmetecsReleases
         return $base + ['update_available' => true, 'product' => $licence['app'], 'version' => $best['version'], 'kind' => $best['kind'], 'title' => $best['title'],
             'notes' => (string) ($best['notes'] ?? ''), 'size_bytes' => (int) $best['size'], 'package_hash' => $best['sha256'], 'signature' => $best['signature'],
             'requires_version' => $best['requires_version'], 'payment' => $pay, 'price' => $best['price'], 'currency' => $best['currency'],
-            'downloadable' => $pay !== 'required', 'message' => $pay === 'required' ? 'This upgrade is paid. Complete the payment in your AmetecsGlobal panel first.' : 'Update ' . $best['version'] . ' is available.'];
+            'downloadable' => $pay !== 'required', 'message' => $pay === 'required' ? 'This upgrade is paid. Complete the payment in your Ametecs Global panel first.' : 'Update ' . $best['version'] . ' is available.'];
     }
 
     /** The zip for $version if this licence may have it, else an error. @return array{ok: bool, why: string, release?: array, path?: string} */
@@ -459,14 +459,14 @@ final class AmetecsReleases
                 }
                 $pv = AmetecsPlugins::view($tid, AmetecsPlugins::catalogue((string) $r['app'], $tid)[$plugin] ?? ['latest' => $r, 'app' => $r['app'], 'code' => $plugin], true);
                 if (!AmetecsPlugins::authorised($pv['state'])) {
-                    return ['ok' => false, 'why' => $pv['state'] === 'blocked' ? 'This plugin has been disabled for your company by Ametecs.' : 'Buy this plugin in your AmetecsGlobal panel first.'];
+                    return ['ok' => false, 'why' => $pv['state'] === 'blocked' ? 'This plugin has been disabled for your company by Ametecs.' : 'Buy this plugin in your Ametecs Global panel first.'];
                 }
                 if (AmetecsPlugins::row($tid, (string) $r['app'], $plugin) !== null && empty(AmetecsPlugins::row($tid, (string) $r['app'], $plugin)['download'])) {
                     return ['ok' => false, 'why' => 'Downloading this plugin is turned off for your company. Contact Ametecs.'];
                 }
             }
             if (self::payment($r, $tid) === 'required') {
-                return ['ok' => false, 'why' => 'Payment for this upgrade is pending. Pay in your AmetecsGlobal panel, then try again.'];
+                return ['ok' => false, 'why' => 'Payment for this upgrade is pending. Pay in your Ametecs Global panel, then try again.'];
             }
             if (!is_file(self::path($r))) {
                 return ['ok' => false, 'why' => 'The package is not on the update server. Contact Ametecs.'];

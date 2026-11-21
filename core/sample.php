@@ -1,6 +1,6 @@
 <?php
 /**
- * SAMPLE DATA (owner, 18 Nov 2026: "add sample data 20 employee and 10 client on super admin"; 19 Nov: 100 employees, 20 companies, 20 clients).
+ * SAMPLE DATA (owner, 18 Nov 2026: "add sample data 20 employee and 10 client on super admin"; 19 Nov: 100 employees in Ametecs India Pvt Ltd, 20 clients).
  * Super Admin -> System & health -> Sample data. Adds, on THIS PC's database only (never through a migration, so it
  * cannot reach a live server by sync):
  *   - 20 employees in one client (default: the house client), with branches / departments / teams if it has none,
@@ -39,12 +39,8 @@ final class AmetecsSample
         $have = static fn (string $t) => array_values(array_filter($store->all($t), static fn ($r) => ($r['deleted_at'] ?? null) === null));
         $cos = [];
         $byName = array_column($have('companies'), 'id', 'name');   // clicking Add twice reuses them
-        // 20 sample companies (owner, 19 Nov 2026: 100 employees, 20 companies)
-        foreach (['Ametecs Recoveries', 'Kondapur Collections', 'Deccan Finserv', 'Charminar Agencies', 'Hitech Credit Services', 'Banjara Debt Solutions', 'Golconda Field Force',
-            'Madhapur Telecollect', 'Gachibowli Microfinance', 'Jubilee Business Services', 'Secunderabad Recoveries', 'Ameerpet Agencies', 'Kukatpally Credit Care',
-            'Begumpet Finance', 'Miyapur Field Ops', 'Uppal Collections', 'Manikonda Services', 'Nizampet Recoveries', 'Kompally Credit', 'Shamshabad Agencies'] as $cn) {
-            $cos[] = (string) ($byName[$cn . ' Pvt Ltd'] ?? $keep('companies', $store->put('companies', ['name' => $cn . ' Pvt Ltd', 'timezone' => 'Asia/Kolkata']))['id']);
-        }
+        // ONE COMPANY (owner, 19 Nov 2026: "company only one - Ametecs India Pvt"): every sample employee works for it
+        $cos[] = (string) ($byName['Ametecs India Pvt Ltd'] ?? $keep('companies', $store->put('companies', ['name' => 'Ametecs India Pvt Ltd', 'timezone' => 'Asia/Kolkata']))['id']);
         $company = $cos[0];
         $mk = static function (string $table, array $names) use ($have, $store, $keep, $company): array {
             $ids = array_column($have($table), 'id', 'name');
@@ -64,18 +60,22 @@ final class AmetecsSample
         $today = AmetecsAccess::today();
         $used = array_flip(array_map(static fn ($e) => (string) ($e['emp_code'] ?? ''), $store->all('employees')));
         $codes = [];
+        // REPORTING LINE (19 Nov 2026, one role map): SMP001-004 are Managers, SMP005-016 Team Leads (3 under each Manager),
+        // everyone else reports to a Team Lead - so Manager / Team Lead / Employee all show up in every app.
+        $ids = [];
         foreach ($people as $i => [$name, $g]) {
             $code = 'SMP' . str_pad((string) ($i + 1), 3, '0', STR_PAD_LEFT);
             if (isset($used[$code])) { continue; }
             $doj = date('Y-m-d', strtotime($today . ' -' . (15 + ($i * 47) % 3600) . ' days'));
             $dob = date('Y-m-d', strtotime((1985 + $i % 14) . '-' . substr($today, 5, 5) . ' +' . (($i % 20) * 3 - 6) . ' days'));   // a few birthdays this month
-            $keep('employees', $store->put('employees', ['emp_code' => $code, 'name' => $name, 'gender' => $g === 'M' ? 'Male' : 'Female', 'dob' => $dob, 'doj' => $doj,
-                'type' => $i % 3 === 0 ? 'Office' : 'Field', 'employer_company_id' => $cos[$i % 20], 'status' => 'active',
+            $boss = $i < 4 ? null : ($i < 16 ? ($ids[$i % 4] ?? null) : ($ids[4 + $i % 12] ?? null));
+            $ids[$i] = (string) $keep('employees', $store->put('employees', ['emp_code' => $code, 'name' => $name, 'reporting_manager_id' => $boss, 'gender' => $g === 'M' ? 'Male' : 'Female', 'dob' => $dob, 'doj' => $doj,
+                'type' => $i % 3 === 0 ? 'Office' : 'Field', 'employer_company_id' => $cos[0], 'status' => 'active',
                 'branch_id' => $branches === [] ? null : array_values($branches)[$i % count($branches)],
                 'department_id' => $depts === [] ? null : array_values($depts)[$i % count($depts)],
                 'team_id' => $teams === [] ? null : array_values($teams)[$i % count($teams)],
                 'email' => strtolower(str_replace(' ', '.', $name)) . '@sample.test', 'mobile' => '9' . str_pad((string) (100000000 + $i * 7919), 9, '0'),
-                'probation_end' => $i === 3 ? date('Y-m-d', strtotime($today . ' +12 days')) : null]));
+                'probation_end' => $i === 3 ? date('Y-m-d', strtotime($today . ' +12 days')) : null]))['id'];
             $codes[] = $code;
         }
         // 30 days of punches: weekdays, most on time, some late, a few absent
@@ -92,7 +92,7 @@ final class AmetecsSample
                 }
             }
         }
-        $done[] = count($codes) . ' employees with 30 days of attendance';
+        $done[] = count($codes) . ' employees (4 managers, 12 team leads) with 30 days of attendance';
 
         // --- 10 demo clients ----------------------------------------------------------------------------------------
         $names = ['Sunrise Recoveries', 'Apex Collections', 'BlueOcean Finserv', 'Trident Agencies', 'Nova Credit Services', 'Pinnacle Debt Solutions',

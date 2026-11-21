@@ -1,0 +1,24 @@
+/* AMETECSGLOBAL BRAND LAYER (19 Nov 2026, Phase 3 - one brand): loaded only inside Ametecs Global. QRONEX's navy/teal
+   utility colours become Ametecs Global black and gold; layout and behaviour untouched. */
+.bg-navy,.bg-ink{background-color:#14100a!important}.bg-navy-2{background-color:#221a0e!important}.bg-navy-3{background-color:#2e2414!important}
+.from-navy{--tw-gradient-from:#14100a var(--tw-gradient-from-position)!important;--tw-gradient-to:rgba(20,16,10,0) var(--tw-gradient-to-position)!important;--tw-gradient-stops:var(--tw-gradient-from),var(--tw-gradient-to)!important}
+.to-ink{--tw-gradient-to:#221a0e var(--tw-gradient-to-position)!important}
+.text-navy,.text-ink{color:#14100a!important}.ring-ink{--tw-ring-color:#14100a!important}
+.bg-teal{background-color:#b8893b!important}.bg-teal-2{background-color:#c9a24c!important}.bg-teal-soft{background-color:#f6efe0!important}
+.text-teal{color:#9a7230!important}.text-teal-soft{color:#f6efe0!important}.text-teal-glow{color:#e8c977!important}
+.border-teal,.border-teal-2{border-color:#b8893b!important}.ring-teal,.ring-teal-2{--tw-ring-color:#b8893b!important}.accent-teal{accent-color:#b8893b!important}
+.bg-scan{background-color:#c9a24c!important}.text-scan{color:#e8c977!important}.from-scan{--tw-gradient-from:#c9a24c var(--tw-gradient-from-position)!important}.to-scan{--tw-gradient-to:#c9a24c var(--tw-gradient-to-position)!important}
+.ag-home{position:fixed;right:16px;bottom:16px;z-index:9999;width:42px;height:42px;border-radius:12px;background:#c9a24c;color:#14100a;display:grid;place-items:center;font:800 14px/1 Inter,Arial,sans-serif;text-decoration:none;box-shadow:0 8px 20px -8px rgba(20,16,10,.6)}
+.ag-home:hover{background:#e8c977}
+/* THEME FOLLOWS AMETECSGLOBAL (19 Nov 2026): the Golden/Navy/Light/Dark choice in the Ametecs Global user menu (agTheme) */
+html.th-navy .bg-navy,html.th-navy .bg-ink{background-color:#0a1a33!important}html.th-navy .bg-navy-2{background-color:#10284a!important}html.th-navy .bg-navy-3{background-color:#132b50!important}
+html.th-navy .from-navy{--tw-gradient-from:#0a1a33 var(--tw-gradient-from-position)!important;--tw-gradient-stops:var(--tw-gradient-from),var(--tw-gradient-to)!important}html.th-navy .to-ink{--tw-gradient-to:#132b50 var(--tw-gradient-to-position)!important}
+html.th-light body{background-color:#fff!important}
+html.th-dark body,html.th-dark .bg-slate-50,html.th-dark .bg-paper{background-color:#0d0b08!important;color:#efe6d2}
+html.th-dark .bg-white{background-color:#17130d!important}html.th-dark .bg-slate-100,html.th-dark .bg-gray-100{background-color:#1d1810!important}html.th-dark .bg-slate-200,html.th-dark .bg-slate-300{background-color:#2e2618!important}
+html.th-dark .text-slate-800,html.th-dark .text-slate-700,html.th-dark .text-gray-900,html.th-dark .text-gray-800,html.th-dark .text-gray-700,html.th-dark .text-ink,html.th-dark .text-navy{color:#efe6d2!important}
+html.th-dark .text-slate-600,html.th-dark .text-slate-500,html.th-dark .text-gray-600,html.th-dark .text-gray-500{color:#a89a7e!important}
+html.th-dark .border-slate-200,html.th-dark .border-slate-300,html.th-dark .divide-slate-200>*,html.th-dark .border-slate-100{border-color:#2e2618!important}
+html.th-dark .from-navy{--tw-gradient-from:#0d0b08 var(--tw-gradient-from-position)!important;--tw-gradient-stops:var(--tw-gradient-from),var(--tw-gradient-to)!important}html.th-dark .to-ink{--tw-gradient-to:#0d0b08 var(--tw-gradient-to-position)!important}
+html.th-dark select,html.th-dark input,html.th-dark textarea{background-color:#1d1810;color:#efe6d2;border-color:#2e2618}
+html.th-dark header.sticky{background-color:rgba(13,11,8,.88)!important;border-color:#2e2618!important}html.th-dark h1,html.th-dark h2,html.th-dark h3{color:#efe6d2}

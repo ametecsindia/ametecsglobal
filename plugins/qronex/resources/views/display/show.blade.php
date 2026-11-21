@@ -20,6 +20,18 @@
   .clock{font-variant-numeric:tabular-nums;font-size:clamp(1.4rem,4.5vh,3rem);font-weight:700}
   .off{color:#FCA5A5}.msg{font-size:clamp(1rem,3vh,2rem);max-width:80vw}
 </style>
+@if(\App\Services\AgBridge::managed())
+{{-- THEME FOLLOWS AMETECSGLOBAL (19 Nov 2026): Golden (default) / Navy / Light / Dark, as chosen in the Ametecs Global menu --}}
+<style>
+  :root{--navy:#14100a;--bar:#2a2012;--fill:#c9a24c;--ink:#f3e7c9;--sub:#c9bc9f}
+  html.th-navy{--navy:#0a1a33;--bar:#132b50;--ink:#EAF0F7;--sub:#C9D5E4}
+  html.th-dark{--navy:#0d0b08;--bar:#221c13}
+  html.th-light{--navy:#fbfaf7;--bar:#ece3d1;--ink:#17130c;--sub:#7a6e5b}
+  body{color:var(--ink)}.sub{color:var(--sub)}.bar{background:var(--bar)}.bar i{background:var(--fill)}
+  html.th-light #qr{box-shadow:0 18px 40px -18px rgba(20,16,10,.35);border:1px solid #ece3d1}
+</style>
+<script>(function(h){function s(){var t;try{t=localStorage.getItem("agTheme")}catch(e){}h.classList.remove("th-navy","th-light","th-dark");if(t&&t!="gold")h.classList.add("th-"+t)}s();addEventListener("storage",s)})(document.documentElement)</script>
+@endif
 </head>
 <body>
   <div class="logo"><svg viewBox="0 0 32 32" class="qx-mark" aria-hidden="true"><rect width="32" height="32" rx="8" fill="#0E2747"/><rect x="6" y="6" width="8" height="8" rx="1.5" fill="none" stroke="#fff" stroke-width="2"/><rect x="18" y="6" width="8" height="8" rx="1.5" fill="none" stroke="#fff" stroke-width="2"/><rect x="6" y="18" width="8" height="8" rx="1.5" fill="none" stroke="#fff" stroke-width="2"/><circle cx="22" cy="22" r="3.2" fill="#14B8A6"/></svg><b style="color:#0E2747;letter-spacing:-.01em">QRONEX</b></div>

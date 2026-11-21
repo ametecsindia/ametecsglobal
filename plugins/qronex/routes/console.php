@@ -52,11 +52,11 @@ Schedule::command('qronex:daily-report')->dailyAt('07:00')->timezone('Asia/Kolka
     ]);
 })->purpose('Create or reset the starter super admin, support and company admin logins');
 
-// AmetecsGlobal: copy branches and employees one way into every linked QRONEX company (also done at each sign-in).
+// Ametecs Global: copy branches and employees one way into every linked QRONEX company (also done at each sign-in).
 \Illuminate\Support\Facades\Artisan::command('ag:sync', function () {
     foreach (\App\Models\Tenant::query()->whereNotNull('ag_tenant')->get() as $t) {
         \App\Services\AgBridge::licence($t);
         [$o, $e] = \App\Services\AgBridge::sync($t);
         $this->info("{$t->name}: {$o} offices, {$e} employees");
     }
-})->purpose('Copy AmetecsGlobal branches and employees into QRONEX');
+})->purpose('Copy Ametecs Global branches and employees into QRONEX');

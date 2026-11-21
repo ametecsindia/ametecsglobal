@@ -37,7 +37,7 @@ final class VerifyDeviceSignature
         (new RequestSignature(new RedisNonceStore()))->verify(
             DevicePublicKey::fromPem($credential->public_key_pem),
             $request->getMethod(),
-            $request->getRequestUri(),
+            substr($request->getRequestUri(), strlen($request->getBaseUrl())),   // Ametecs Global: ROVEXY in a sub-folder; the phone signs /api/...
             (string) $request->header('X-Timestamp'),
             (string) $request->header('X-Nonce'),
             $request->getContent(),

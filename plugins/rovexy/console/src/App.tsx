@@ -264,14 +264,32 @@ export function App() {
   const [, setOrgTick] = useState(0);   // bumped by the Branch / Team / Employee filter → pages remount and reload
   useEffect(() => { if (me) get<{ message: string | null; state?: string }>('/licence').then((l) => { if (AG_MANAGED && l.state && !['active', 'grace', 'unrestricted'].includes(l.state)) agLock(); setLicenceMsg(l.message); }, () => setLicenceMsg(null)); }, [me]);
   if (loading) return <p className="muted" style={{ padding: 24 }}>Loading…</p>;
-  if (!me) return <LoginPage />;
+  if (!me) {
+    // Ametecs Global: no separate ROVEXY sign-in - an expired session is renewed through Ametecs Global's one sign-in.
+    // Guard: if that just failed (within 30 s), show the normal page instead of going round in a loop.
+    const last = Number(sessionStorage.getItem('ag-resso') || 0);
+    if (AG_MANAGED && Date.now() - last > 30000) {
+      sessionStorage.setItem('ag-resso', String(Date.now()));
+      window.top!.location.href = ROOT.replace(/\/plugins\/rovexy\/public$/, '') + '/core/open.php?app=rovexy';
+      return <p className="muted" style={{ padding: 24 }}>Signing in through Ametecs Global…</p>;
+    }
+    // ONE LOGIN (19 Nov 2026): inside Ametecs Global there is no ROVEXY password page - only the way back to Ametecs Global.
+    if (AG_MANAGED) {
+      return <div className="card" style={{ maxWidth: 420, margin: '12vh auto', padding: 28, textAlign: 'center' }}>
+        <h2 style={{ marginTop: 0 }}>Sign in through Ametecs Global</h2>
+        <p className="muted">ROVEXY uses your Ametecs Global sign-in.</p>
+        <a className="btn primary" href={ROOT.replace(/\/plugins\/rovexy\/public$/, '') + '/core/open.php?app=rovexy'} target="_top">Open Ametecs Global sign-in</a>
+      </div>;
+    }
+    return <LoginPage />;
+  }
 
   const logout = async () => {
     await post('/auth/logout').catch(() => undefined);
     disconnectRealtime();
     setMe(null);
   };
-  const items = NAV.filter((n) => (!n.perm || can(n.perm)) && !(AG_MANAGED && n.to === '/licence'));
+  const items = NAV.filter((n) => (!n.perm || can(n.perm)) && !(AG_MANAGED && ['/licence', '/branding'].includes(n.to)));
   const orgKey = JSON.stringify(orgFilter());
   const name = branding?.display_name ?? me.company.name;
   return (
@@ -281,7 +299,7 @@ export function App() {
       <main className="main">
         <TopBar items={items} me={me} logout={logout} pendingPhones={pendingPhones} />
         <OrgBar onChange={() => setOrgTick((n) => n + 1)} />
-        {licenceMsg && <div className="alert warn" role="status" style={{ margin: '0 24px 12px' }}>{licenceMsg} {AG_MANAGED ? <a href={ROOT.replace(/\/plugins\/rovexy\/public$/, '') + '/core/?v=licences'} target="_top">Licences &amp; plans in AmetecsGlobal</a> : <Link to="/licence">Plan & licence</Link>}</div>}
+        {licenceMsg && <div className="alert warn" role="status" style={{ margin: '0 24px 12px' }}>{licenceMsg} {AG_MANAGED ? <a href={ROOT.replace(/\/plugins\/rovexy\/public$/, '') + '/core/?v=licences'} target="_top">Licences &amp; plans in Ametecs Global</a> : <Link to="/licence">Plan & licence</Link>}</div>}
         <Routes key={orgKey}>
           <Route path="/" element={<OverviewPage />} />
           <Route path="/portfolio-reports" element={<PortfolioReportsPage />} />
@@ -353,9 +371,9 @@ function ChangePassword({ onClose }: { onClose: () => void }) {
   );
 }
 
-/** AmetecsGlobal: the licence lives in AmetecsGlobal (Licences & plans), not in ROVEXY. */
+/** Ametecs Global: the licence lives in Ametecs Global (Licences & plans), not in ROVEXY. */
 function AgLicence() {
   const url = ROOT.replace(/\/plugins\/rovexy\/public$/, '') + '/core/?v=licences';
   useEffect(() => { window.top!.location.href = url; }, [url]);
-  return <p className="muted" style={{ padding: 24 }}>Your ROVEXY licence is managed in AmetecsGlobal. <a href={url} target="_top">Open Licences &amp; plans</a></p>;
+  return <p className="muted" style={{ padding: 24 }}>Your ROVEXY licence is managed in Ametecs Global. <a href={url} target="_top">Open Licences &amp; plans</a></p>;
 }

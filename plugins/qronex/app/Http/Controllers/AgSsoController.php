@@ -9,14 +9,15 @@ use App\Services\AgBridge;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
-/** AmetecsGlobal "Open QRONEX": the signed hand-over from core/open.php becomes a portal session (see AgBridge). */
+/** Ametecs Global "Open QRONEX": the signed hand-over from core/open.php becomes a portal session (see AgBridge). */
 final class AgSsoController extends Controller
 {
     public function enter(Request $r)
     {
         $p = AgBridge::verify((string) $r->input('t'));
+        $p !== null && ($p['kind'] ?? '') !== '' && $p = null;   // a scan ticket is not a sign-in
         if ($p === null) {
-            return response('This link has expired. Go back to AmetecsGlobal and open QRONEX again.', 403);
+            return response('This link has expired. Go back to Ametecs Global and open QRONEX again.', 403);
         }
         $first = !\App\Models\Tenant::query()->where('ag_tenant', (string) $p['tid'])->exists();
         $t = AgBridge::workspace($p);
@@ -34,6 +35,8 @@ final class AgSsoController extends Controller
         AuditLog::create(['tenant_id' => $t->id, 'user_id' => $u->id, 'action' => 'auth.login', 'subject' => $u->email, 'meta' => ['via' => 'ametecsglobal'], 'ip' => $r->ip()]);
         Auth::login($u);
         $r->session()->regenerate();
-        return redirect('/' . $t->slug);   // url() adds the sub-folder
+        $r->session()->put('ag_sid', (string) ($p['sid'] ?? ''));   // signed out in Ametecs Global = signed out here (AgCentral)
+        $to = preg_match('#^[a-z0-9][a-z0-9/_:-]{0,79}$#', (string) ($p['to'] ?? '')) === 1 ? (string) $p['to'] : '';   // Ametecs Global's one menu: the portal page to open
+        return redirect('/' . $t->slug . ($to !== '' ? '/' . $to : ''));   // url() adds the sub-folder
     }
 }

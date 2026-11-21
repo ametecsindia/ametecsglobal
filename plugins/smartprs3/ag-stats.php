@@ -9,7 +9,7 @@
  * It returns any of:
  *   'tiles'  => [['key' => 'present', 'label' => 'Present', 'value' => '42', 'sub' => 'of 50', 'tone' => 'green|amber|red|blue|']]
  *   'trend'  => ['title' => '...', 'labels' => [dates], 'sets' => ['Present' => [n, ...], ...]]   (a stacked bar chart)
- *   'people' => [employeeId => ['present' => n, 'absent' => n, 'leave' => n, 'late' => n]]       (AmetecsGlobal groups
+ *   'people' => [employeeId => ['present' => n, 'absent' => n, 'leave' => n, 'late' => n]]       (Ametecs Global groups
  *               these by company / branch / team for the breakdown chart)
  *   'list'   => ['title' => '...', 'rows' => [['text' => '...', 'sub' => '...']]]
  * Cloud: run by the dashboard directly. On-premise: SmartPRS3 sends today's figures with its hourly licence check-in.

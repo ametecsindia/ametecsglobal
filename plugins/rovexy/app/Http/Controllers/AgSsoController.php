@@ -10,14 +10,15 @@ use App\Support\CurrentCompany;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
-/** AmetecsGlobal "Open ROVEXY": the signed hand-over from core/open.php becomes a console session (see AgBridge). */
+/** Ametecs Global "Open ROVEXY": the signed hand-over from core/open.php becomes a console session (see AgBridge). */
 final class AgSsoController extends Controller
 {
     public function enter(Request $r)
     {
         $p = AgBridge::verify((string) $r->input('t'));
+        $p !== null && ($p['kind'] ?? '') !== '' && $p = null;   // a scan ticket is not a sign-in
         if ($p === null) {
-            return response('This link has expired. Go back to AmetecsGlobal and open ROVEXY again.', 403);
+            return response('This link has expired. Go back to Ametecs Global and open ROVEXY again.', 403);
         }
         $c = AgBridge::workspace($p);
         $user = app(CurrentCompany::class)->run($c, function () use ($c, $p) {
@@ -37,7 +38,8 @@ final class AgSsoController extends Controller
         });
         Auth::guard('web')->login($user);
         $r->session()->regenerate();
-        $r->session()->put(['auth_started_at' => time(), 'mfa_verified_at' => time()]);   // AmetecsGlobal already checked who this is
-        return redirect('/w/' . $c->slug . '/admin/');   // url() adds the sub-folder
+        $r->session()->put(['auth_started_at' => time(), 'mfa_verified_at' => time(), 'ag_sid' => (string) ($p['sid'] ?? '')]);   // Ametecs Global already checked who this is
+        $to = preg_match('#^[a-z0-9][a-z0-9/_:-]{0,79}$#', (string) ($p['to'] ?? '')) === 1 ? (string) $p['to'] : '';   // Ametecs Global's one menu: the console page to open
+        return redirect('/w/' . $c->slug . '/admin/' . $to);   // url() adds the sub-folder
     }
 }

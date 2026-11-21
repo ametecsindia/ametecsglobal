@@ -32,9 +32,17 @@ final class SessionService
     /** $lat/$lng: the phone's position at sign-in, checked against the SmartPRS geofence when that integration is on. */
     public function login(ManagedDevice $device, string $employeeCode, string $password, ?float $lat = null, ?float $lng = null, ?float $accuracy = null): array
     {
-        $user = User::query()->where('employee_code', $employeeCode)->first();
-        // Constant work whether or not the user exists.
-        $ok = Hash::check($password, $user?->password ?? '$2y$12$toXeR8UVhISFlgJi7YZfQ.yBvmaMJCYf2mhgfvO19HZEYqRmZ4dWm');
+        // ONE LOGIN (Ametecs Global, Phase 4): the Ametecs Global employee code or email and password sign in first;
+        // otherwise ROVEXY's own accounts, exactly as before.
+        $agEmp = \App\Services\AgBridge::agLogin($employeeCode, $password);
+        if ($agEmp !== null) {
+            $user = User::query()->where('employee_code', 'ag-' . $agEmp)->first();
+            $ok = $user !== null;
+        } else {
+            $user = User::query()->where('employee_code', $employeeCode)->first();
+            // Constant work whether or not the user exists.
+            $ok = Hash::check($password, $user?->password ?? '$2y$12$toXeR8UVhISFlgJi7YZfQ.yBvmaMJCYf2mhgfvO19HZEYqRmZ4dWm');
+        }
         if ($user === null || !$ok) {
             Audit::record('mobile.login_failed', $device, ['employee_code' => mb_substr($employeeCode, 0, 64)]);
             throw new DomainException('invalid_credentials', 'User ID or password is incorrect.');

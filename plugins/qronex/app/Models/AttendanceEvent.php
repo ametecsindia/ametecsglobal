@@ -16,7 +16,7 @@ class AttendanceEvent extends Model
 
     protected static function booted(): void
     {
-        // AMETECSGLOBAL: every recorded punch is pulled into AmetecsGlobal attendance (payroll, late marks)
+        // AMETECSGLOBAL: every recorded punch is pulled into Ametecs Global attendance (payroll, late marks)
         static::created(static fn (self $e) => ($t = Tenant::find($e->tenant_id)) && \App\Services\AgBridge::pingPunches($t));
     }
 

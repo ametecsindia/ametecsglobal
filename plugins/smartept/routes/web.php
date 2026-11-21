@@ -14,7 +14,7 @@ Route::view('/admin', 'admin');
 // PRE-LOGIN licence activation (SmartPRS2 AS-DL pattern, 13-Aug-2026): on-prem
 // client installs activate with their .lic BEFORE any sign-in. Cloud consoles
 // show a "managed by Ametecs" notice instead (SMARTEPT_ONPREM unset).
-// AmetecsGlobal one sign-in (core/open.php?app=smartept); see AgSsoController.
+// Ametecs Global one sign-in (core/open.php?app=smartept); see AgSsoController.
 Route::match(['get', 'post'], '/ag/sso', [\App\Http\Controllers\AgSsoController::class, 'enter'])->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class, \Illuminate\Foundation\Http\Middleware\ValidateCsrfToken::class])->middleware('throttle:30,1');
 
 Route::get('/activate', [\App\Http\Controllers\ActivateController::class, 'show']);

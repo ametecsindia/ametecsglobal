@@ -412,7 +412,7 @@ PEM;
     }
 
     /**
-     * THIS INSTALL'S DASHBOARD FIGURES for the client's AmetecsGlobal panel (owner, 18 Nov 2026): ag-stats.php, run for the
+     * THIS INSTALL'S DASHBOARD FIGURES for the client's Ametecs Global panel (owner, 18 Nov 2026): ag-stats.php, run for the
      * install's company and sent with the hourly check-in. Best effort - a failure here never touches the licence.
      *
      * @return array<string, string>

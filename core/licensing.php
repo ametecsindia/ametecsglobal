@@ -22,7 +22,7 @@ final class AmetecsLicences
     public const STATES = ['on' => ['Active', 'green'], 'suspended' => ['Suspended', 'amber'], 'expired' => ['Expired', 'red'], 'off' => ['Not licensed', 'grey']];
 
     /** Who is making changes (Super Admin email, or "licence server" for activations). */
-    public static string $actor = 'AmetecsGlobal';
+    public static string $actor = 'Ametecs Global';
 
     private static ?\PDO $pdo = null;
     private static ?bool $ready = null;

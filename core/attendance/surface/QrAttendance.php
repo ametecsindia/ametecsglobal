@@ -158,10 +158,10 @@ final class QrAttendance
     /** Does this company take SmartEPT punches? Not when it records attendance by QR, the device, or both (one source each). */
     public function takesSmartEpt(string $companyId): bool
     {
-        return !in_array($this->sourceFor($companyId), [self::SOURCE, 'biometric', 'qr_biometric'], true);
+        return !in_array($this->sourceFor($companyId), [self::SOURCE, 'biometric', 'qr_biometric', 'qronex'], true);
     }
 
-    /** standard | smartept | qr | biometric | qr_biometric — a company never set (or set to something unknown) is Standard. */
+    /** standard | smartept | qr | biometric | qr_biometric | qronex — a company never set (or set to something unknown) is Standard. */
     public function sourceFor(string $companyId): string
     {
         $s = (string) (((array) ($this->saved['sources'] ?? []))[$companyId] ?? '');

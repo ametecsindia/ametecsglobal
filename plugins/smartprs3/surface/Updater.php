@@ -49,7 +49,7 @@ final class Updater
 
     public function runningVersion(): string
     {
-        // AmetecsGlobal: other plugins (ROVEXY) keep version.json at their root.
+        // Ametecs Global: other plugins (ROVEXY) keep version.json at their root.
         $v = json_decode((string) (@file_get_contents($this->root . '/config/version.json') ?: @file_get_contents($this->root . '/version.json')), true);
 
         return is_array($v) ? (string) ($v['version'] ?? '') : '';
@@ -245,7 +245,7 @@ final class Updater
 
         // MIGRATIONS (pending only, never --fresh), then the application account's grants.
         $log = "Installed {$written} file(s); backup " . basename($backupPath) . "\n";
-        // Apps without SmartPRS3's migration tool (other AmetecsGlobal plugins) have no database step here.
+        // Apps without SmartPRS3's migration tool (other Ametecs Global plugins) have no database step here.
         $migrated = is_file($this->root . '/tools/db/migrate.php') ? $this->runTool('tools/db/migrate.php')
             : (is_file($this->root . '/artisan') ? $this->runTool('artisan migrate --force')   // Laravel plugins (ROVEXY)
             : ['ok' => true, 'log' => "\n(no database migrations for this app)\n"]);

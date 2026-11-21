@@ -32,7 +32,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'consent'    => \App\Http\Middleware\EnsureConsent::class,
             'tracking-mode' => \App\Http\Middleware\EnforceTrackingMode::class,
             'licensed'   => \App\Http\Middleware\EnsureLicensed::class,
-            'ag.managed' => \App\Http\Middleware\AgManaged::class,   // AmetecsGlobal: licence and organisation are central
+            'ag.managed' => \App\Http\Middleware\AgManaged::class,   // Ametecs Global: licence and organisation are central
             // 18-Sep-2026: Standard/Enforcer/Commander plan-feature gate, stacks
             // (AND) with role:/permission: — see EnsureFeature's own docblock.
             'feature'    => \App\Http\Middleware\EnsureFeature::class,
@@ -50,6 +50,7 @@ return Application::configure(basePath: dirname(__DIR__))
             // 23-Sep-2026: every API request runs on the signed-in company's Organisation-tab
             // timezone, including on a multi-company server — see the class docblock.
             \App\Http\Middleware\ApplyCompanyTimezone::class,
+            \App\Http\Middleware\AgSession::class,   // Ametecs Global: signed out there = console signed out here
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {

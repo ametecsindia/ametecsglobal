@@ -6,7 +6,8 @@
   "smartept": "SmartEPT punch (SmartEPT API)",
   "biometric": "Biometric device (ZKTeco / eSSL / eTimeOffice)",
   "qr_biometric": "QR Attendance + Biometric device (either — first IN, last OUT)",
-  "qr": "QR Attendance (gate QR in the app)"
+  "qr": "QR Attendance (gate QR in the app)",
+  "qronex": "QRONEX app (offices, gates and phones in QRONEX)"
  },
  "office_qr": {
   "_note": "QR PUNCH BY DEFAULT FOR OFFICE STAFF (owner, 12 Nov 2026): in a Standard company, an employee whose Staff Type is one of these punches by scanning the gate QR in the SmartPRS3 app, once their branch has an active gate. Field staff keep the app's location punch.",

@@ -6,7 +6,7 @@
  * per app, cloud or on-premise). all() still hands every caller the old shape:
  *   { "<tenant id>": { "<plugin code>": {"on": true, "seats": 50, "until": "2027-03-31", "state": "on", ...} } }
  *   on     — licensed (not cancelled)
- *   seats  — how many the client may use (employees for SmartPRS3); 0/empty = no AmetecsGlobal cap
+ *   seats  — how many the client may use (employees for SmartPRS3); 0/empty = no Ametecs Global cap
  *   until  — last valid day; after it the app is "expired" and will not open
  *   state  — on | suspended | expired | off: only "on" opens
  * Until the licence migration has run on a PC, the old core/data/access.json is used (and then imported once).
@@ -37,12 +37,14 @@ require_once __DIR__ . '/releases.php';
 require_once __DIR__ . '/plugins.php';
 require_once __DIR__ . '/billing.php';
 require_once __DIR__ . '/shell.php';
+require_once __DIR__ . '/roles.php';
+require_once __DIR__ . '/menu.php';
 
 final class AmetecsAccess
 {
     public const FILE = __DIR__ . '/data/access.json';
 
-    /** The apps AmetecsGlobal starts with. Super Admin -> Apps edits these and adds more (core/apps.json - shared code, synced through GitHub like the screens). */
+    /** The apps Ametecs Global starts with. Super Admin -> Apps edits these and adds more (core/apps.json - shared code, synced through GitHub like the screens). */
     public const STARTER_APPS = [
         'smartprs3' => ['name' => 'SmartPRS 3', 'what' => 'HRM · Payroll · Attendance · Compliance', 'unit' => 'employees', 'open' => '../plugins/smartprs3/public/app.php', 'color' => '#F97316'],
         'smartept'  => ['name' => 'SmartEPT', 'what' => 'Employee productivity tracking', 'unit' => 'users', 'open' => 'open.php?app=smartept', 'color' => '#2563EB'],
@@ -54,7 +56,7 @@ final class AmetecsAccess
 
     /**
      * The app catalogue: starter apps, then everything Super Admin added or changed, in the order saved.
-     * 'open' = where the app lives (null = not on AmetecsGlobal yet). Retired apps are left out unless asked for:
+     * 'open' = where the app lives (null = not on Ametecs Global yet). Retired apps are left out unless asked for:
      * clients stop seeing them, but their licences and data stay.
      */
     /** The app list is part of the interface, so it lives with the code (core/apps.json) and reaches every PC via GitHub. */
@@ -202,7 +204,7 @@ final class AmetecsAccess
             $had = (array) ($all[$tid][$code] ?? []);
             if (empty($had['on'])) {   // the one-time setup switches EVERY app on; seats or dates already entered are kept
                 $all[$tid][$code] = ['on' => true, 'seats' => max(100, (int) ($had['seats'] ?? 0)), 'until' => (string) (($had['until'] ?? '') ?: $until),
-                    'changed' => date('c') . ' by AmetecsGlobal (house client)'];
+                    'changed' => date('c') . ' by Ametecs Global (house client)'];
             }
         }
         self::save($all);
@@ -215,10 +217,10 @@ final class AmetecsAccess
                 $store->forTenant($tid)->put('companies', ['name' => 'Ametecs India Private Limited', 'timezone' => 'Asia/Kolkata']);
             }
             $made = $users->create(self::HOUSE_LOGIN, self::HOUSE_PASSWORD, 'administrator');
-            $made['ok'] && AmetecsData::log('AmetecsGlobal', 'Created the default test login ' . self::HOUSE_LOGIN . ' (change its password after first sign-in)', $tid);
+            $made['ok'] && AmetecsData::log('Ametecs Global', 'Created the default test login ' . self::HOUSE_LOGIN . ' (change its password after first sign-in)', $tid);
         }
         AmetecsData::saveClient($tid, ['house' => true]);
-        AmetecsData::log('AmetecsGlobal', 'Set up Ametecs India as the house client: sign-in link /c/ametecs, all apps on', $tid);
+        AmetecsData::log('Ametecs Global', 'Set up Ametecs India as the house client: sign-in link /c/ametecs, all apps on', $tid);
         @file_put_contents($marker, date('c') . "\n");
         return $tid;
     }
@@ -238,7 +240,7 @@ final class AmetecsAccess
     }
 }
 
-/** AmetecsGlobal's own records: client contact details and the activity log (core/data/). */
+/** Ametecs Global's own records: client contact details and the activity log (core/data/). */
 final class AmetecsData
 {
     public static function clients(): array
@@ -287,7 +289,7 @@ final class AmetecsData
 }
 
 /**
- * AmetecsGlobal email: the platform mailbox (SMTP) saved under Super Admin -> Email settings, with AmetecsGlobal's
+ * Ametecs Global email: the platform mailbox (SMTP) saved under Super Admin -> Email settings, with Ametecs Global's
  * own look. The SMTP settings are the same record SmartPRS3's console uses, so there is one mailbox to set up.
  */
 final class AmetecsMail
@@ -312,7 +314,7 @@ final class AmetecsMail
             . '<div style="padding:22px;font-size:14px;line-height:1.6;color:#1e293b">' . nl2br($e($text))
             . ($url !== '' ? '<p style="margin:22px 0"><a href="' . $e($url) . '" style="background:#B8893B;color:#fff;padding:11px 20px;border-radius:8px;text-decoration:none;font-weight:bold">' . $e($button ?: 'Open') . '</a></p>'
                 . '<p style="font-size:12px;color:#64748b">If the button does not work, copy this link into your browser:<br>' . $e($url) . '</p>' : '')
-            . '</div><div style="padding:12px 22px;background:#f8fafc;color:#94a3b8;font-size:12px">AmetecsGlobal by Ametecs India</div></div>';
+            . '</div><div style="padding:12px 22px;background:#f8fafc;color:#94a3b8;font-size:12px">Ametecs Global by Ametecs India</div></div>';
         try {
             return (new \SmartPRS\Surface\Smtp())->send($s, [$to], [], $subject, $text . ($url !== '' ? "\n\n" . $url : ''), $html);
         } catch (\Throwable $x) {
@@ -320,14 +322,14 @@ final class AmetecsMail
         }
     }
 
-    /** This AmetecsGlobal's own address, e.g. http://localhost/AmetecsGlobal/core/ */
+    /** This Ametecs Global's own address, e.g. http://localhost/AmetecsGlobal/core/ */
     public static function base(): string
     {
         return (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off' ? 'https' : 'http') . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost')
             . rtrim(str_replace('\\', '/', dirname((string) ($_SERVER['SCRIPT_NAME'] ?? '/core/index.php'))), '/') . '/';
     }
 
-    /** A client's own sign-in link: <AmetecsGlobal>/c/<slug>, like SmartPRS3's company links. */
+    /** A client's own sign-in link: <Ametecs Global>/c/<slug>, like SmartPRS3's company links. */
     public static function clientLink(string $slug): string
     {
         return preg_replace('~core/$~', '', self::base()) . 'c/' . rawurlencode($slug);
@@ -345,8 +347,8 @@ final class AmetecsMail
         if (!$inv['ok']) {
             return $inv;
         }
-        return self::send($pdo, (string) $inv['user']['email'], 'Reset your AmetecsGlobal password',
-            "Hello,\n\nUse the button below to set a new password for your AmetecsGlobal login (" . $inv['user']['email'] . ").\nThe link works once, for "
+        return self::send($pdo, (string) $inv['user']['email'], 'Reset your Ametecs Global password',
+            "Hello,\n\nUse the button below to set a new password for your Ametecs Global login (" . $inv['user']['email'] . ").\nThe link works once, for "
             . $hours . ' hour' . ($hours === 1 ? '' : 's') . ".\n\nIf you did not ask for this, ignore this email; your password stays as it is.",
             'Set a new password', self::base() . '?reset=' . rawurlencode($tenant . '.' . $inv['token']));
     }

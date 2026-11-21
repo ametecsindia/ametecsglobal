@@ -65,7 +65,7 @@ if ($cur[0] === 'users') {
         . '<button class="b">Save</button>' . ($hasDefault ? '<button class="b" name="clear" value="1" style="background:#64748b">Clear</button>' : '') . '</form>';
 }
 // THE SHARED CLIENT SHELL (Phase 4, 18 Nov 2026): same sidebar, top bar and notification bell as the client panel.
-$isAdmin = strtolower((string) ($user['role'] ?? '')) !== 'employee';
+$isAdmin = AmetecsRoles::isAdmin($user);
 $cq2 = $pdo->prepare('SELECT name FROM tenants WHERE id = ?');
 $cq2->execute([$tid]);
 $company = (string) ($cq2->fetchColumn() ?: '');
@@ -75,8 +75,8 @@ $titles = ['ag-apps' => 'App access', 'users' => 'Users & permissions', 'setup-c
 $title = $titles[$cur[0]] ?? 'Organization setup';
 foreach (AmetecsSetup::CORE as $items) { foreach ($items as $label => $it) { if ($it[0] === $cur[0] && $it[1] === $cur[1] && !isset($titles[$cur[0]])) { $title = $label; } } }
 ?><!DOCTYPE html>
-<html lang="en"><head><meta charset="utf-8"><script>try{var R=document.documentElement,T=localStorage.getItem("agTheme");R.classList.add("t-gold");(T==="navy"||T==="classic")&&R.classList.add("th-navy");T==="light"&&R.classList.add("th-light");T==="dark"&&R.classList.add("th-dark");localStorage.getItem("agSb")==="1"&&document.documentElement.classList.add("sb-mini")}catch(e){document.documentElement.classList.add("t-gold")}</script><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Organization Setup · AmetecsGlobal</title>
+<html lang="en"><head><meta charset="utf-8"><link rel="icon" href="assets/brand/favicon.svg" type="image/svg+xml"><link rel="icon" href="assets/brand/favicon-32x32.png" sizes="32x32"><link rel="apple-touch-icon" href="assets/brand/apple-touch-icon.png"><script>try{var R=document.documentElement,T=localStorage.getItem("agTheme");R.classList.add("t-gold");(T==="navy"||T==="classic")&&R.classList.add("th-navy");T==="light"&&R.classList.add("th-light");T==="dark"&&R.classList.add("th-dark");localStorage.getItem("agSb")==="1"&&document.documentElement.classList.add("sb-mini")}catch(e){document.documentElement.classList.add("t-gold")}</script><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Organization Setup · Ametecs Global</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 <style>
 :root{--navy:#1F3A5F;--gold:#B8893B;--ink:#1e293b;--mute:#64748b;--line:#e2e8f0}
@@ -102,9 +102,9 @@ tr:nth-child(even) td{background:#f8fafc}select,input[type=text]{padding:6px 8px
 .col{flex:1;display:flex;flex-direction:column;min-width:0;min-height:0}.umbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:10px 18px;background:#fff;border-bottom:1px solid var(--line);font-size:13px}.umbar .msg{flex-basis:100%;margin:0}.umbar input{padding:6px 8px;border:1px solid var(--line);border-radius:8px}
 @media (max-width:860px){.top-in .who{display:none}.top-in{padding:0 14px}}
 </style>
-<link rel="stylesheet" href="assets/shell.css?v=26"><link rel="stylesheet" href="assets/theme-gold.css?v=2"><link rel="stylesheet" href="assets/theme-clean.css?v=10"><link rel="stylesheet" href="assets/theme-alt.css?v=11"></head><body>
+<link rel="stylesheet" href="assets/shell.css?v=30"><link rel="stylesheet" href="assets/theme-gold.css?v=2"><link rel="stylesheet" href="assets/theme-clean.css?v=10"><link rel="stylesheet" href="assets/theme-alt.css?v=11"></head><body>
 <div class="shell">
-<?= AmetecsShell::nav($company, $isAdmin, $active, ['notifications' => count($notes)], './') ?>
+<?= AmetecsShell::nav($company, $isAdmin, $active, ['notifications' => count($notes)], './', $pdo, $user) ?>
 <div class="orgmain">
 <header class="top"><div class="top-in">
   <button type="button" class="drawer-btn" data-drawer aria-label="Menu"><i class="fas fa-bars"></i></button>

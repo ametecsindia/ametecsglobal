@@ -41,7 +41,7 @@ return static function (string $agTenant): array {
     if ($pdo === null) {
         return ['received' => 0, 'error' => 'database'];
     }
-    // the employee's current AmetecsGlobal code, found by id (hrms_ref "ag-<id>"); QRONEX's own employees are skipped
+    // the employee's current Ametecs Global code, found by id (hrms_ref "ag-<id>"); QRONEX's own employees are skipped
     $ids = array_values(array_unique(array_filter(array_map(static fn ($r) => str_starts_with((string) $r['hrms_ref'], 'ag-') ? (int) substr((string) $r['hrms_ref'], 3) : 0, $rows))));
     $codes = [];
     if ($ids !== []) {

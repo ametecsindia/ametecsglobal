@@ -1,0 +1,50 @@
+/* AMETECSGLOBAL BRAND LAYER (19 Nov 2026, Phase 3 - one brand): loaded only inside Ametecs Global. Same black and gold as
+   the Ametecs Global panel; SmartEPT's layout, screens and behaviour are untouched - only its colour tokens change. */
+html:root{--accent:#b8893b;--accent-2:#c9a24c;--accent-3:#e8c977;--accent-weak:#f6efe0;--accent-ink:#7a5a1e;--info:#9a7230;--info-w:#f6efe0;
+  --navy:#14100a;--navy-2:#2a2012;--canvas:#f6f3ec;--ring:0 0 0 3px rgba(201,162,76,.25)}
+.ag-home{position:fixed;right:16px;bottom:16px;z-index:9999;width:42px;height:42px;border-radius:12px;background:#c9a24c;color:#14100a;display:grid;place-items:center;font:800 14px/1 Inter,Arial,sans-serif;text-decoration:none;box-shadow:0 8px 20px -8px rgba(20,16,10,.6)}
+.ag-home:hover{background:#e8c977}
+.side{background:linear-gradient(178deg,#14100a 0%,#1d160c 60%,#2a2012 100%)!important}
+/* THEME FOLLOWS AMETECSGLOBAL (19 Nov 2026): the Golden/Navy/Light/Dark choice in the Ametecs Global user menu (agTheme) */
+html.th-navy:root{--navy:#0a1a33;--navy-2:#132b50;--canvas:#f2f4f8}
+html.th-navy .side{background:linear-gradient(178deg,#0a1a33 0%,#10284a 60%,#132b50 100%)!important}
+html.th-light:root{--canvas:#ffffff;--card-2:#fdfbf6}
+html.th-dark:root{--canvas:#0d0b08;--card:#17130d;--card-2:#1d1810;--border:#2e2618;--hairline:#272014;--ink:#efe6d2;--ink-2:#c9bc9f;--ink-3:#8f8268;--accent-weak:#2a2012}
+html.th-dark .side{background:#0d0b08!important;border-right:1px solid #2e2618}
+html.th-dark body{background-color:#0d0b08!important;color:#efe6d2}
+html.th-dark select,html.th-dark input,html.th-dark textarea{background-color:#1d1810;color:#efe6d2;border-color:#2e2618}
+/* ONE LOGIN (19 Nov 2026): inside Ametecs Global the SmartEPT password form is gone - only "Sign in through Ametecs Global" */
+#login .box>label,#login .box>input,#btn-login,#fp-link,#fp-box{display:none!important}
+/* COMMON SETUP (owner, 19 Nov 2026: "hide them in apps"): Organisation (branches, departments, teams, shifts), Users (one
+   login) and Biometric devices are set up once in Ametecs Global - Settings › Organization, Logins & access, Attendance devices */
+.nav[data-view="org"],.nav[data-view="users"],.nav[data-view="biometric"]{display:none!important}
+/* NO FLASH OF A SIGN-IN PAGE (20 Nov 2026): while SmartEPT checks the Ametecs Global sign-in (page load, refresh), show
+   "Opening SmartEPT…" - the box with "Sign in through Ametecs Global" appears only if that check failed (agShowLogin). */
+#login:not(.ag-show) .box{visibility:hidden}
+#login .box{position:relative}
+#login:not(.ag-show) .box{background:transparent!important;box-shadow:none!important;border:0!important}
+#login:not(.ag-show) .box::before{content:"";visibility:visible;position:absolute;left:50%;top:calc(50% - 34px);width:34px;height:34px;margin-left:-17px;border-radius:50%;
+  border:3px solid rgba(232,201,119,.22)!important;border-top-color:#d6ae55!important;background:none!important;box-sizing:border-box;animation:agspin .8s linear infinite;right:auto;bottom:auto;height:34px!important}
+#login:not(.ag-show) .box::after{content:"Opening SmartEPT…";visibility:visible;position:absolute;left:0;right:0;top:calc(50% + 14px);text-align:center;color:#e8c977;font:600 15px/1.4 Inter,"Segoe UI",system-ui,sans-serif;letter-spacing:.02em}
+@keyframes agspin{to{transform:rotate(360deg)}}
+/* the sign-in screen in Ametecs Global's black and gold, not SmartEPT's blue */
+#login{background:radial-gradient(600px 380px at 15% 10%,rgba(214,174,85,.16),transparent 60%),linear-gradient(160deg,#1d170e 0%,#110d07 55%,#0a0704 100%)!important}
+#login::before,#login::after{display:none!important}
+html.th-navy #login{background:radial-gradient(600px 380px at 15% 10%,rgba(214,174,85,.16),transparent 60%),linear-gradient(160deg,#0f2342,#0a1a33 50%,#06101f)!important}
+html.th-light #login{background:#fbfaf7!important}html.th-light #login:not(.ag-show) .box::after{color:#8a6420}
+#login .ag-sso{background:linear-gradient(135deg,#f3dc95,#d6ae55 45%,#b08433)!important;color:#14100a!important;font-weight:700;font-size:14px}
+/* MAIN THEME ON THE DASHBOARD TILES (owner, 20 Nov 2026: "convert into main theme"): every status tile in Ametecs Global's
+   black and gold - the dark gold block with a gold label, the number in dark ink - instead of seven different colours.
+   Follows the theme: Navy = navy block, Light = gold block with dark label, Dark = dark tiles. */
+.kpis .kpi{border:1px solid #efe6d4!important;box-shadow:0 10px 24px -18px rgba(20,16,10,.45)!important;border-radius:14px!important;overflow:hidden}
+.kpis .kpi .kside{background:radial-gradient(140px 90px at 0% 0%,rgba(214,174,85,.22),transparent 70%),linear-gradient(160deg,#2a2012 0%,#14100a 100%)!important;box-shadow:inset -1px 0 0 rgba(232,201,119,.25)}
+.kpis .kpi .kside,.kpis .kpi .kside *{color:#e8c977!important}
+.kpis .kpi .kside .l>*:not(:first-child),.kpis .kpi .kside small{color:#c9bc9f!important}
+.kpis .kpi .kmain .v{color:#17130c!important}
+.kpis .kpi .kmain{background:#fff!important}
+.kpis .kpi.drill:hover{box-shadow:0 0 0 2px #d6ae55,0 14px 28px -18px rgba(20,16,10,.5)!important}
+.kpis .kpi .kmain .go{color:#b08433!important}
+html.th-navy .kpis .kpi .kside{background:radial-gradient(140px 90px at 0% 0%,rgba(214,174,85,.18),transparent 70%),linear-gradient(160deg,#132b50,#0a1a33)!important}
+html.th-light .kpis .kpi .kside{background:linear-gradient(135deg,#f3dc95,#d6ae55 45%,#b08433)!important}
+html.th-light .kpis .kpi .kside,html.th-light .kpis .kpi .kside *{color:#14100a!important}
+html.th-dark .kpis .kpi{border-color:#2e2618!important}html.th-dark .kpis .kpi .kmain{background:#17130d!important}html.th-dark .kpis .kpi .kmain .v{color:#f3e7c9!important}

@@ -116,7 +116,7 @@ final class Licensing
         if ($cid === null) {
             return null;
         }
-        // AmetecsGlobal client: the licence is whatever its Super Admin says, read live (AgBridge).
+        // Ametecs Global client: the licence is whatever its Super Admin says, read live (AgBridge).
         if (($ag = \App\Services\AgBridge::liveLicence($this->current->get())) !== null) {
             return $ag;
         }

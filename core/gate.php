@@ -2,7 +2,7 @@
 /**
  * AMETECSGLOBAL GATE — runs inside plugins/smartprs3/public/app.php (SYNC adds the one `require` line after boot-hooks).
  *
- *   - nobody signed in  -> the AmetecsGlobal front door (core/), not SmartPRS3's own sign-in page
+ *   - nobody signed in  -> the Ametecs Global front door (core/), not SmartPRS3's own sign-in page
  *   - signed in, but Super Admin has not switched SmartPRS3 on (or it expired) for this client -> back to the front door
  *   - THE ORGANISATION AND EMPLOYEE MASTER ARE CENTRAL (owner, 17 Nov 2026): those screens (core/setup.php) open only from
  *     core/org.php, framed. Inside the app their menus, buttons and addresses are gone; everything else in the app,
@@ -19,12 +19,12 @@ if (!$superConsole) {
     // Framed inside core/org.php? The browser says so on every request in the frame (Sec-Fetch-Dest), redirects and saves included.
     $agFramed = ($_SERVER['HTTP_SEC_FETCH_DEST'] ?? '') === 'iframe' || isset($_GET['ag_embed']);
     if (!$session->isSignedIn()) {
-        // A SmartPRS3 company link (/c/<slug> -> ?ws=) opens the AmetecsGlobal company link instead; the mobile app's (?app=1) stays.
+        // A SmartPRS3 company link (/c/<slug> -> ?ws=) opens the Ametecs Global company link instead; the mobile app's (?app=1) stays.
         if (isset($_GET['ws']) && !isset($_GET['app']) && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET') {
             header('Location: ../../../core/?c=' . rawurlencode((string) $_GET['ws']));
             exit;
         }
-        // Every SmartPRS3 page opened while signed out goes to the AmetecsGlobal front door, except the pages that
+        // Every SmartPRS3 page opened while signed out goes to the Ametecs Global front door, except the pages that
         // must work without a sign-in: emailed set-password links (?t=), the mobile app's company link, forgot password, first-run enrolment.
         // Field formats and live checks on the pages that work signed out too (self-onboarding, set password).
         ob_start(static fn (string $html): string => stripos($html, '</body>') === false ? $html : str_ireplace('</body>', AmetecsSetup::fieldChecks() . '</body>', $html));
@@ -56,13 +56,13 @@ if (!$superConsole) {
             exit;
         };
         if ($agKind === 'master' && !$agFramed) {
-            $agStop('Settings and the employee master are managed centrally, in AmetecsGlobal Organization Setup.');
+            $agStop('Settings and the employee master are managed centrally, in Ametecs Global Organization Setup.');
         }
         $agAction = (string) ($_POST['action'] ?? '');
         // LICENCES ONLY IN SUPER ADMIN (owner, 19 Nov 2026): SmartPRS3's own subscription, renewal, invoices and self-update
-        // are closed inside AmetecsGlobal; the client sees its licence under My applications.
+        // are closed inside Ametecs Global; the client sees its licence under My applications.
         if (in_array((string) ($_GET['r'] ?? ''), ['my-subscription', 'sys-updates'], true) || in_array($agAction, ['my-renew', 'my-invoice', 'system-update', 'plan', 'subscription', 'onprem', 'feature-flag'], true)) {
-            $_SESSION['flash_problem'] = 'Licences, renewals and updates are managed by Ametecs in AmetecsGlobal Super Admin. Your licence is shown under My applications.';
+            $_SESSION['flash_problem'] = 'Licences, renewals and updates are managed by Ametecs in Ametecs Global Super Admin. Your licence is shown under My applications.';
             if ($agFramed) {
                 echo '<!doctype html><script>top.location.href="../../../core/?v=apps";</script>';
                 exit;
@@ -75,7 +75,7 @@ if (!$superConsole) {
         }
         $agModuleKind = str_starts_with($agAction, 'module-') ? AmetecsSetup::kind(AmetecsSetup::screenOf('m', (string) ($_POST['k'] ?? $_GET['k'] ?? ''))) : '';
         if (!$agFramed && $agPost && (in_array($agAction, AmetecsSetup::MASTER_ACTIONS, true) || in_array($agAction, AmetecsSetup::DEVICE_ACTIONS, true) || $agModuleKind === 'master')) {
-            $agStop('Employees are added and changed centrally, in AmetecsGlobal Organization Setup.');
+            $agStop('Employees are added and changed centrally, in Ametecs Global Organization Setup.');
         }
         // The central master works whatever apps the client has; the app's own screens only while it is switched on.
         if (!$agOn && $agKind !== 'master' && $agKind !== 'shared') {

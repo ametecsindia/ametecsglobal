@@ -394,7 +394,10 @@ final class Users
 
         $employment = $this->store->find('employees', $employmentId);
         $saved = $this->store->put(self::COLLECTION,
-            ['id' => $user['id'], 'employee_id' => $employmentId]);
+            ['id' => $user['id'], 'employee_id' => $employmentId]
+            // a login linked to an employee is called by that employee's name (Ametecs Global, 20 Nov 2026: a login
+            // moved to a re-made employee kept the old person's name on screen)
+            + (trim((string) ($employment['name'] ?? '')) !== '' ? ['name' => mb_substr(trim((string) $employment['name']), 0, 120)] : []));
 
         return ['ok' => true, 'why' => sprintf('%s is now %s. It sees that employee\'s records as '
             . 'its own, and a manager role on it reaches the people who report to it.',

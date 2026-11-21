@@ -134,10 +134,10 @@ Artisan::command('demo:activity {slug?}', function (?string $slug = null) {
 })->purpose('Realistic activity data for demo clients');
 Schedule::command('demo:activity')->hourlyAt(7)->name('demo:activity')->withoutOverlapping(30);
 
-// AMETECSGLOBAL: copy branches, teams and employees from AmetecsGlobal into every linked workspace (also done at each sign-in).
+// AMETECSGLOBAL: copy branches, teams and employees from Ametecs Global into every linked workspace (also done at each sign-in).
 Artisan::command('ag:sync', function () {
     Company::query()->get()->filter(fn (Company $c) => $c->setting('ag_tenant'))->each(function (Company $c) {
         [$b, $t, $u] = app(CurrentCompany::class)->run($c, fn () => \App\Services\AgBridge::sync($c));
         $this->info("{$c->name}: {$b} branches, {$t} teams, {$u} employees");
     });
-})->purpose('Copy AmetecsGlobal branches, teams and employees into ROVEXY');
+})->purpose('Copy Ametecs Global branches, teams and employees into ROVEXY');

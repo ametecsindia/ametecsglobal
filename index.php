@@ -31,22 +31,24 @@ $h = static fn (string $s): string => htmlspecialchars($s, ENT_QUOTES, 'UTF-8');
 // ponytail: static catalogue; mirrors AmetecsAccess::plugins() - read it from there if the catalogue starts changing often.
 $apps = [
     ['SmartPRS 3', 'HR, payroll and compliance', 'fa-people-group', 'Live', ['Employee directory, onboarding and exit', 'Attendance, leave and shifts', 'Payroll with PF, ESI, PT and TDS', 'Payslips, Form 16 and ID cards']],
-    ['SmartEPT', 'Employee productivity tracking', 'fa-chart-line', 'Arriving soon', ['Work time and activity', 'Office and remote teams', 'Daily and weekly reports', 'Team and person views']],
+    ['SmartEPT', 'Employee productivity tracking', 'fa-chart-line', 'Live', ['Work time and activity', 'Office and remote teams', 'Daily and weekly reports', 'Team and person views']],
     ['SmartDCM', 'Debt collection management', 'fa-hand-holding-dollar', 'Arriving soon', ['Allocations to agents', 'Calling and follow-ups', 'Payments and promises to pay', 'Agency and portfolio reports']],
     ['LeadGER', 'Lead management', 'fa-bullseye', 'Arriving soon', ['Capture leads from every source', 'Assign and follow up', 'Pipeline and stages', 'Conversion reports']],
     ['ROVEXY', 'Field force, calling and visits', 'fa-route', 'Live', ['Calling from the phone with outcomes and follow-ups', 'Live location and field visits', 'Call recordings and payment slips', 'Managed company phones']],
-    ['QRONEX', 'QR attendance', 'fa-qrcode', 'Arriving soon', ['QR codes at gates and offices', 'Geo-fenced punches', 'Works with the mobile app', 'Feeds attendance everywhere']],
+    ['QRONEX', 'QR attendance', 'fa-qrcode', 'Live', ['QR codes at gates and offices', 'Geo-fenced punches', 'Works with the mobile app', 'Feeds attendance everywhere']],
 ];
 $features = [
     ['fa-sitemap', 'One organisation, every app', 'Companies, branches, departments, designations, teams and shifts are set up once. Every application reads the same records.'],
-    ['fa-user-shield', 'One login per employee', 'Add an employee and they can sign in straight away. Switch any app on or off by company, branch, department, team or person.'],
+    ['fa-user-shield', 'One login for every app', 'Sign in once to Ametecs Global and open every app your role and licence allow, with no second password. Sign out once and every app signs out.'],
+    ['fa-users-viewfinder', 'Roles that follow your org chart', 'Admins, managers, team leads and employees each see what their role allows, in every app, straight from the reporting line.'],
+    ['fa-file-export', 'Every report in one place', 'Reports from every app on one page, with filters for dates, company, branch, team, role and people, ready to download to Excel.'],
     ['fa-fingerprint', 'Attendance devices built in', 'Biometric machines, QR gates and mobile punches feed attendance into every app at once. Register a device once.'],
     ['fa-key', 'Licences and seats you control', 'See seats used, renewal dates and plans for each app. Add users or change plan online, paying only for the days left.'],
     ['fa-cloud-arrow-up', 'Updates from one hub', 'New versions and add-on modules arrive in one place, for cloud and on-premise servers alike.'],
     ['fa-chart-pie', 'A live dashboard', 'Attendance, workforce, birthdays, plan usage and recent activity across all your apps, refreshed every minute.'],
 ];
 $faq = [
-    ['What is AmetecsGlobal?', 'It is the one platform that runs every Ametecs application. Your organisation, employees, logins, licences and updates live in one place, and each application plugs into it.'],
+    ['What is Ametecs Global?', 'It is the one platform that runs every Ametecs application. Your organisation, employees, logins, licences and updates live in one place, and each application plugs into it.'],
     ['Do I have to take every application?', 'No. Choose only the applications you need. You can add another one later from Licences and plans, and it works with everything you already set up.'],
     ['Can we run it on our own server?', 'Yes. Every application can run in the Ametecs cloud or on your own server with a licence key. Updates for on-premise servers come from the same hub and install when you choose.'],
     ['How are employees and logins managed?', 'Employees are added once in Organization Setup, one by one or by import. Each employee gets a login straight away, and you choose which applications they can use.'],
@@ -57,9 +59,9 @@ $faq = [
 ];
 ?><!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>AmetecsGlobal · Every Ametecs application on one platform</title>
-<meta name="description" content="AmetecsGlobal brings SmartPRS, SmartEPT, SmartDCM, LeadGER, ROVEXY and QRONEX together on one platform: one organisation, one login per employee, one place for licences and updates. Cloud or on-premise.">
-<meta property="og:title" content="AmetecsGlobal · Every Ametecs application on one platform">
+<title>Ametecs Global · Every Ametecs application on one platform</title>
+<meta name="description" content="Ametecs Global brings SmartPRS, SmartEPT, SmartDCM, LeadGER, ROVEXY and QRONEX together on one platform: one organisation, one login per employee, one place for licences and updates. Cloud or on-premise.">
+<meta property="og:title" content="Ametecs Global · Every Ametecs application on one platform">
 <meta property="og:description" content="HR and payroll, productivity, collections, leads, field force and QR attendance on one platform, by Ametecs India.">
 <meta name="theme-color" content="#0f0b06">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect rx='16' width='64' height='64' fill='%23c9a24c'/%3E%3Ctext x='32' y='42' font-family='Arial' font-weight='900' font-size='26' text-anchor='middle' fill='%2314100a'%3EAG%3C/text%3E%3C/svg%3E">
@@ -334,6 +336,8 @@ body:before{content:"";position:fixed;inset:0;pointer-events:none;z-index:100;op
 .tview img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .45s}.tview img.on{opacity:1}
 /* gallery strip */
 .gal{display:grid;grid-template-columns:1.3fr 1fr;gap:20px}
+.olg{display:grid;grid-template-columns:repeat(2,1fr);gap:22px}.olg figure{margin:0}.olg figcaption{display:flex;gap:10px;align-items:baseline;padding:12px 16px;background:#14100a;color:#c9bc9f;font-size:14px}.olg figcaption b{color:#e8c977}
+@media (max-width:760px){.olg{grid-template-columns:1fr}}
 .gal .shotf:first-child{grid-row:span 2}
 .gal figure{margin:0}.gal figcaption{font-size:13px;color:var(--mute);margin-top:10px;display:flex;gap:8px;align-items:center}.gal figcaption i{color:#b08433}
 /* finer cards */
@@ -346,11 +350,11 @@ body:before{content:"";position:fixed;inset:0;pointer-events:none;z-index:100;op
 
 <header class="nav"><div class="wrap">
   <a class="logo" href="#top"><span class="lm">AG</span><span>Ametecs<b>Global</b></span></a>
-  <nav id="mainnav"><a href="#apps">Applications</a><a href="#tour">Product tour</a><a href="#themes">Themes</a><a href="#features">Features</a><a href="#pricing">Pricing</a><a href="#faq">FAQ</a><a href="#contact">Contact</a></nav>
+  <nav id="mainnav"><a href="#apps">Applications</a><a href="#tour">Product tour</a><a href="#onelogin">One login</a><a href="#themes">Themes</a><a href="#features">Features</a><a href="#pricing">Pricing</a><a href="#faq">FAQ</a><a href="#contact">Contact</a></nav>
   <div class="acts"><a class="btn line" href="#contact">Book a demo</a><a class="btn gold" href="core/"><i class="fas fa-right-to-bracket"></i>Sign in</a></div>
   <button class="burger" type="button" aria-label="Open menu" aria-expanded="false" data-burger><i class="fas fa-bars"></i></button>
 </div>
-<div class="mnav" id="mnav"><a href="#apps">Applications</a><a href="#tour">Product tour</a><a href="#themes">Themes</a><a href="#features">Features</a><a href="#pricing">Pricing</a><a href="#faq">FAQ</a><a href="#contact">Contact</a><a class="btn gold" href="core/"><i class="fas fa-right-to-bracket"></i>Sign in</a></div>
+<div class="mnav" id="mnav"><a href="#apps">Applications</a><a href="#tour">Product tour</a><a href="#onelogin">One login</a><a href="#themes">Themes</a><a href="#features">Features</a><a href="#pricing">Pricing</a><a href="#faq">FAQ</a><a href="#contact">Contact</a><a class="btn gold" href="core/"><i class="fas fa-right-to-bracket"></i>Sign in</a></div>
 </header>
 
 <main id="top">
@@ -363,7 +367,7 @@ body:before{content:"";position:fixed;inset:0;pointer-events:none;z-index:100;op
 </div>
   <div class="stage">
     <div class="frame"><div class="bar3"><i></i><i></i><i></i><span class="url"><i class="fas fa-lock" style="width:auto;height:auto;background:none;font-size:9px;color:#d6ae55"></i>your-company.ametecsglobal</span></div>
-      <img src="assets/landing/dashboard.jpg" width="1366" height="585" alt="The AmetecsGlobal dashboard: employees, attendance, absences and late arrivals across 20 companies" fetchpriority="high"></div>
+      <img src="assets/landing/dashboard.jpg" width="1366" height="641" alt="The Ametecs Global dashboard: today across every app, with employees, attendance, absences and late arrivals" fetchpriority="high"></div>
     <div class="chip c1" aria-hidden="true"><i class="fas fa-fingerprint"></i><div><b>Punch received</b>Biometric · Kondapur gate</div></div>
     <div class="chip c2" aria-hidden="true"><i class="fas fa-user-plus"></i><div><b>Login created</b>New employee, every app</div></div>
     <div class="chip c3" aria-hidden="true"><i class="fas fa-file-invoice"></i><div><b>Invoice paid</b>Seats added instantly</div></div>
@@ -390,7 +394,7 @@ body:before{content:"";position:fixed;inset:0;pointer-events:none;z-index:100;op
 </div></section>
 
 <section style="padding-top:40px"><div class="wrap">
-  <div class="sh reveal"><span class="k">The problem</span><h2>Many apps, the same employee five times</h2><p>Each tool keeps its own staff list, its own logins and its own renewal date. AmetecsGlobal puts them on one foundation.</p></div>
+  <div class="sh reveal"><span class="k">The problem</span><h2>Many apps, the same employee five times</h2><p>Each tool keeps its own staff list, its own logins and its own renewal date. Ametecs Global puts them on one foundation.</p></div>
   <div class="ba reveal">
     <div class="bx no"><h3><i class="fas fa-circle-xmark"></i>Without one platform</h3><ul>
       <li><i class="fas fa-xmark"></i>Employees typed again in every application</li>
@@ -398,7 +402,7 @@ body:before{content:"";position:fixed;inset:0;pointer-events:none;z-index:100;op
       <li><i class="fas fa-xmark"></i>Attendance machines connected app by app</li>
       <li><i class="fas fa-xmark"></i>Renewals and invoices scattered across vendors</li>
       <li><i class="fas fa-xmark"></i>No single view of the whole workforce</li></ul></div>
-    <div class="bx yes"><h3><i class="fas fa-circle-check"></i>With AmetecsGlobal</h3><ul>
+    <div class="bx yes"><h3><i class="fas fa-circle-check"></i>With Ametecs Global</h3><ul>
       <li><i class="fas fa-check"></i>Your organisation set up once, read by every app</li>
       <li><i class="fas fa-check"></i>One login per employee, apps switched on as needed</li>
       <li><i class="fas fa-check"></i>Every punch reaches every application</li>
@@ -417,19 +421,28 @@ body:before{content:"";position:fixed;inset:0;pointer-events:none;z-index:100;op
 
 <section id="tour" class="tour"><div class="wrap">
   <div class="sh reveal"><span class="k">Product tour</span><h2>See how it works</h2><p>The same calm, black-and-gold workspace for your administrators, your managers and Ametecs.</p></div>
-  <div class="tabs" role="tablist"><button class="on" type="button" data-tab="t1"><i class="fas fa-gauge-high"></i>Dashboard</button><button type="button" data-tab="t2"><i class="fas fa-hand-pointer"></i>People</button><button type="button" data-tab="t3"><i class="fas fa-users"></i>Directory</button><button type="button" data-tab="t4"><i class="fas fa-key"></i>Licences</button></div>
+  <div class="tabs" role="tablist"><button class="on" type="button" data-tab="t1"><i class="fas fa-gauge-high"></i>Dashboard</button><button type="button" data-tab="t2"><i class="fas fa-id-card-clip"></i>Employee 360</button><button type="button" data-tab="t3"><i class="fas fa-chart-column"></i>Reports</button><button type="button" data-tab="t4"><i class="fas fa-key"></i>Licences</button></div>
   <div class="pane on" id="t1"><div><span class="cap"><i class="fas fa-gauge-high"></i>Dashboard</span><h3>Your whole company at a glance</h3><p>One dashboard for every application, filtered by date, company, branch, department, team or person.</p>
       <ul><li><i class="fas fa-check"></i>Present, absent, on leave, late and early, live</li><li><i class="fas fa-check"></i>Attendance ring, seven-day trend and company comparison</li><li><i class="fas fa-check"></i>Birthdays, anniversaries, probation and expiring documents</li><li><i class="fas fa-check"></i>Refreshes itself every minute</li></ul></div>
     <div class="shotf"><div class="bar3"><i></i><i></i><i></i><span>Dashboard · charts</span></div><img loading="lazy" src="assets/landing/charts.jpg" width="1366" height="490" alt="Attendance ring, last seven days and by-company attendance charts"></div></div>
-  <div class="pane" id="t2"><div><span class="cap"><i class="fas fa-hand-pointer"></i>Click any number</span><h3>The people behind every figure</h3><p>Open any tile to see exactly who is present, absent or late, then open a person for their full record.</p>
-      <ul><li><i class="fas fa-check"></i>Search across name, code, company and department</li><li><i class="fas fa-check"></i>Full details with this period's attendance</li><li><i class="fas fa-check"></i>Call or email in one click</li><li><i class="fas fa-check"></i>Download the list as CSV</li></ul></div>
-    <div class="shotf"><div class="bar3"><i></i><i></i><i></i><span>Employees · details</span></div><img loading="lazy" src="assets/landing/people.jpg" width="1366" height="585" alt="Employee list pop-up with a detail card showing attendance and contact details"></div></div>
-  <div class="pane" id="t3"><div><span class="cap"><i class="fas fa-users"></i>Organisation</span><h3>One employee directory</h3><p>Add, import and edit employees once. Every application reads the same record.</p>
-      <ul><li><i class="fas fa-check"></i>Totals by company, branch and department</li><li><i class="fas fa-check"></i>Field and format checks on every save</li><li><i class="fas fa-check"></i>Logins created the moment an employee is added</li><li><i class="fas fa-check"></i>Export and bulk import</li></ul></div>
-    <div class="shotf"><div class="bar3"><i></i><i></i><i></i><span>Employee directory</span></div><img loading="lazy" src="assets/landing/directory.jpg" width="1366" height="470" alt="Employee directory with totals, company filters and the employee table"></div></div>
+  <div class="pane" id="t2"><div><span class="cap"><i class="fas fa-id-card-clip"></i>Employee 360</span><h3>One person, every application</h3><p>Open anyone to see their master record, attendance from every source and what each licensed app knows about them.</p>
+      <ul><li><i class="fas fa-check"></i>Biometric, QR, PC and phone punches together</li><li><i class="fas fa-check"></i>Productivity, calls and visits from every app</li><li><i class="fas fa-check"></i>Which apps the person can use, on one line</li><li><i class="fas fa-check"></i>Managers and team leads see only their own people</li></ul></div>
+    <div class="shotf"><div class="bar3"><i></i><i></i><i></i><span>Employee 360</span></div><img loading="lazy" src="assets/landing/e360.jpg" width="1366" height="641" alt="Employee 360: one employee's record, attendance from every source and app activity"></div></div>
+  <div class="pane" id="t3"><div><span class="cap"><i class="fas fa-chart-column"></i>Reports</span><h3>Every app's reports, one page</h3><p>Pick the app and the report, narrow it with as many filters as you need, then view it or download it.</p>
+      <ul><li><i class="fas fa-check"></i>Attendance, productivity, calls and QR scans</li><li><i class="fas fa-check"></i>Filter by dates, company, branch, team, role and people</li><li><i class="fas fa-check"></i>Download to Excel in one click</li><li><i class="fas fa-check"></i>Every download is recorded</li></ul></div>
+    <div class="shotf"><div class="bar3"><i></i><i></i><i></i><span>Reports</span></div><img loading="lazy" src="assets/landing/reports.jpg" width="1366" height="641" alt="Reports page with app tabs, filters and an attendance summary table"></div></div>
   <div class="pane" id="t4"><div><span class="cap"><i class="fas fa-key"></i>Licences</span><h3>Licences you can see and change</h3><p>Seats, validity and plan for every application, with online payment.</p>
       <ul><li><i class="fas fa-check"></i>Seats used against seats bought</li><li><i class="fas fa-check"></i>Add users and pay only for the days left</li><li><i class="fas fa-check"></i>Change plan with unused time credited</li><li><i class="fas fa-check"></i>Tax invoices ready to print or save as PDF</li></ul></div>
-    <div class="shotf"><div class="bar3"><i></i><i></i><i></i><span>Licences and plans</span></div><img loading="lazy" src="assets/landing/licences.jpg" width="1366" height="585" alt="Licences and plans with seats and validity for six applications"></div></div>
+    <div class="shotf"><div class="bar3"><i></i><i></i><i></i><span>Licences and plans</span></div><img loading="lazy" src="assets/landing/licences.jpg" width="1366" height="641" alt="Licences and plans with seats and validity for six applications"></div></div>
+</div></section>
+
+<section id="onelogin" style="background:#fff;border-top:1px solid var(--line);border-bottom:1px solid var(--line)"><div class="wrap">
+  <div class="sh reveal"><span class="k">One login</span><h2>Sign in once. Every app opens.</h2><p>Each application opens from Ametecs Global already signed in, with the same top bar, the same menu and the same theme. One click on the Ametecs Global button brings you back.</p></div>
+  <div class="olg">
+    <?php foreach ([['app-smartprs', 'SmartPRS 3', 'HR, payroll and compliance'], ['app-smartept', 'SmartEPT', 'Live productivity'], ['app-rovexy', 'ROVEXY', 'Calling and field force'], ['app-qronex', 'QRONEX', 'QR attendance']] as [$img, $n, $d]): ?>
+    <figure class="shotf reveal"><div class="bar3"><i></i><i></i><i></i><span><?= $h($n) ?></span></div><img loading="lazy" src="assets/landing/<?= $img ?>.jpg" width="1366" height="641" alt="<?= $h($n . ' inside Ametecs Global') ?>"><figcaption><b><?= $h($n) ?></b><?= $h($d) ?></figcaption></figure>
+    <?php endforeach; ?>
+  </div>
 </div></section>
 
 <section id="themes"><div class="wrap thm">
@@ -446,7 +459,7 @@ body:before{content:"";position:fixed;inset:0;pointer-events:none;z-index:100;op
 <section style="background:#fff;border-top:1px solid var(--line);border-bottom:1px solid var(--line)"><div class="wrap">
   <div class="sh reveal"><span class="k">Run by Ametecs</span><h2>A command centre behind every client</h2><p>Ametecs manages clients, licences, releases and billing from one Super Admin console, so your renewals, updates and invoices are always in order.</p></div>
   <div class="gal">
-    <figure class="shotf reveal" style="background:#14100a"><div class="bar3"><i></i><i></i><i></i><span>Super Admin · dashboard</span></div><img loading="lazy" src="assets/landing/super.jpg" width="1366" height="585" alt="Super Admin dashboard with revenue, renewals and client overview"></figure>
+    <figure class="shotf reveal" style="background:#14100a"><div class="bar3"><i></i><i></i><i></i><span>Super Admin · dashboard</span></div><img loading="lazy" src="assets/landing/super.jpg" width="1366" height="641" alt="Super Admin dashboard with revenue, renewals and client overview"></figure>
     <figure class="reveal" style="margin:0;display:grid;gap:14px;align-content:start">
       <div class="sg"><i class="fas fa-calendar-check"></i><h4>Renewals never missed</h4><p>Every licence ending in the next 60 days, with one-click renew and invoice.</p></div>
       <div class="sg"><i class="fas fa-cloud-arrow-up"></i><h4>Releases to chosen clients</h4><p>Publish an update, pick who gets it, schedule it and roll back if needed.</p></div>
@@ -456,20 +469,20 @@ body:before{content:"";position:fixed;inset:0;pointer-events:none;z-index:100;op
 </div></section>
 
 <section id="features" class="feat"><div class="wrap">
-  <div class="sh reveal"><span class="k">Why one platform</span><h2>Set it up once. Every app benefits.</h2><p>No more keeping the same employee in five places. AmetecsGlobal is the single home for your organisation.</p></div>
+  <div class="sh reveal"><span class="k">Why one platform</span><h2>Set it up once. Every app benefits.</h2><p>No more keeping the same employee in five places. Ametecs Global is the single home for your organisation.</p></div>
   <div class="fgrid"><?php foreach ($features as [$ic, $t, $p]): ?>
     <div class="f reveal"><div class="ic"><i class="fas <?= $ic ?>"></i></div><div><h3><?= $h($t) ?></h3><p><?= $h($p) ?></p></div></div>
   <?php endforeach; ?></div>
 </div></section>
 
 <section id="attendance"><div class="wrap">
-  <div class="sh reveal"><span class="k">Attendance</span><h2>Every punch, everywhere it is needed</h2><p>Connect your devices once in AmetecsGlobal. Attendance flows into payroll, productivity, collections and every other app.</p></div>
+  <div class="sh reveal"><span class="k">Attendance</span><h2>Every punch, everywhere it is needed</h2><p>Connect your devices once in Ametecs Global. Attendance flows into payroll, productivity, collections and every other app.</p></div>
   <div class="att">
     <div class="ac reveal"><div class="big"><i class="fas fa-fingerprint"></i></div><h3>Biometric machines</h3><p>Connect your existing machines, map device IDs to employees and sync punches automatically.</p></div>
     <div class="ac reveal"><div class="big"><i class="fas fa-qrcode"></i></div><h3>QR at gates and offices</h3><p>Printed QR codes per office or gate, with geo-fencing so punches count only on site.</p></div>
     <div class="ac reveal"><div class="big"><i class="fas fa-mobile-screen"></i></div><h3>Mobile app</h3><p>Employees punch from approved phones only. Approve a device once, revoke a lost one instantly.</p></div>
   </div>
-  <div class="flow reveal"><span>Device punch</span><i class="fas fa-arrow-right"></i><span class="g">AmetecsGlobal</span><i class="fas fa-arrow-right"></i><span>Payroll</span><span>Productivity</span><span>Collections</span><span>Reports</span></div>
+  <div class="flow reveal"><span>Device punch</span><i class="fas fa-arrow-right"></i><span class="g">Ametecs Global</span><i class="fas fa-arrow-right"></i><span>Payroll</span><span>Productivity</span><span>Collections</span><span>Reports</span></div>
 </div></section>
 
 <section style="background:#fff;border-top:1px solid var(--line);border-bottom:1px solid var(--line)"><div class="wrap sec">
@@ -514,7 +527,7 @@ body:before{content:"";position:fixed;inset:0;pointer-events:none;z-index:100;op
 <section id="about"><div class="wrap about">
   <div class="sh reveal"><span class="k">About Ametecs</span><h2>Built in Hyderabad, from years in the field</h2>
     <p>Ametecs India Private Limited is a product technology company based in Kondapur, Hyderabad. Our software grew out of years of working inside debt collection and operations teams, where we saw how many tools one company needs and how much time is lost keeping them in step.</p>
-    <p>AmetecsGlobal is our answer: one platform where every Ametecs application shares the same organisation, logins, licences and updates, so our clients can focus on their work.</p></div>
+    <p>Ametecs Global is our answer: one platform where every Ametecs application shares the same organisation, logins, licences and updates, so our clients can focus on their work.</p></div>
   <div class="vals">
     <div class="vl reveal"><i class="fas fa-eye"></i><div><b>Observation first</b><span>We study the work from the user's side before we build.</span></div></div>
     <div class="vl reveal"><i class="fas fa-handshake"></i><div><b>Close to customers</b><span>Our team helps you set up and stays with you after go-live.</span></div></div>
@@ -528,7 +541,7 @@ body:before{content:"";position:fixed;inset:0;pointer-events:none;z-index:100;op
 </div></section>
 
 <section id="contact" class="contact"><div class="wrap cgrid">
-  <div class="reveal"><span class="k" style="color:#d6ae55">Contact</span><h2>See AmetecsGlobal with your own data</h2>
+  <div class="reveal"><span class="k" style="color:#d6ae55">Contact</span><h2>See Ametecs Global with your own data</h2>
     <p class="lead">Tell us a little about your company and the applications you are interested in. The Ametecs team will set up a walkthrough for you.</p>
     <div class="ci">
       <div><i class="fas fa-location-dot"></i><div><b>Office</b><span>Ametecs India Private Limited, Kondapur, Hyderabad, Telangana</span></div></div>
@@ -551,7 +564,7 @@ body:before{content:"";position:fixed;inset:0;pointer-events:none;z-index:100;op
         <div class="fi w"><label for="f-msg">Anything we should know?</label><textarea id="f-msg" name="message" rows="3" maxlength="1000" placeholder="Your current tools, number of branches, timelines…"><?= $h($v('message')) ?></textarea></div>
       </div>
       <button class="btn gold" type="submit"><i class="fas fa-paper-plane"></i>Request my demo</button>
-      <p class="small">We use these details only to contact you about AmetecsGlobal.</p>
+      <p class="small">We use these details only to contact you about Ametecs Global.</p>
     </form>
     <?php endif; ?>
   </div>

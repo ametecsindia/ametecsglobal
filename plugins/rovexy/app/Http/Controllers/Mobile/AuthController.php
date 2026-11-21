@@ -32,6 +32,15 @@ final class AuthController extends Controller
     }
 
     /** Includes the employee-facing monitoring disclosure derived from the effective policy. */
+    /** Ametecs Global: a one-time link that opens a web page (payslips, leave, attendance, QRONEX, SmartEPT) already signed in. */
+    public function agOpen(Request $r)
+    {
+        $what = (string) $r->validate(['what' => 'required|string|max:30'])['what'];
+        $base = preg_replace('#/plugins/rovexy/public$#', '', $r->root());
+        $url = \App\Services\AgBridge::openLink($r->user(), $this->device($r), $what, $base);
+        return $url === null ? response()->json(['message' => 'This is not available for you.'], 403) : response()->json(['url' => $url]);
+    }
+
     public function me(Request $r, PolicyService $policies)
     {
         $d = $this->device($r);
@@ -39,6 +48,8 @@ final class AuthController extends Controller
         $u = $r->user();
         return response()->json([
             'employee' => ['id' => $u->id, 'name' => $u->name, 'employee_code' => $u->employee_code],
+            'ag_apps' => \App\Services\AgBridge::apps($u),
+            'ag_today' => \App\Services\AgBridge::today($u),   // today's attendance for the home card   // Ametecs Global: the tiles on the phone's home (null = plain ROVEXY)
             'device' => ['id' => $d->id, 'asset_tag' => $d->asset_tag, 'compliant' => $d->compliant, 'policy_state' => $d->policy_state,
                 'failing_mandatory' => data_get($d->compliance_detail, 'failing_mandatory', [])],
             'calling_route' => \App\Services\CallService::routes($u)[0] ?? 'sim',   // default (older app builds use only this)

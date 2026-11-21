@@ -155,7 +155,7 @@ if (!$session->isSignedIn() ? $superConsole : ((($session->user()['platform'] ??
 // LICENCE GATE (on-premise), SUBSCRIPTION LOCK (cloud), MOBILE-APP DEVICE LINK — SmartPRS 2's
 // middlewares, 16 Oct 2026. Sets $subscriptionLocked; does nothing on a local/SaaS install with a
 // licence-free, unexpired workspace. See the file for the rules.
-require __DIR__ . '/../surface/partials/boot-hooks.php'; require __DIR__ . '/../../../core/gate.php'; // AmetecsGlobal: plugin on/off + seats
+require __DIR__ . '/../surface/partials/boot-hooks.php'; require __DIR__ . '/../../../core/gate.php'; // AmetecsGlobal: plugin on/off + seats require __DIR__ . '/../../../core/gate.php'; // Ametecs Global: plugin on/off + seats
 
 // EVERY collection below this line is read and written through a TENANT-SCOPED
 // store. The scoping is structural rather than a where-clause each screen has to
@@ -5635,10 +5635,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
 
+        // Ametecs Global: every employee needs a valid email ID (it is their login) - add and edit alike.
+        $agMail = isset($_POST['f_email']) ? trim(post('f_email')) : trim((string) ($existingRow['email'] ?? ''));
         // AmetecsGlobal: every employee needs a valid email ID (it is their login) - add and edit alike.
         $agMail = isset($_POST['f_email']) ? trim(post('f_email')) : trim((string) ($existingRow['email'] ?? ''));
         if ($code === '' || $name === '') {
             $problem = 'An employee needs a code and a name.';
+        } elseif (filter_var($agMail, FILTER_VALIDATE_EMAIL) === false) {
+            $problem = $agMail === '' ? 'Enter the employee\'s email ID - it is their login. Not saved.'
+                : '"' . $agMail . '" is not a valid email ID. Correct it and save again. Not saved.';
         } elseif (filter_var($agMail, FILTER_VALIDATE_EMAIL) === false) {
             $problem = $agMail === '' ? 'Enter the employee\'s email ID - it is their login. Not saved.'
                 : '"' . $agMail . '" is not a valid email ID. Correct it and save again. Not saved.';
@@ -6860,6 +6865,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $problem = 'Only a submitted form can be approved.';
                 } elseif (post('all_verified') !== '1') {
                     $problem = 'Tick that you have verified the submitted fields.';
+                } elseif (filter_var(trim((string) ((SelfOnboarding::data($soTarget)['columns']['email'] ?? '') ?: ($soTarget['email'] ?? ''))), FILTER_VALIDATE_EMAIL) === false) {
+                    $problem = 'Not injected - the joiner needs a valid email ID (it is their login). Correct it with Edit on the invitation first.';   // Ametecs Global: email required
                 } elseif (filter_var(trim((string) ((SelfOnboarding::data($soTarget)['columns']['email'] ?? '') ?: ($soTarget['email'] ?? ''))), FILTER_VALIDATE_EMAIL) === false) {
                     $problem = 'Not injected - the joiner needs a valid email ID (it is their login). Correct it with Edit on the invitation first.';   // AmetecsGlobal: email required
                 } elseif (($soHrProblems = employeeFieldProblems($selfOnboarding->hrOnly($employeeFields->inUse()), $employeeImport)) !== []) {
@@ -12620,6 +12627,26 @@ $brandShowText = !$brandHasText || $brandLogo === '';
     // anything in it: a holder of leave decisions, or an employee somebody
     // reports to. A regular employee with no team never sees it.
     $navFlags = ['leave_approver' => $may('leave.request.decide') || hasDirectReports($store, $scope->own()) || leaveSelfApproves((string) ($session->user()['role'] ?? ''))];
+    // AMETECS GLOBAL ONE MENU (owner, 20 Nov 2026): the SmartPRS items this person may open, kept in the shared sign-in
+    // session for Ametecs Global's menu (core/menu.php), so the one menu shows exactly what this role and licence allow.
+    $_SESSION['ag_prs_nav'] = array_map(static fn (array $s): array => ['key' => (string) $s['key'], 'label' => (string) $s['label'],
+        'items' => array_values(array_map(static fn (array $i): array => ['label' => (string) ($i['label'] ?? ''), 'icon' => (string) ($i['icon'] ?? ''),
+            'href' => (string) $i['href'], 'count' => $i['count']], array_filter((array) $s['items'], static fn (array $i): bool => (bool) ($i['allowed'] ?? false))))],
+        array_values(array_filter($navigation->forViewer($may, $navBadges, $navFlags), static fn (array $s): bool => !($s['platform_only'] ?? false))));
+    if (isset($_GET['ag_nav'])) {   // asked by the menu before this person has opened a SmartPRS page in this sign-in
+        while (ob_get_level() > 0) { ob_end_clean(); }
+        header('Content-Type: application/json');
+        header('Cache-Control: no-store');
+        echo json_encode(['ok' => true]);
+        exit;
+    }
+    if (isset($_GET['ag_api'])) {   // Ametecs Global phone app's own (native) screens: JSON from the same engines
+        while (ob_get_level() > 0) { ob_end_clean(); }
+        header('Content-Type: application/json');
+        header('Cache-Control: no-store');
+        echo json_encode(require __DIR__ . '/../surface/partials/ag-api.php');
+        exit;
+    }
     // WHO IS SIGNED IN, as a person rather than a login: the employee this
     // account is bound to (Users::bind — `users.employee_id`), so the avatar
     // shows their own photo and their own name's initials rather than two
@@ -23874,7 +23901,11 @@ boot();
                 if ($umMail === '') { continue; } // shown on the row as "no email on file"
                 $umSame = $umByEmail[strtolower($umMail)] ?? null;
                 if ($umSame !== null) {
-                    if ((string) $umSame['employment_id'] === '') {
+                    // An employee removed and made again (e.g. fresh sample data) leaves its login behind on the same email:
+                    // that login belongs to no current employee, so it moves to the new one (Ametecs Global, 20 Nov 2026).
+                    $umOld = (string) $umSame['employment_id'] === '' ? null : $store->find('employees', (string) $umSame['employment_id']);
+                    $umOrphan = (string) $umSame['employment_id'] !== '' && ($umOld === null || trim((string) ($umOld['deleted_at'] ?? '')) !== '');
+                    if ((string) $umSame['employment_id'] === '' || $umOrphan) {
                         $r = $users->bind((string) $umSame['id'], (string) $umE['id']);
                         $r['ok'] ? $umSync['linked'][] = Employment::codeOrSay($umE) : $umSync['problems'][] = Employment::codeOrSay($umE) . ': ' . $r['why'];
                         $r['ok'] && $audit('user.linked', 'user', (string) $umSame['id'], null, ['employment' => (string) $umE['id']], 'Linked from User Management sync');
@@ -23891,6 +23922,10 @@ boot();
                     $users->setDisabled((string) $r['user']['id'], true, (string) ($umActor['id'] ?? ''));
                 }
                 continue;
+            }
+            // the login shows its employee's name (a login moved from a removed employee kept the old name)
+            if (trim((string) ($umE['name'] ?? '')) !== '' && trim((string) ($umHas['name'] ?? '')) !== trim((string) $umE['name']) && (string) $umHas['role'] !== 'administrator') {
+                $users->update((string) $umHas['id'], trim((string) $umE['name']), (string) $umHas['email']);
             }
             if ((string) $umHas['role'] !== $umWant && (string) $umHas['role'] !== 'administrator' && (string) $umHas['id'] !== (string) ($umActor['id'] ?? '')) {
                 $r = $users->setRole((string) $umHas['id'], $umWant, (string) ($umActor['id'] ?? ''));

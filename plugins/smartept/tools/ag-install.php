@@ -17,7 +17,7 @@ set_exception_handler(static function (\Throwable $x): void {
 $dir = dirname(__DIR__);
 $opt = getopt('', ['root-user::', 'root-password::', 'url::']) + ['root-user' => 'root', 'root-password' => ''];
 foreach (['storage/app/public', 'storage/framework/cache/data', 'storage/framework/sessions', 'storage/framework/views', 'storage/logs', 'bootstrap/cache'] as $d) {
-    is_dir($dir . '/' . $d) || mkdir($dir . '/' . $d, 0775, true);   // storage/ is never on GitHub (AmetecsGlobal .gitignore)
+    is_dir($dir . '/' . $d) || mkdir($dir . '/' . $d, 0775, true);   // storage/ is never on GitHub (Ametecs Global .gitignore)
 }
 $envFile = $dir . '/.env';
 is_file($envFile) || copy($dir . '/.env.example', $envFile);
@@ -82,7 +82,7 @@ foreach ([
     'CACHE_STORE' => 'file', 'QUEUE_CONNECTION' => 'sync', 'SESSION_DRIVER' => 'file', 'SESSION_SECURE_COOKIE' => 'false',
     'SESSION_COOKIE' => 'smartept_session', 'SESSION_PATH' => rtrim((string) parse_url(dirname($url), PHP_URL_PATH), '/') . '/',
     'MAIL_MAILER' => 'log',
-    // Inside AmetecsGlobal: each client is a cloud tenant licensed by AmetecsGlobal Super Admin (no SmartEPT Central)
+    // Inside Ametecs Global: each client is a cloud tenant licensed by Ametecs Global Super Admin (no SmartEPT Central)
     'SMARTEPT_ONPREM' => 'false', 'SMARTEPT_LICENCE_ENFORCE' => 'true',
     'SSO_SHARED_SECRET' => $keep('SSO_SHARED_SECRET'),       // signs the console's own ?sso= ticket (AgBridge::ticket)
     'RELAY_SECRET' => $keep('RELAY_SECRET'),                 // never the sample value shipped in .env.example

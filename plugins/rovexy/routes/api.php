@@ -168,6 +168,7 @@ Route::prefix('mobile/v1')->middleware('company')->group(function () {
 
     Route::middleware('work.session')->group(function () {
         Route::get('me', [Mobile\AuthController::class, 'me']);
+        Route::post('ag/open', [Mobile\AuthController::class, 'agOpen'])->middleware('throttle:login');   // Ametecs Global one app
         Route::post('auth/logout', [Mobile\AuthController::class, 'logout']);
         Route::post('sync', [Mobile\SyncController::class, 'store']);
         Route::get('conversations', [Mobile\ChatController::class, 'index'])->middleware('perm:chat.use');
@@ -213,8 +214,8 @@ Route::prefix('mobile/v1')->middleware('company')->group(function () {
 | Admin API — Sanctum stateful cookie session + CSRF, company-resolved, MFA-gated, permission-gated.
 */
 // No workspace in the address: find it from the email + password (rovexy.app/admin, Admin app with the workspace left empty).
-Route::post('admin/auth/find-workspace', [Admin\AuthController::class, 'findWorkspace'])->middleware('throttle:admin-login');
-Route::prefix('admin')->middleware('company')->group(function () {
+Route::post('admin/auth/find-workspace', [Admin\AuthController::class, 'findWorkspace'])->middleware(['ag.session', 'throttle:admin-login']);
+Route::prefix('admin')->middleware(['company', 'ag.session'])->group(function () {
     Route::post('auth/login', [Admin\AuthController::class, 'login'])->middleware('throttle:admin-login');
     Route::middleware('auth:web')->group(function () {
         Route::post('auth/mfa/setup', [Admin\AuthController::class, 'mfaSetup']);

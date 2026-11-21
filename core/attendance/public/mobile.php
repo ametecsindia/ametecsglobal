@@ -320,7 +320,15 @@ if ($op === 'signin' || $op === 'activate') {
         trim((string) ($d['token'] ?? '')) === '' && $upd['token'] = bin2hex(random_bytes(24));
         $store->put('mobile_devices', $upd);
         $act->cleared($deviceId);
-        json_out(200, ['ok' => true, 'registered' => true, 'status' => 'approved', 'name' => $name,
+        // ONE APP (Phase 4, 20 Nov 2026): the apps this person may open, so the phone shows only those tiles.
+        $modules = [['app' => 'smartprs3', 'name' => 'SmartPRS']];
+        try {
+            require_once dirname(__DIR__, 2) . '/access.php';
+            $modules = $GLOBALS['pdo'] instanceof \PDO ? AmetecsRoles::apps($GLOBALS['pdo'], $user + ['tenant_id' => $tenant['id']]) : $modules;
+        } catch (\Throwable $mx) {
+            error_log('mobile modules: ' . $mx->getMessage());
+        }
+        json_out(200, ['ok' => true, 'registered' => true, 'status' => 'approved', 'name' => $name, 'modules' => $modules,
             'login' => $act->mintLogin((string) $user['id'], (string) $tenant['id'], $deviceId, $nowTs)]);
     };
 

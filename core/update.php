@@ -1,12 +1,12 @@
 <?php
 /**
  * THE HUB'S DOOR FOR ON-PREMISE INSTALLS THAT SPEAK SMARTPRS' /update/* PROTOCOL (owner, 18 Nov 2026 - Phase 5).
- * SmartPRS3 (and other apps built on the SmartPRS 2 licence client) point at AmetecsGlobal with one .env line:
+ * SmartPRS3 (and other apps built on the SmartPRS 2 licence client) point at Ametecs Global with one .env line:
  *
  *   SMARTPRS_LICENCE_SERVER=https://<ametecsglobal host>/core/update.php
  *
  * and then call <that>/update/{activate|heartbeat|check|download|report} with form fields, exactly as before.
- * Each call is answered from the AmetecsGlobal licences and releases (Super Admin -> Licences / Updates & releases),
+ * Each call is answered from the Ametecs Global licences and releases (Super Admin -> Licences / Updates & releases),
  * so binding, suspension, renewals, paid upgrades and install history all live in the one hub.
  * The licence key (AG-XXXX-...) says which app it is for; the machine fingerprint must match the bound server
  * for everything except the first activate. The JSON door (licence-api.php) stays for apps written fresh.
