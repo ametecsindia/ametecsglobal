@@ -136,6 +136,11 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.graphics.drawscope.scale
+import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.painterResource
 
@@ -177,20 +182,42 @@ private fun fail(msg: String) = JsonObject(mapOf("ok" to JsonPrimitive(false), "
 /** True while a screen's data is being refreshed underneath what is shown. */
 val LocalAgRefreshing = compositionLocalOf { false }
 
-/** The mark, breathing, inside a turning gold orbit: every wait in the app (start, load, pull to refresh). */
+/** The transparent mark BUILDING ITSELF (owner, 21 Nov 2026: "transparent logo, animation like build complete logo"):
+ *  the A is drawn, the orbit sweeps round it (behind, then in front), the satellite lands, holds, fades, and again.
+ *  [spinning] = false shows the finished mark (pull to refresh before release). Same drawing as the web loader. */
 @Composable
 fun AgSpinner(size: Int = 56, modifier: Modifier = Modifier, spinning: Boolean = true) {
     val t = rememberInfiniteTransition(label = "ag")
-    val turn by t.animateFloat(0f, 360f, infiniteRepeatable(tween(1100, easing = LinearEasing)), label = "turn")
-    val pulse by t.animateFloat(0.92f, 1.04f, infiniteRepeatable(tween(750, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "pulse")
-    Box(modifier.size((size * 1.45f).dp), contentAlignment = Alignment.Center) {
-        Canvas(Modifier.fillMaxSize().graphicsLayer { rotationZ = if (spinning) turn else 0f }) {
-            val w = 3.dp.toPx()
-            drawArc(Brush.sweepGradient(listOf(Color.Transparent, Gold, GoldHi)), 0f, 330f, false, topLeft = Offset(w, w),
-                size = Size(this.size.width - 2 * w, this.size.height - 2 * w), style = Stroke(w, cap = StrokeCap.Round))
+    val p by t.animateFloat(0f, 1f, infiniteRepeatable(tween(2200, easing = LinearEasing)), label = "build")
+    val k = if (spinning) p else 0.83f
+    fun seg(a: Float, b: Float) = ((k - a) / (b - a)).coerceIn(0f, 1f)
+    val aP = FastOutSlowInEasing.transform(seg(0f, 0.35f))      // the A
+    val oP = FastOutSlowInEasing.transform(seg(0.30f, 0.70f))   // the orbit, all the way round
+    val dP = seg(0.68f, 0.82f)                                  // the satellite lands
+    val fade = 1f - seg(0.84f, 0.96f)
+    val gold = Brush.linearGradient(listOf(Color(0xFFE7C77A), Color(0xFFC9A24A), Color(0xFF9C7A2E)), Offset(60f, 90f), Offset(460f, 430f))
+    Canvas(modifier.size(size.dp).graphicsLayer { alpha = fade }) {
+        val sc = this.size.width / 400f
+        scale(sc, sc, pivot = Offset.Zero) {
+            translate(-60f, -60f) {   // 400 x 340 drawing, centred in a square
+                val oval = Size(336f, 104f); val tl = Offset(88f, 248f)
+                fun orbit(from: Float, sweep: Float) = rotate(-16f, Offset(256f, 300f)) {
+                    if (sweep > 0f) drawArc(gold, from, sweep, false, tl, oval, style = Stroke(18f, cap = StrokeCap.Round))
+                }
+                orbit(180f, (oP * 360f).coerceAtMost(180f))                 // back half, behind the A
+                val path = Path()
+                val l1 = aP * 2f
+                path.moveTo(150f, 396f)
+                path.lineTo(150f + 106f * l1.coerceAtMost(1f), 396f - 278f * l1.coerceAtMost(1f))
+                if (l1 > 1f) path.lineTo(256f + 106f * (l1 - 1f), 118f + 278f * (l1 - 1f))
+                if (aP > 0f) drawPath(path, gold, style = Stroke(46f, cap = StrokeCap.Round, join = StrokeJoin.Round))
+                orbit(0f, (oP * 360f - 180f).coerceAtLeast(0f))              // front half, over the A
+                if (dP > 0f) {
+                    val pop = if (dP < 0.55f) dP / 0.55f * 1.5f else 1.5f - (dP - 0.55f) / 0.45f * 0.5f
+                    drawCircle(Color(0xFFE7C77A), 17f * pop, Offset(417f, 254f))
+                }
+            }
         }
-        Image(painterResource(R.drawable.ag_mark), "Loading", Modifier.size(size.dp)
-            .graphicsLayer { val s = if (spinning) pulse else 1f; scaleX = s; scaleY = s }.clip(RoundedCornerShape((size * 0.23f).dp)))
     }
 }
 

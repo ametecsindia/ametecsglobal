@@ -160,7 +160,7 @@ final class AmetecsSetup
             . 'document.querySelectorAll("a[href]").forEach(function(a){if(central(scr(a.getAttribute("href"))))a.remove()});'
             . 'document.querySelectorAll("form").forEach(function(f){var a=f.querySelector("input[name=action]");if(a&&M.indexOf(a.value)>=0)(f.closest("details")||f).remove()});'
             . 'document.querySelectorAll(".nav-section").forEach(function(s){if(!s.querySelector(".nav-items a"))s.remove()});'
-            . '})();</script><script src="../../../core/assets/ag-topbar.js?v=10" defer></script><script src="../../../core/assets/ag-loader.js?v=1" defer></script>';   // Ametecs Global's top bar (19 Nov 2026)
+            . '})();</script><script src="../../../core/assets/ag-topbar.js?v=10" defer></script><script src="../../../core/assets/ag-loader.js?v=2" defer></script>';   // Ametecs Global's top bar (19 Nov 2026)
     }
 }
 
