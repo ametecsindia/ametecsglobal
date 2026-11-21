@@ -45,6 +45,16 @@ import androidx.compose.material.icons.automirrored.outlined.Logout
 import androidx.compose.material.icons.outlined.BeachAccess
 import androidx.compose.material.icons.outlined.Campaign
 import androidx.compose.material.icons.outlined.Groups
+import androidx.compose.material.icons.outlined.Bolt
+import androidx.compose.material.icons.outlined.EmojiEvents
+import androidx.compose.material.icons.outlined.Lightbulb
+import androidx.compose.material.icons.outlined.LocalFireDepartment
+import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.Schedule
+import androidx.compose.material.icons.outlined.Star
+import androidx.compose.material.icons.outlined.WbSunny
+import androidx.compose.animation.core.animateFloatAsState
+import kotlin.math.roundToInt
 import androidx.compose.material.icons.outlined.SupportAgent
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.ChevronLeft
@@ -514,150 +524,6 @@ private fun minutesOf(s: String): Int {
     return h * 60 + m
 }
 
-@Composable
-private fun AppsBento(vm: AppViewModel, h: JsonObject, can: JsonObject, go: (String) -> Unit) {
-    val month = YearMonth.now().toString()
-    val att = if (can.b("attendance")) rememberAg("attendance:$month") { vm.ag.get("attendance", mapOf("m" to month)) } else null
-    val today = LocalDate.now()
-    val prod = if (can.b("productivity")) rememberAg("person:smartept:$today:$today") {
-        vm.ag.get("person", mapOf("app" to "smartept", "from" to today.toString(), "to" to today.toString()))
-    } else null
-    Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text("Apps & services", color = Text1, fontSize = 18.sp, fontWeight = FontWeight.ExtraBold, modifier = Modifier.padding(start = 4.dp, top = 4.dp))
-        // attendance: the month at a glance
-        if (can.b("attendance")) {
-            val sum = (att?.get("summary") as? JsonArray).orEmpty().mapNotNull { it as? JsonArray }.associate { it[0].jsonPrimitive.content to it[1].jsonPrimitive.content }
-            val byDate = att?.a("days").orEmpty().associateBy { it.s("date") }
-            val week = (6 downTo 0).map { today.minusDays(it.toLong()) }.map { d -> byDate[d.toString()] }
-            val maxM = week.maxOfOrNull { it?.let { x -> minutesOf(x.s("worked")) } ?: 0 }?.coerceAtLeast(480) ?: 480
-            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(Brush.linearGradient(listOf(Color(0xFF0B0906), Ink, Ink2)))
-                .clickable { go("attendance") }.padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).background(Color(0x24E8C977)), contentAlignment = Alignment.Center) {
-                        Icon(Icons.Outlined.History, null, tint = GoldHi, modifier = Modifier.size(22.dp))
-                    }
-                    Spacer(Modifier.width(12.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text("Attendance", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                        Text(YearMonth.now().format(DateTimeFormatter.ofPattern("MMMM")) + " · days, punches, hours", color = Color(0xFFD9C9A3), fontSize = 12.sp)
-                    }
-                    Icon(Icons.Outlined.ChevronRight, null, tint = GoldHi)
-                }
-                Row(verticalAlignment = Alignment.Bottom) {
-                    Column(Modifier.weight(1f)) {
-                        Text(att?.s("worked")?.takeIf { it.isNotBlank() } ?: "—", color = GoldHi, fontWeight = FontWeight.ExtraBold, fontSize = 28.sp, lineHeight = 30.sp)
-                        Text("worked this month", color = Color(0xFFBFAE86), fontSize = 12.sp)
-                    }
-                    // the last 7 days: one bar per day, orange when late, stub when nothing worked
-                    Row(Modifier.height(42.dp), verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                        week.forEachIndexed { i, d ->
-                            val m = d?.let { minutesOf(it.s("worked")) } ?: 0
-                            Box(Modifier.width(8.dp).height((6 + 36 * m / maxM).dp).clip(RoundedCornerShape(4.dp))
-                                .background(when { m == 0 -> Color(0x33FFFFFF); d?.str("late") != null -> Color(0xFFB45309); i == 6 -> GoldHi; else -> Gold }))
-                        }
-                    }
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    listOf(Triple("Present", Color(0x264ADE80), Color(0xFF86EFAC)), Triple("Late", Color(0x26F59E0B), Color(0xFFFCD34D)),
-                        Triple("Absent", Color(0x26EF4444), Color(0xFFFCA5A5))).forEach { (k, bg, fg) ->
-                        sum[k]?.let { n -> Text("$n ${k.lowercase()}", color = fg, fontSize = 11.sp, fontWeight = FontWeight.SemiBold,
-                            modifier = Modifier.clip(RoundedCornerShape(50)).background(bg).padding(horizontal = 10.dp, vertical = 4.dp)) }
-                    }
-                }
-            }
-        }
-        if (can.b("admin")) {
-            Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(Ink2).clickable { go("admin") }.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Outlined.Groups, null, tint = GoldHi, modifier = Modifier.size(24.dp))
-                Spacer(Modifier.width(12.dp))
-                Column(Modifier.weight(1f)) {
-                    Text("Team & approvals", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                    Text("Who's in, leave, corrections", color = Color(0xFFD9C9A3), fontSize = 12.sp)
-                }
-                Icon(Icons.Outlined.ChevronRight, null, tint = GoldHi)
-            }
-        }
-        // leave + payslips
-        val pair = listOfNotNull(
-            Tile("leave", "Leave", if (h.n("pending_leave") > 0) "${h.n("pending_leave")} request pending" else "Balance, apply, status", Icons.Outlined.BeachAccess, h.n("pending_leave")).takeIf { can.b("leave") },
-            Tile("payslips", "Payslips", "Monthly salary slips", Icons.Outlined.Payments).takeIf { can.b("payslips") })
-        if (pair.isNotEmpty()) Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            pair.forEachIndexed { i, t ->
-                val hot = i == 0 && t.key == "leave"
-                Column(Modifier.weight(1f).clip(RoundedCornerShape(22.dp))
-                    .background(if (hot) Brush.linearGradient(listOf(Color(0xFFFBF1D9), Color(0xFFF0E2C0))) else SolidColor(Color.White))
-                    .border(1.dp, if (hot) Color.Transparent else Line, RoundedCornerShape(22.dp)).clickable { go(t.key) }.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Row {
-                        Box(Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(if (hot) Color.White else GoldTint), contentAlignment = Alignment.Center) {
-                            Icon(t.icon, null, tint = Color(0xFFB08433), modifier = Modifier.size(20.dp))
-                        }
-                        Spacer(Modifier.weight(1f))
-                        if (t.badge > 0) Text("${t.badge}", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold,
-                            modifier = Modifier.clip(CircleShape).background(Bad).padding(horizontal = 8.dp, vertical = 2.dp))
-                    }
-                    Column {
-                        Text(t.label, color = Text1, fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                        Text(t.sub, color = Text2, fontSize = 12.sp)
-                    }
-                }
-            }
-        }
-        // productivity: today's score ring
-        if (can.b("productivity")) {
-            val pct = (prod?.get("tiles") as? JsonArray)?.firstOrNull()?.let { (it as? JsonArray)?.getOrNull(1)?.jsonPrimitive?.content }?.removeSuffix("%")?.toFloatOrNull()
-            Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(Color.White).border(1.dp, Line, RoundedCornerShape(22.dp))
-                .clickable { go("productivity") }.padding(horizontal = 16.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(52.dp), contentAlignment = Alignment.Center) {
-                    Canvas(Modifier.fillMaxSize()) {
-                        val w = 5.dp.toPx()
-                        val tl = Offset(w / 2, w / 2); val sz = Size(size.width - w, size.height - w)
-                        drawArc(GoldTint, 0f, 360f, false, tl, sz, style = Stroke(w))
-                        if (pct != null) drawArc(Gold, -90f, 360f * pct / 100f, false, tl, sz, style = Stroke(w, cap = StrokeCap.Round))
-                    }
-                    if (pct != null) Text("${pct.toInt()}%", color = Text1, fontSize = 12.sp, fontWeight = FontWeight.ExtraBold)
-                    else Icon(Icons.Outlined.Insights, null, tint = Color(0xFFB08433), modifier = Modifier.size(20.dp))
-                }
-                Spacer(Modifier.width(14.dp))
-                Column(Modifier.weight(1f)) {
-                    Text("Productivity", color = Text1, fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                    Text(if (pct != null) "Today's score · PC time, breaks, idle" else "PC time, breaks, idle", color = Text2, fontSize = 12.sp)
-                }
-                Icon(Icons.Outlined.ChevronRight, null, tint = Color(0xFFB08433))
-            }
-        }
-        // the small ones
-        val small = listOfNotNull(
-            Tile("corrections", "Correct", "", Icons.Outlined.EditCalendar).takeIf { can.b("corrections") },
-            Tile("field", "Field", "", Icons.Outlined.Route).takeIf { can.b("field") },
-            Tile("letters", "Letters", "", Icons.Outlined.Description).takeIf { can.b("letters") },
-            Tile("assets", "Assets", "", Icons.Outlined.Inventory2).takeIf { can.b("assets") })
-        small.chunked(4).forEach { row ->
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                row.forEach { t ->
-                    Column(Modifier.weight(1f).clip(RoundedCornerShape(18.dp)).background(Color.White).border(1.dp, Line, RoundedCornerShape(18.dp))
-                        .clickable { go(t.key) }.padding(vertical = 12.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Icon(t.icon, null, tint = Color(0xFFB08433), modifier = Modifier.size(22.dp))
-                        Text(t.label, color = Text1, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
-                    }
-                }
-                repeat(4 - row.size) { Spacer(Modifier.weight(1f)) }
-            }
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Row(Modifier.weight(1f).clip(RoundedCornerShape(18.dp)).background(Text1).clickable { go("support") }.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Outlined.SupportAgent, null, tint = GoldHi, modifier = Modifier.size(20.dp)); Spacer(Modifier.width(10.dp))
-                Text("Help & support", color = GoldHi, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-            }
-            Row(Modifier.weight(1f).clip(RoundedCornerShape(18.dp)).background(Color.White).border(1.dp, Line, RoundedCornerShape(18.dp)).clickable { go("profile") }.padding(14.dp),
-                verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Outlined.Person, null, tint = Color(0xFFB08433), modifier = Modifier.size(20.dp)); Spacer(Modifier.width(10.dp))
-                Text("My profile", color = Text1, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-            }
-        }
-    }
-}
-
 // ---------- home ----------
 private data class Tile(val key: String, val label: String, val sub: String, val icon: ImageVector, val badge: Int = 0)
 
@@ -684,6 +550,55 @@ private fun QuickAction(label: String, icon: ImageVector, modifier: Modifier, on
     }
 }
 
+// ---------- home: H8 "Streaks" (owner, 21 Nov 2026: picked H8 of the Home redesign canvas) ----------
+/** This month in numbers, worked out on the phone from the attendance month the Attendance screen also shows.
+ *  ponytail: this month only (a streak resets on the 1st); read last month too if people ask for longer streaks. */
+private class MonthStats(val score: Int?, val streak: Int, val best: Int, val worked: Int, val goal: Int, val present: Int, val late: Int, val absent: Int,
+                         val badges: List<Triple<String, Boolean, String>>)
+
+private fun monthStats(att: JsonObject?): MonthStats {
+    val today = LocalDate.now()
+    val days = att?.a("days").orEmpty().sortedBy { it.s("date") }
+    val shift = att?.s("shift").orEmpty().split("–", "-").map { it.trim() }
+    val start = runCatching { LocalTime.parse(shift[0]) }.getOrNull()
+    val end = runCatching { LocalTime.parse(shift[1]) }.getOrNull()
+    val shiftMin = if (start != null && end != null) java.time.Duration.between(start, end).toMinutes().toInt().coerceAtLeast(0) else 480
+    val work = days.filter { it.s("status") in setOf("PRESENT", "HALF_DAY", "ABSENT") && it.s("date") <= today.toString() }
+    val onTime = { d: JsonObject -> d.s("status") == "PRESENT" && d.str("late") == null }
+    val pts = work.sumOf { d -> when { onTime(d) -> 1.0; d.s("status") == "PRESENT" -> 0.6; d.s("status") == "HALF_DAY" -> 0.5; else -> 0.0 } }
+    val score = if (work.isEmpty()) null else (100 * pts / work.size).roundToInt()
+    var streak = 0
+    for (d in work.reversed()) { if (onTime(d)) streak++ else break }
+    var best = 0; var run = 0
+    for (d in work) { if (onTime(d)) { run++; best = maxOf(best, run) } else run = 0 }
+    val byDate = days.associateBy { it.s("date") }
+    val ym = YearMonth.now()
+    val workDays = (1..ym.lengthOfMonth()).map { ym.atDay(it) }.count { d ->
+        val st = byDate[d.toString()]?.s("status")
+        when { st in setOf("WEEKLY_OFF", "HOLIDAY") -> false; st == null && d > today && d.dayOfWeek == java.time.DayOfWeek.SUNDAY -> false; else -> true }
+    }
+    val early = start != null && work.any { d -> runCatching { LocalTime.parse(d.s("in")) <= start.minusMinutes(15) }.getOrDefault(false) }
+    val late = work.count { it.str("late") != null }
+    val absent = work.count { it.s("status") == "ABSENT" }
+    return MonthStats(score, streak, best, minutesOf(att?.s("worked").orEmpty()), workDays * shiftMin, work.count { it.s("status") == "PRESENT" }, late, absent, listOf(
+        Triple("Perfect week", best >= 5, "be on time 5 working days in a row"),
+        Triple("Early bird", early, "punch in 15 minutes before your shift starts"),
+        Triple("Zero late", work.isNotEmpty() && late == 0, "finish the month with no late day"),
+        Triple("Full month", today == ym.atEndOfMonth() && absent == 0 && work.isNotEmpty(), "go the whole month without an absent day")))
+}
+
+@Composable
+private fun Badge(name: String, on: Boolean, modifier: Modifier) {
+    Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
+        Box(Modifier.size(60.dp).clip(CircleShape).background(if (on) Brush.linearGradient(listOf(Color(0xFFF3DC95), Color(0xFFB08433))) else SolidColor(Line))
+            .border(if (on) 0.dp else 2.dp, Color(0xFFD9C9A3), CircleShape), contentAlignment = Alignment.Center) {
+            Icon(when { !on -> Icons.Outlined.Lock; name == "Early bird" -> Icons.Outlined.WbSunny; name == "Zero late" -> Icons.Outlined.Bolt
+                name == "Full month" -> Icons.Outlined.EmojiEvents; else -> Icons.Outlined.Star }, null, tint = if (on) Ink else Color(0xFFB8AA8A), modifier = Modifier.size(26.dp))
+        }
+        Text(name, color = if (on) Text1 else Text2, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 6.dp))
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun Hub(vm: AppViewModel, go: (String) -> Unit) {
@@ -693,103 +608,176 @@ private fun Hub(vm: AppViewModel, go: (String) -> Unit) {
         val me = h.o("me") ?: JsonObject(emptyMap())
         val today = h.o("today") ?: JsonObject(emptyMap())
         val can = h.o("can") ?: JsonObject(emptyMap())
-        val hour = LocalTime.now().hour
-        val hello = if (hour < 12) "Good morning" else if (hour < 17) "Good afternoon" else "Good evening"
         val isIn = today.s("last") == "IN"
-        val quick = buildList {
-            if (can.b("leave_apply")) add(Triple("Apply leave", Icons.Outlined.EventAvailable, "leave-apply"))
-            if (can.b("corrections")) add(Triple("Correction", Icons.Outlined.EditCalendar, "correct"))
-            if (can.b("payslips")) add(Triple("Payslips", Icons.Outlined.Payments, "payslips"))
-            add(Triple("Support", Icons.Outlined.SupportAgent, "support"))
-        }
+        val out = today.str("out") != null && !isIn
+        val month = YearMonth.now().toString()
+        val att = if (can.b("attendance")) rememberAg("attendance:$month") { vm.ag.get("attendance", mapOf("m" to month)) } else null
+        val st = monthStats(att)
         val refreshing = LocalAgRefreshing.current
         val pull = rememberPullToRefreshState()
-        PullToRefreshBox(refreshing, { reload(); vm.refresh() }, Modifier.fillMaxSize().background(Cream), state = pull, indicator = {
-            // pull to refresh: the logo comes down with the finger and turns while it refreshes
-            val f = pull.distanceFraction.coerceIn(0f, 1.4f)
-            if (refreshing || f > 0f) AgSpinner(34, Modifier.align(Alignment.TopCenter).statusBarsPadding()
-                .graphicsLayer { translationY = (if (refreshing) 1f else f) * 140f; alpha = if (refreshing) 1f else f.coerceAtMost(1f) }, spinning = refreshing || f >= 1f)
-        }) {
-        LazyColumn(Modifier.fillMaxSize().background(Cream), contentPadding = PaddingValues(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        val initials = me.s("name").split(" ").filter { it.isNotBlank() }.let { w -> (w.firstOrNull()?.take(1).orEmpty() + (if (w.size > 1) w.last().take(1) else "")).uppercase() }
+        PullToRefreshBox(refreshing, { reload(); vm.refresh(); AgCache.warm("attendance:$month") { vm.ag.get("attendance", mapOf("m" to month)) } },
+            Modifier.fillMaxSize().background(Cream), state = pull, indicator = {
+                val f = pull.distanceFraction.coerceIn(0f, 1.4f)
+                if (refreshing || f > 0f) AgSpinner(34, Modifier.align(Alignment.TopCenter).statusBarsPadding()
+                    .graphicsLayer { translationY = (if (refreshing) 1f else f) * 140f; alpha = if (refreshing) 1f else f.coerceAtMost(1f) }, spinning = refreshing || f >= 1f)
+            }) {
+        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 18.dp, end = 18.dp, bottom = 28.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            // header: me, refresh, bell
             item {
-                Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(bottomStart = 32.dp, bottomEnd = 32.dp))
-                    .background(Brush.linearGradient(listOf(Color(0xFF0B0906), Ink, Ink2))).statusBarsPadding().padding(start = 20.dp, end = 20.dp, top = 14.dp, bottom = 22.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Mark(38)
-                        Spacer(Modifier.width(10.dp))
-                        Column(Modifier.weight(1f)) {
-                            Row {
-                                Text("Ametecs ", color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
-                                Text("Global", color = GoldHi, fontWeight = FontWeight.ExtraBold, fontSize = 16.sp)
-                            }
-                            me.s("company").takeIf { it.isNotBlank() }?.let { Text(it, color = Color(0xFFBFAE86), fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) }
-                        }
-                        Box(Modifier.size(42.dp).clip(CircleShape).clickable { reload(); vm.refresh() }, contentAlignment = Alignment.Center) {
-                            val spin by rememberInfiniteTransition(label = "r").animateFloat(0f, 360f, infiniteRepeatable(tween(900, easing = LinearEasing)), label = "spin")
-                            Icon(Icons.Outlined.Refresh, "Refresh", tint = GoldHi, modifier = Modifier.size(22.dp).graphicsLayer { rotationZ = if (refreshing) spin else 0f })
-                        }
-                        Spacer(Modifier.width(4.dp))
-                        Bell(h.n("unread")) { go("alerts") }
+                Row(Modifier.statusBarsPadding().padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(46.dp).clip(CircleShape).background(Ink).clickable { go("profile") }, contentAlignment = Alignment.Center) {
+                        Text(initials, color = GoldHi, fontWeight = FontWeight.ExtraBold, fontSize = 16.sp)
                     }
-                    Spacer(Modifier.height(20.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f)) {
-                            Text("$hello,", color = Color(0xFFD9C9A3), fontSize = 14.sp)
-                            Text(me.s("name").ifBlank { "there" }, color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            listOf(me.s("designation"), me.s("code")).filter { it.isNotBlank() }.joinToString(" · ").takeIf { it.isNotBlank() }?.let {
-                                Text(it, color = Color(0xFFBFAE86), fontSize = 13.sp)
-                            }
+                    Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(me.s("name").ifBlank { "Welcome" }, color = Text1, fontSize = 18.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(listOf(me.s("designation"), me.s("code")).filter { it.isNotBlank() }.joinToString(" · ").ifBlank { me.s("company") }, color = Text2, fontSize = 12.sp, maxLines = 1)
+                    }
+                    Box(Modifier.size(42.dp).clip(CircleShape).clickable { reload(); vm.refresh() }, contentAlignment = Alignment.Center) {
+                        val spin by rememberInfiniteTransition(label = "r").animateFloat(0f, 360f, infiniteRepeatable(tween(900, easing = LinearEasing)), label = "spin")
+                        Icon(Icons.Outlined.Refresh, "Refresh", tint = Color(0xFF8A6A25), modifier = Modifier.size(22.dp).graphicsLayer { rotationZ = if (refreshing) spin else 0f })
+                    }
+                    Box(Modifier.size(42.dp).clip(CircleShape).background(Color.White).border(1.dp, Line, CircleShape).clickable { go("alerts") }, contentAlignment = Alignment.Center) {
+                        Icon(Icons.Outlined.Notifications, "Notifications", tint = Text1, modifier = Modifier.size(21.dp))
+                        if (h.n("unread") > 0) Text(if (h.n("unread") > 9) "9+" else "${h.n("unread")}", color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold,
+                            modifier = Modifier.align(Alignment.TopEnd).clip(CircleShape).background(Bad).padding(horizontal = 5.dp, vertical = 1.dp))
+                    }
+                }
+            }
+            // attendance score
+            if (can.b("attendance")) item {
+                Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(28.dp)).background(Brush.linearGradient(listOf(Color(0xFF0B0906), Ink, Ink2)))
+                    .clickable { go("attendance") }.padding(20.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(112.dp), contentAlignment = Alignment.Center) {
+                        val pct by animateFloatAsState((st.score ?: 0) / 100f, tween(900), label = "score")
+                        Canvas(Modifier.fillMaxSize()) {
+                            val w = 10.dp.toPx(); val tl = Offset(w / 2, w / 2); val sz = Size(size.width - w, size.height - w)
+                            drawArc(Color(0x1AFFFFFF), 0f, 360f, false, tl, sz, style = Stroke(w))
+                            drawArc(Brush.sweepGradient(listOf(Gold, GoldHi, Gold)), -90f, 360f * pct, false, tl, sz, style = Stroke(w, cap = StrokeCap.Round))
                         }
-                        val initials = me.s("name").split(" ").filter { it.isNotBlank() }.let { w -> (w.firstOrNull()?.take(1).orEmpty() + (if (w.size > 1) w.last().take(1) else "")).uppercase() }
-                        Box(Modifier.size(52.dp).clip(CircleShape).background(Brush.linearGradient(listOf(GoldHi, Gold))).clickable { go("profile") }, contentAlignment = Alignment.Center) {
-                            Text(initials, color = Ink, fontWeight = FontWeight.ExtraBold, fontSize = 18.sp)
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(st.score?.toString() ?: "—", color = GoldHi, fontSize = 32.sp, fontWeight = FontWeight.ExtraBold, lineHeight = 34.sp)
+                            Text("SCORE", color = Color(0xFFBFAE86), fontSize = 10.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.sp)
                         }
                     }
-                    Spacer(Modifier.height(18.dp))
-                    // today
-                    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(Color(0x1AFFFFFF)).border(1.dp, Color(0x33E8C977), RoundedCornerShape(20.dp)).padding(16.dp)) {
+                    Spacer(Modifier.width(18.dp))
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text("ATTENDANCE SCORE", color = Color(0xFFBFAE86), fontSize = 11.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.sp)
+                        Text(when { st.score == null -> "Starts with your first working day"; st.score >= 90 -> "Excellent. Keep it going."; st.score >= 75 -> "Good. On time, every day, moves this up."
+                            else -> "On time, every day, moves this up." }, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold, lineHeight = 20.sp)
+                        Text("${st.present} present · ${st.late} late · ${st.absent} absent", color = Color(0xFFD9C9A3), fontSize = 12.sp)
+                    }
+                }
+            }
+            // streak + hours goal
+            if (can.b("attendance")) item {
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Column(Modifier.weight(1f).clip(RoundedCornerShape(22.dp)).background(Color.White).border(1.dp, Line, RoundedCornerShape(22.dp)).padding(16.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(Modifier.size(10.dp).clip(CircleShape).background(if (isIn) Color(0xFF4ADE80) else if (today.str("out") != null) Color(0xFFF59E0B) else Color(0xFFEF4444)))
-                            Spacer(Modifier.width(8.dp))
-                            Text(if (isIn) "You're in" else if (today.str("out") != null) "Punched out" else "Not punched in yet", color = Color.White, fontWeight = FontWeight.SemiBold)
-                            Spacer(Modifier.weight(1f))
-                            Text(LocalDate.now().format(DateTimeFormatter.ofPattern("EEE, dd-MM-yyyy")), color = Color(0xFFD9C9A3), fontSize = 12.sp)
+                            Icon(Icons.Outlined.LocalFireDepartment, null, tint = Color(0xFFEA580C), modifier = Modifier.size(22.dp)); Spacer(Modifier.width(6.dp))
+                            Text("On-time streak", color = Text2, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                         }
-                        Spacer(Modifier.height(14.dp))
-                        Row {
-                            listOf("Check in" to today.s("in"), "Check out" to today.s("out"), "Worked" to today.s("worked")).forEach { (k, v) ->
-                                Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Text(k, color = Color(0xFFBFAE86), fontSize = 11.sp)
-                                    Text(v.ifBlank { "—" }, color = Color.White, fontSize = 19.sp, fontWeight = FontWeight.Bold)
+                        Row(verticalAlignment = Alignment.Bottom, modifier = Modifier.padding(top = 6.dp)) {
+                            Text("${st.streak}", color = Text1, fontSize = 30.sp, fontWeight = FontWeight.ExtraBold, lineHeight = 32.sp)
+                            Text(if (st.streak == 1) " day" else " days", color = Text2, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(bottom = 4.dp))
+                        }
+                        Text("Best this month: ${st.best}", color = Text2, fontSize = 12.sp)
+                    }
+                    Column(Modifier.weight(1f).clip(RoundedCornerShape(22.dp)).background(Color.White).border(1.dp, Line, RoundedCornerShape(22.dp)).padding(16.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Outlined.Schedule, null, tint = Color(0xFFB08433), modifier = Modifier.size(22.dp)); Spacer(Modifier.width(6.dp))
+                            Text("Hours goal", color = Text2, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                        }
+                        Row(verticalAlignment = Alignment.Bottom, modifier = Modifier.padding(top = 6.dp)) {
+                            Text("${st.worked / 60}", color = Text1, fontSize = 30.sp, fontWeight = FontWeight.ExtraBold, lineHeight = 32.sp)
+                            Text(" / ${st.goal / 60}h", color = Text2, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(bottom = 4.dp))
+                        }
+                        Box(Modifier.padding(top = 8.dp).fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)).background(Line)) {
+                            Box(Modifier.fillMaxWidth(if (st.goal > 0) (st.worked.toFloat() / st.goal).coerceIn(0f, 1f) else 0f).fillMaxHeight().background(Gold))
+                        }
+                    }
+                }
+            }
+            // punch
+            item {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    if (can.b("scan")) Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp))
+                        .background(if (isIn) Brush.linearGradient(listOf(Ink2, Ink)) else Brush.linearGradient(listOf(Color(0xFFF3DC95), Gold)))
+                        .clickable(onClick = punch).padding(horizontal = 18.dp, vertical = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Outlined.QrCodeScanner, null, tint = if (isIn) GoldHi else Ink, modifier = Modifier.size(30.dp))
+                        Spacer(Modifier.width(14.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(if (isIn) "Punch out" else "Punch in", color = if (isIn) GoldHi else Ink, fontSize = 17.sp, fontWeight = FontWeight.ExtraBold)
+                            Text(when {
+                                isIn -> "In since ${today.s("in")} · worked ${today.s("worked")}"
+                                out -> "Punched out at ${today.s("out")} · worked ${today.s("worked")}"
+                                st.streak > 0 -> "Scan the office QR · keep your ${st.streak}-day streak"
+                                else -> "Scan the office QR to start your day"
+                            }, color = if (isIn) Color(0xFFD9C9A3) else Ink.copy(alpha = 0.75f), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+                    val punches = today.a("punches")
+                    if (punches.isNotEmpty()) Card {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("Today's log", color = Text1, fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                            if (can.b("attendance")) Text("History ›", color = Warn, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.clickable { go("attendance") })
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        PunchTimeline(punches)
+                    }
+                }
+            }
+            // badges
+            if (can.b("attendance")) item {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text("Badges this month", color = Text1, fontSize = 17.sp, fontWeight = FontWeight.ExtraBold)
+                    Row { st.badges.forEach { (n, on, _) -> Badge(n, on, Modifier.weight(1f)) } }
+                    st.badges.firstOrNull { !it.second }?.let { (n, _, how) ->
+                        Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(Color(0xFFFFF7E6)).border(1.dp, Color(0xFFF3DC95), RoundedCornerShape(20.dp)).padding(14.dp),
+                            verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Outlined.Lightbulb, null, tint = Warn, modifier = Modifier.size(22.dp)); Spacer(Modifier.width(12.dp))
+                            Text("Next badge: $how to earn $n.", color = Text1, fontSize = 13.sp, lineHeight = 18.sp)
+                        }
+                    }
+                }
+            }
+            // apps
+            item {
+                val apps = buildList {
+                    if (can.b("admin")) add(Tile("admin", "Team", "", Icons.Outlined.Groups))
+                    if (can.b("leave")) add(Tile("leave", "Leave", "", Icons.Outlined.BeachAccess, h.n("pending_leave")))
+                    if (can.b("payslips")) add(Tile("payslips", "Payslips", "", Icons.Outlined.Payments))
+                    if (can.b("productivity")) add(Tile("productivity", "Productivity", "", Icons.Outlined.Insights))
+                    if (can.b("corrections")) add(Tile("corrections", "Corrections", "", Icons.Outlined.EditCalendar))
+                    if (can.b("attendance")) add(Tile("attendance", "Attendance", "", Icons.Outlined.History))
+                    if (can.b("field")) add(Tile("field", "Field work", "", Icons.Outlined.Route))
+                    if (can.b("letters")) add(Tile("letters", "Letters", "", Icons.Outlined.Description))
+                    if (can.b("assets")) add(Tile("assets", "Assets", "", Icons.Outlined.Inventory2))
+                    add(Tile("support", "Support", "", Icons.Outlined.SupportAgent))
+                    add(Tile("profile", "Profile", "", Icons.Outlined.Person))
+                }
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("Apps", color = Text1, fontSize = 17.sp, fontWeight = FontWeight.ExtraBold)
+                    apps.chunked(4).forEach { row ->
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            row.forEach { t ->
+                                Column(Modifier.weight(1f).clip(RoundedCornerShape(18.dp)).background(Color.White).border(1.dp, Line, RoundedCornerShape(18.dp))
+                                    .clickable { go(t.key) }.padding(vertical = 12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Box {
+                                        Icon(t.icon, null, tint = Color(0xFFB08433), modifier = Modifier.size(24.dp))
+                                        if (t.badge > 0) Box(Modifier.align(Alignment.TopEnd).offset(x = 6.dp, y = (-4).dp).size(10.dp).clip(CircleShape).background(Bad))
+                                    }
+                                    Text(t.label, color = Text1, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, modifier = Modifier.padding(top = 6.dp))
                                 }
                             }
-                        }
-                        if (can.b("scan")) {
-                            Spacer(Modifier.height(16.dp))
-                            GoldButton(if (isIn) "Scan QR to punch out" else "Scan QR to punch in", Icons.Outlined.QrCodeScanner, onClick = punch)
+                            repeat(4 - row.size) { Spacer(Modifier.weight(1f)) }
                         }
                     }
                 }
             }
             item {
-                Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
-                    quick.forEach { (label, icon, to) -> QuickAction(label, icon, Modifier.weight(1f)) { go(to) } }
-                }
-            }
-            val punches = today.a("punches")
-            if (punches.isNotEmpty()) item {
-                Card(Modifier.padding(horizontal = 16.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Today's log", color = Text1, fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                        if (can.b("attendance")) Text("History ›", color = Warn, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.clickable { go("attendance") })
-                    }
-                    Spacer(Modifier.height(8.dp))
-                    PunchTimeline(punches)
-                }
-            }
-            item { AppsBento(vm, h, can, go) }
-            item {
-                Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
                     Mark(16); Spacer(Modifier.width(6.dp))
                     Text("Ametecs Global · one platform, every app", color = Text2, fontSize = 11.sp)
                 }
