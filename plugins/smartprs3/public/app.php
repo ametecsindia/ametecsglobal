@@ -12605,6 +12605,10 @@ $brandShowText = !$brandHasText || $brandLogo === '';
     <div class="login-form-wrap">
 <?php else: ?>
 <?php
+    // THE PHONE APP'S CALLS SKIP THE MENU (owner, 21 Nov 2026: "app loading very slow"): every ?ag_api call rebuilt the
+    // inbox count, the leave queue and the whole menu just to answer one screen. Rebuilt at most every 5 minutes for it.
+    $agApiFast = isset($_GET['ag_api']) && isset($_SESSION['ag_prs_nav']) && (int) ($_SESSION['ag_prs_nav_at'] ?? 0) > time() - 300;
+    if (!$agApiFast) {
     // THE INBOX BADGE IS THE INBOX PAGE'S OWN COUNT (owner, 6 Nov 2026: one leave pending, badge 0): requests, leave,
     // transfers and requisitions waiting on THIS person — the same partial the page and its export read.
     $navInbox = (static function () use ($requests, $modules, $access, $scope, $may, $session, $store, $transfers, $recruitment, $requisitionDecider): int {
@@ -12633,6 +12637,8 @@ $brandShowText = !$brandHasText || $brandLogo === '';
         'items' => array_values(array_map(static fn (array $i): array => ['label' => (string) ($i['label'] ?? ''), 'icon' => (string) ($i['icon'] ?? ''),
             'href' => (string) $i['href'], 'count' => $i['count']], array_filter((array) $s['items'], static fn (array $i): bool => (bool) ($i['allowed'] ?? false))))],
         array_values(array_filter($navigation->forViewer($may, $navBadges, $navFlags), static fn (array $s): bool => !($s['platform_only'] ?? false))));
+    $_SESSION['ag_prs_nav_at'] = time();
+    }
     if (isset($_GET['ag_nav'])) {   // asked by the menu before this person has opened a SmartPRS page in this sign-in
         while (ob_get_level() > 0) { ob_end_clean(); }
         header('Content-Type: application/json');

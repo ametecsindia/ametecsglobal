@@ -163,3 +163,6 @@
 .t-gold .ibox .frm{max-width:none}.t-gold .ibox .frm input,.t-gold .ibox .frm textarea,.t-gold .ibox .frm .btn2{width:100%;max-width:none;box-sizing:border-box}
 .t-gold .ibox .frm .btn2{justify-content:center}
 .t-gold .lv td:first-child{white-space:nowrap}
+
+/* AMETECS GLOBAL MARK (21 Nov 2026): the gold "A" and orbit in place of the "AG" letters, everywhere */
+.logo-mark,.brand .lm,.agtb .hm span,.agm-b span{background:#14120D url(brand/ag-mark.svg) center/100% no-repeat!important;color:transparent!important;font-size:0!important;box-shadow:none!important}

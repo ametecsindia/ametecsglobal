@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- ROVEXY launcher icon: brand pin mark (white + gold) on navy. Foreground PNGs from brand/rovexy-2026/rovexy-mark-dark.svg. -->
+<!-- Ametecs Global launcher icon (21 Nov 2026): gold "A" with orbit on black. Foreground PNGs from brand ag-mark.svg. -->
 <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
     <background android:drawable="@color/ic_launcher_background"/>
     <foreground android:drawable="@mipmap/ic_launcher_fg"/>

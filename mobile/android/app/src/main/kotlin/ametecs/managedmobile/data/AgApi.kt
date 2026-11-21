@@ -46,20 +46,26 @@ class AgApi(private val link: suspend () -> String) {
 
     fun reset() { synchronized(cookies) { cookies.clear() }; root = null; csrf = null }
 
-    private suspend fun signIn() = lock.withLock {
+    @Volatile private var gen = 0   // +1 per sign-in
+    /** [seen] = the sign-in the caller used; one another call finished meanwhile is reused (no double sign-in). */
+    private suspend fun signIn(seen: Int) = lock.withLock {
+        if (root != null && gen != seen) return@withLock
         val url = link()
         withContext(Dispatchers.IO) { http.newCall(Request.Builder().url(url).build()).execute().close() }
         root = url.substringBefore("/plugins/smartprs3/")
         csrf = null
+        gen++
     }
 
     private suspend fun send(build: (String) -> Request): JsonObject {
-        if (root == null) signIn()
+        if (root == null) signIn(gen)
         repeat(2) { attempt ->
-            val text = withContext(Dispatchers.IO) { http.newCall(build(root!!)).execute().use { if (it.isRedirect) "" else it.body?.string().orEmpty() } }
+            val seen = gen
+            val used = root!!
+            val text = withContext(Dispatchers.IO) { http.newCall(build(used)).execute().use { if (it.isRedirect) "" else it.body?.string().orEmpty() } }
             val o = runCatching { json.parseToJsonElement(text).jsonObject }.getOrNull()
             if (o != null) { o.str("csrf")?.let { csrf = it }; return o }
-            if (attempt == 0) signIn()   // got the sign-in page: the server session ended
+            if (attempt == 0) signIn(seen)   // got the sign-in page: the server session ended
         }
         throw ApiException(0, "ag_signin", "Could not reach Ametecs Global. Check the connection and try again.")
     }
@@ -83,6 +89,16 @@ class AgApi(private val link: suspend () -> String) {
             csrf = null   // signed in again since the token was read
         }
         throw ApiException(0, "csrf", "Please try again.")
+    }
+
+    /** POST to one API op with this sign-in's token (e.g. notifications = mark all read). */
+    suspend fun post(op: String, fields: Map<String, String> = emptyMap()): JsonObject {
+        if (csrf == null) get("home")
+        val token = csrf.orEmpty()
+        return send { root ->
+            val body = FormBody.Builder().add("csrf", token).apply { fields.forEach { (k, v) -> add(k, v) } }.build()
+            Request.Builder().url(app(root, mapOf("ag_api" to op))).post(body).build()
+        }
     }
 
     /** QRONEX punch: a one-time ticket for this employee, then QRONEX's own verifier. Returns QRONEX's answer. */

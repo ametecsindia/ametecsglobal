@@ -454,3 +454,6 @@ html.sb-mini .side .sfind{display:none}
 .dqa a:hover{transform:translateY(-1px);box-shadow:0 8px 22px -14px rgba(176,132,51,.8);border-color:#d6ae55}
 .dqa a i{width:32px;height:32px;min-width:32px;border-radius:10px;display:grid;place-items:center;background:rgba(201,162,76,.14);color:#b08433;font-size:13px}
 .dqa a em{position:absolute;top:6px;right:8px;font-style:normal;font-size:10.5px;font-weight:700;background:#c9a24c;color:#14100a;border-radius:999px;padding:1px 7px}
+
+/* AMETECS GLOBAL MARK (21 Nov 2026): the gold "A" and orbit in place of the "AG" letters, everywhere */
+.logo-mark,.brand .lm,.agtb .hm span,.agm-b span{background:#14120D url(brand/ag-mark.svg) center/100% no-repeat!important;color:transparent!important;font-size:0!important;box-shadow:none!important}

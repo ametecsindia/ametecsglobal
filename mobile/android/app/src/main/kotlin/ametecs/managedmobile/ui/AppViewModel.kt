@@ -286,6 +286,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Steps 12–14: verify, apply policy, report, then open the dashboard only if compliant. */
     private suspend fun enterWork() {
+        // Home starts loading now, alongside the policy and profile checks, not after them (owner, 21 Nov 2026: "slow")
+        ametecs.managedmobile.data.AgCache.attach(getApplication())
+        ametecs.managedmobile.data.AgCache.warm("home") { ag.get("home") }
         val ack = g.work.syncPolicy()
         val me = g.session.work("GET", "/api/mobile/v1/me").obj()
         applyMe(me)
@@ -468,6 +471,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun logout() = act {
         stopWork()
         ag.reset()
+        ametecs.managedmobile.data.AgCache.clear()
         g.session.logout()
         g.work.clearWorkData()
         screen.value = Screen.Login

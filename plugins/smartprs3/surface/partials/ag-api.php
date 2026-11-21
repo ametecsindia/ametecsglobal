@@ -8,7 +8,7 @@
  * Only this person's own record. Returns an array; app.php prints it as JSON.
  *
  * Ops: home | attendance (&m=YYYY-MM) | leave | payslips | payslip (&period=) | corrections | person (&app=smartept|qronex|rovexy)
- *      | notifications | scan-ticket | result (after a POST action)
+ *      | notifications (POST csrf = mark all read) | scan-ticket | result (after a POST action)
  */
 declare(strict_types=1);
 
@@ -49,13 +49,17 @@ $aaAppOn = static function (string $app) use ($aaTid, $aaOwn, $aaPdo): bool {
 $aaDur = static fn (int $m): string => $m <= 0 ? '—' : ($m < 60 ? $m . 'm' : intdiv($m, 60) . 'h ' . str_pad((string) ($m % 60), 2, '0', STR_PAD_LEFT) . 'm');
 $aaSrc = ['qr' => 'QR gate', 'qronex' => 'QR scan', 'smartept' => 'PC login', 'web' => 'App / web', 'mobile' => 'App', 'manual' => 'Manual', 'regularised' => 'Regularised',
     'bulk' => 'Upload', 'biometric' => 'Biometric', 'iclock' => 'Biometric', 'push' => 'Biometric', 'pull' => 'Biometric', 'sbb' => 'Biometric', 'fieldforce' => 'Field app', 'caller' => 'Field app'];
+// OWN PAYSLIPS FOR EVERY EMPLOYEE (owner, 21 Nov 2026: "add also like payslips"): only this person's own slips, whatever
+// the role's web menu shows. ponytail: one switch; tie it back to a role permission if a client asks for that.
+$aaSlips = true;
 $aaStatus = ['PRESENT' => 'Present', 'ABSENT' => 'Absent', 'HALF_DAY' => 'Half day', 'WEEKLY_OFF' => 'Weekly off', 'HOLIDAY' => 'Holiday', 'ON_LEAVE' => 'Leave',
     'UNPAID_LEAVE' => 'Unpaid leave', 'NOT_YET' => '—', 'NOT_JOINED' => '—'];
 
 /** One month of this person's attendance: the muster the web's My Attendance and payroll read, plus each punch. */
-$aaMonth = static function (string $month) use ($attendanceReport, $attendance, $calendar, $aaMe, $aaCode, $aaDur, $aaSrc, $aaStatus): array {
-    $from = $month . '-01';
-    $to = date('Y-m-t', (int) strtotime($from));
+$aaMonth = static function (string $month, ?string $day = null) use ($attendanceReport, $attendance, $calendar, $aaMe, $aaCode, $aaDur, $aaSrc, $aaStatus): array {
+    // $day: just that day (the home card), not the whole month (owner, 21 Nov 2026: "app loading very slow")
+    $from = $day ?? $month . '-01';
+    $to = $day ?? date('Y-m-t', (int) strtotime($from));
     $row = $attendanceReport->muster([$aaMe], $from, $to, $calendar->shiftStart(), $calendar->shiftEnd(), date('Y-m-d'), 62, true)['rows'][0] ?? null;
     $cells = (array) ($row['cells'] ?? []);
     $punches = [];
@@ -80,17 +84,23 @@ $aaMonth = static function (string $month) use ($attendanceReport, $attendance, 
             'status_label' => $aaStatus[$st] ?? ucwords(strtolower(str_replace('_', ' ', $st))),
             'in' => (string) ($c['first_in'] ?? '') ?: null, 'out' => (string) ($c['last_out'] ?? '') ?: null,
             'worked' => $aaDur((int) ($c['worked_minutes'] ?? 0)), 'late' => (int) ($c['late_minutes'] ?? 0) > 0 ? $aaDur((int) $c['late_minutes']) : null,
-            'planned' => (bool) ($c['planned'] ?? false), 'punches' => $punches[$d] ?? []];
+            'planned' => (bool) ($c['planned'] ?? false), 'punches' => $punches[$d] ?? [],
+            // the muster's own detail for the phone's day card (owner, 21 Nov 2026: "show more information like logs")
+            'break' => (int) ($c['break_minutes'] ?? 0) > 0 ? $aaDur((int) $c['break_minutes']) : null,
+            'early' => (int) ($c['early_exit_minutes'] ?? 0) > 0 ? $aaDur((int) $c['early_exit_minutes']) : null,
+            'ot' => (int) ($c['overtime_minutes'] ?? 0) > 0 ? $aaDur((int) $c['overtime_minutes']) : null,
+            'why' => (string) ($c['why'] ?? ''), 'fix' => (bool) ($c['needs_regularisation'] ?? false)];
     }
     return ['month' => $month, 'summary' => [
         ['Present', (int) ($count['PRESENT'] ?? 0)], ['Half day', (int) ($count['HALF_DAY'] ?? 0)], ['Absent', (int) ($count['ABSENT'] ?? 0)],
         ['Leave', (int) ($count['ON_LEAVE'] ?? 0) + (int) ($count['UNPAID_LEAVE'] ?? 0)], ['Off / holiday', (int) ($count['WEEKLY_OFF'] ?? 0) + (int) ($count['HOLIDAY'] ?? 0)],
-        ['Late', $late]], 'worked' => $aaDur($worked), 'days' => array_reverse($days)];
+        ['Late', $late]], 'worked' => $aaDur($worked), 'days' => array_reverse($days),
+        'shift' => substr((string) $calendar->shiftStart(), 0, 5) . ' – ' . substr((string) $calendar->shiftEnd(), 0, 5)];
 };
 
 switch ($aaOp) {
     case 'home':
-        $t = $aaMonth(date('Y-m'))['days'];
+        $t = $aaMonth(date('Y-m'), date('Y-m-d'))['days'];
         $today = null;
         foreach ($t as $d) { $d['date'] === date('Y-m-d') && $today = $d; }
         $last = $today === null || $today['punches'] === [] ? null : end($today['punches'])['dir'];
@@ -110,9 +120,16 @@ switch ($aaOp) {
             'today' => ['in' => $today['in'] ?? null, 'out' => $today['out'] ?? null, 'worked' => $today['worked'] ?? '—', 'status' => $today['status_label'] ?? '—',
                 'last' => $last, 'punches' => $today['punches'] ?? []],
             'can' => ['scan' => $aaAppOn('qronex'), 'attendance' => $may('ess.attendance.punch'), 'leave' => $may('leave.request.view'),
-                'leave_apply' => $may('leave.request.submit'), 'payslips' => isset($aaHrefs['payslips']) || isset($aaHrefs['payslips-batch']),
+                'leave_apply' => $may('leave.request.submit'), 'payslips' => $aaSlips,
                 'corrections' => isset($aaHrefs['attendance-corrections']), 'letters' => isset($aaHrefs['letters-mine']), 'assets' => isset($aaHrefs['my-assets']), 'productivity' => $aaAppOn('smartept'), 'field' => $aaAppOn('rovexy')],
-            'unread' => $unread, 'pending_leave' => $pendingLeave];
+            'unread' => $unread, 'pending_leave' => $pendingLeave,
+            // SUPPORT (owner, 21 Nov 2026): who this person can reach - their manager and their company's contact
+            'support' => (static function () use ($store, $aaMe, $mgr): array {
+                $co = (string) ($aaMe['employer_company_id'] ?? '') !== '' ? $store->find('companies', (string) $aaMe['employer_company_id']) : null;
+                $pick = static fn (?array $r, array $keys): string => $r === null ? '' : (string) (array_values(array_filter(array_map(static fn (string $k): string => trim((string) ($r[$k] ?? '')), $keys)))[0] ?? '');
+                return ['manager' => $mgr === null ? null : ['name' => (string) ($mgr['name'] ?? ''), 'mobile' => $pick($mgr, ['mobile', 'phone']), 'email' => $pick($mgr, ['email', 'official_email'])],
+                    'company' => $co === null ? null : ['name' => (string) ($co['name'] ?? ''), 'phone' => $pick($co, ['phone', 'contact_phone', 'mobile']), 'email' => $pick($co, ['hr_email', 'email', 'contact_email'])]];
+            })()];
 
     case 'attendance':
         $m = preg_match('/^\d{4}-\d{2}$/', (string) ($_GET['m'] ?? '')) === 1 ? (string) $_GET['m'] : date('Y-m');
@@ -136,7 +153,7 @@ switch ($aaOp) {
 
     case 'payslips':
     case 'payslip':
-        if (!(isset($aaHrefs['payslips']) || isset($aaHrefs['payslips-batch']))) {
+        if (!$aaSlips) {
             return ['ok' => false, 'message' => 'Payslips are not available for your role.'];
         }
         $list = [];
@@ -217,17 +234,42 @@ switch ($aaOp) {
             'recovery_status' => (string) ($r['recovery_status'] ?? '')];
         return ['ok' => true, 'held' => array_map($row, $o['held']), 'unsettled' => array_map($row, $o['unsettled'])];
 
-    case 'notifications':
+    case 'notifications':   // every kind in one feed (owner, 21 Nov 2026): approvals, notices, leave, attendance, payroll
         $out = [];
+        $cat = static function (string $kind, string $title): string {
+            $k = strtolower($kind . ' ' . $title);
+            return match (true) {
+                str_contains($k, 'approv') || str_contains($k, 'request') || str_contains($k, 'decid') || str_contains($k, 'reject') => 'approval',
+                str_contains($k, 'leave') => 'leave',
+                str_contains($k, 'attend') || str_contains($k, 'regulari') || str_contains($k, 'punch') || str_contains($k, 'late') => 'attendance',
+                str_contains($k, 'pay') || str_contains($k, 'salary') || str_contains($k, 'tds') || str_contains($k, 'tax') => 'payroll',
+                default => 'update',
+            };
+        };
+        $aaFor = [SmartPRS\Surface\Notifications::ROLE_PREFIX . (string) ($aaUser['role'] ?? '')];
         try {
-            foreach ($notifications->queuedFor($aaCode, 40, [SmartPRS\Surface\Notifications::ROLE_PREFIX . (string) ($aaUser['role'] ?? '')]) as $n) {
-                $out[] = ['title' => (string) ($n['title'] ?? ''), 'body' => (string) ($n['body'] ?? ''), 'at' => (string) ($n['created_at'] ?? ''),
+            if ($_SERVER['REQUEST_METHOD'] === 'POST' && hash_equals($session->token(), (string) ($_POST['csrf'] ?? ''))) {   // "mark all read"
+                foreach ($notifications->queuedFor($aaCode, 200, $aaFor) as $n) {
+                    trim((string) ($n['read_at'] ?? '')) === '' && $notifications->markRead((string) $n['id'], $aaCode, false, date('Y-m-d H:i:s'), $aaFor);
+                }
+            }
+            foreach ($notifications->queuedFor($aaCode, 60, $aaFor) as $n) {
+                $out[] = ['id' => (string) ($n['id'] ?? ''), 'kind' => $cat((string) ($n['kind'] ?? ''), (string) ($n['title'] ?? '')),
+                    'title' => (string) ($n['title'] ?? ''), 'body' => (string) ($n['body'] ?? ''), 'at' => (string) ($n['created_at'] ?? ''),
                     'read' => trim((string) ($n['read_at'] ?? '')) !== ''];
             }
         } catch (\Throwable) {
         }
+        try {
+            foreach (array_slice((new SmartPRS\Surface\Notices($store))->current(), 0, 20) as $nt) {
+                $out[] = ['id' => 'notice-' . (string) ($nt['id'] ?? ''), 'kind' => 'notice', 'title' => (string) ($nt['title'] ?? 'Notice'), 'body' => (string) ($nt['body'] ?? ''),
+                    'at' => (string) ($nt['posted_on'] ?? $nt['created_at'] ?? ''), 'read' => true, 'until' => (string) ($nt['valid_to'] ?? '') !== '' ? Dates::dmy((string) $nt['valid_to']) : ''];
+            }
+        } catch (\Throwable) {
+            // no notices table on this store: nothing to add
+        }
         usort($out, static fn ($a, $b) => strcmp($b['at'], $a['at']));
-        return ['ok' => true, 'items' => $out];
+        return ['ok' => true, 'csrf' => $session->token(), 'items' => $out];
 
     case 'scan-ticket':   // QRONEX punch from the native scanner: the same one-time ticket core/scan.php issues
         if (!$aaAppOn('qronex')) {

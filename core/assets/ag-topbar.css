@@ -90,3 +90,6 @@ html.ag-rovexy .sidebar.mini .agm :is(span,.car,em),html.ag-rovexy .sidebar.mini
 .agm-f{position:relative;margin:0 2px 10px}.agm-f i{position:absolute;left:11px;top:50%;transform:translateY(-50%);font-size:12px;color:var(--sb-lb)}
 .agm-f input{width:100%;box-sizing:border-box;padding:8px 10px 8px 30px;border-radius:10px;border:1px solid rgba(201,162,76,.25);background:rgba(255,255,255,.06);color:var(--sb-tx);font:inherit;font-size:13px;outline:none}
 .agm-f input:focus{border-color:#c9a24c}
+
+/* AMETECS GLOBAL MARK (21 Nov 2026): the gold "A" and orbit in place of the "AG" letters, everywhere */
+.logo-mark,.brand .lm,.agtb .hm span,.agm-b span{background:#14120D url(brand/ag-mark.svg) center/100% no-repeat!important;color:transparent!important;font-size:0!important;box-shadow:none!important}

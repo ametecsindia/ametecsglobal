@@ -43,6 +43,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.Logout
 import androidx.compose.material.icons.outlined.BeachAccess
+import androidx.compose.material.icons.outlined.Campaign
+import androidx.compose.material.icons.outlined.SupportAgent
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.ChevronLeft
 import androidx.compose.material.icons.outlined.ChevronRight
@@ -110,6 +112,10 @@ import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 import kotlin.coroutines.resume
 import ametecs.managedmobile.data.str
+import ametecs.managedmobile.data.AgCache
+import ametecs.managedmobile.R
+import androidx.compose.foundation.Image
+import androidx.compose.ui.res.painterResource
 
 /*
  * AMETECS GLOBAL - THE PHONE APP'S OWN SCREENS (owner, 20 Nov 2026: "No WebView or embedded application pages ... develop
@@ -165,6 +171,7 @@ fun AgHome(vm: AppViewModel) {
         page == "correct" -> CorrectionForm(vm, back)
         page == "productivity" -> PersonPage(vm, "smartept", "My productivity", back)
         page == "alerts" -> AlertsPage(vm, back)
+        page == "support" -> SupportPage(vm, back, go)
         page == "profile" -> ProfilePage(vm, back)
         page == "letters" -> LettersPage(vm, back)
         page == "assets" -> AssetsPage(vm, back)
@@ -229,17 +236,19 @@ private fun Field(label: String, value: String) {
     }
 }
 
-/** Loads one API answer; shows a spinner, the error with Retry, or the content (with a reload function). */
+/** Loads one API answer; shows a spinner, the error with Retry, or the content (with a reload function).
+ *  [cache]: the screen opens on its last answer at once and refreshes underneath (owner, 21 Nov 2026: "loading very slow"). */
 @Composable
-private fun Load(key: Any?, load: suspend () -> JsonObject, content: @Composable (JsonObject, () -> Unit) -> Unit) {
+private fun Load(key: Any?, load: suspend () -> JsonObject, cache: String? = null, content: @Composable (JsonObject, () -> Unit) -> Unit) {
+    AgCache.attach(LocalContext.current)
     var tick by remember { mutableIntStateOf(0) }
-    var data by remember(key) { mutableStateOf<JsonObject?>(null) }
+    var data by remember(key) { mutableStateOf(cache?.let { AgCache.peek(it) }) }
     var err by remember(key) { mutableStateOf<String?>(null) }
     LaunchedEffect(key, tick) {
         err = null
-        runCatching { load() }
-            .onSuccess { if (it.str("ok") == "false") err = it.str("message") ?: "Not available." else data = it }
-            .onFailure { err = it.message ?: "Could not load this just now." }
+        runCatching { if (cache != null) AgCache.fetch(cache, load) else load() }
+            .onSuccess { if (it.str("ok") == "false") { if (data == null) err = it.str("message") ?: "Not available." } else data = it }
+            .onFailure { if (data == null) err = it.message ?: "Could not load this just now." }
     }
     val d = data
     when {
@@ -384,102 +393,142 @@ private fun PunchResult(r: JsonObject, retry: () -> Unit, close: () -> Unit) {
 // ---------- home ----------
 private data class Tile(val key: String, val label: String, val sub: String, val icon: ImageVector, val badge: Int = 0)
 
+/** The Ametecs Global mark (gold "A" and orbit) at [size]. */
+@Composable
+private fun Mark(size: Int) = Image(painterResource(R.drawable.ag_mark), "Ametecs Global", Modifier.size(size.dp).clip(RoundedCornerShape((size * 0.23f).dp)))
+
+@Composable
+private fun Bell(unread: Int, onClick: () -> Unit) {
+    Box(Modifier.size(42.dp).clip(CircleShape).background(Color(0x1FFFFFFF)).clickable(onClick = onClick), contentAlignment = Alignment.Center) {
+        Icon(Icons.Outlined.Notifications, "Notifications", tint = GoldHi, modifier = Modifier.size(22.dp))
+        if (unread > 0) Text(if (unread > 9) "9+" else "$unread", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold,
+            modifier = Modifier.align(Alignment.TopEnd).padding(top = 4.dp, end = 3.dp).clip(CircleShape).background(Bad).padding(horizontal = 5.dp, vertical = 1.dp))
+    }
+}
+
+@Composable
+private fun QuickAction(label: String, icon: ImageVector, modifier: Modifier, onClick: () -> Unit) {
+    Column(modifier.clip(RoundedCornerShape(16.dp)).clickable(onClick = onClick).padding(vertical = 6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Box(Modifier.size(52.dp).clip(RoundedCornerShape(16.dp)).background(Color.White).border(1.dp, Line, RoundedCornerShape(16.dp)), contentAlignment = Alignment.Center) {
+            Icon(icon, null, tint = Color(0xFFB08433), modifier = Modifier.size(24.dp))
+        }
+        Text(label, color = Text1, fontSize = 12.sp, fontWeight = FontWeight.Medium, textAlign = TextAlign.Center, maxLines = 1, modifier = Modifier.padding(top = 6.dp))
+    }
+}
+
 @Composable
 private fun Hub(vm: AppViewModel, go: (String) -> Unit) {
     var tick by remember { mutableIntStateOf(0) }
     val punch = rememberPunch(vm) { tick++; vm.refresh() }
-    Load(tick, { vm.ag.get("home") }) { h, reload ->
+    Load(tick, { vm.ag.get("home") }, cache = "home") { h, reload ->
         val me = h.o("me") ?: JsonObject(emptyMap())
         val today = h.o("today") ?: JsonObject(emptyMap())
         val can = h.o("can") ?: JsonObject(emptyMap())
         val hour = LocalTime.now().hour
         val hello = if (hour < 12) "Good morning" else if (hour < 17) "Good afternoon" else "Good evening"
         val isIn = today.s("last") == "IN"
+        val quick = buildList {
+            if (can.b("leave_apply")) add(Triple("Apply leave", Icons.Outlined.EventAvailable, "leave-apply"))
+            if (can.b("corrections")) add(Triple("Correction", Icons.Outlined.EditCalendar, "correct"))
+            if (can.b("payslips")) add(Triple("Payslips", Icons.Outlined.Payments, "payslips"))
+            add(Triple("Support", Icons.Outlined.SupportAgent, "support"))
+        }
         val tiles = buildList {
-            if (can.b("attendance")) add(Tile("attendance", "Attendance history", "Days, in / out, hours", Icons.Outlined.History))
+            if (can.b("attendance")) add(Tile("attendance", "Attendance", "Days, punches, hours", Icons.Outlined.History))
             if (can.b("leave")) add(Tile("leave", "Leave", "Balance, apply, status", Icons.Outlined.BeachAccess, h.n("pending_leave")))
             if (can.b("payslips")) add(Tile("payslips", "Payslips", "Monthly salary slips", Icons.Outlined.Payments))
+            if (can.b("productivity")) add(Tile("productivity", "Productivity", "PC time, breaks, idle", Icons.Outlined.Insights))
             if (can.b("corrections")) add(Tile("corrections", "Corrections", "Missed or wrong punch", Icons.Outlined.EditCalendar))
-            if (can.b("productivity")) add(Tile("productivity", "Productivity", "PC time and score", Icons.Outlined.Insights))
             if (can.b("field")) add(Tile("field", "Field work", "Calls, visits, follow-ups", Icons.Outlined.Route))
             if (can.b("letters")) add(Tile("letters", "My letters", "Letters issued to you", Icons.Outlined.Description))
             if (can.b("assets")) add(Tile("assets", "My assets", "Items issued to you", Icons.Outlined.Inventory2))
-            add(Tile("alerts", "Notifications", "Approvals and updates", Icons.Outlined.Notifications, h.n("unread")))
+            add(Tile("support", "Help & support", "Manager, HR, FAQs", Icons.Outlined.SupportAgent))
             add(Tile("profile", "My profile", "Details and sign-out", Icons.Outlined.Person))
         }
         LazyColumn(Modifier.fillMaxSize().background(Cream), contentPadding = PaddingValues(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             item {
-                Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp))
-                    .background(Brush.linearGradient(listOf(Color(0xFF0B0906), Ink, Ink2))).statusBarsPadding().padding(20.dp)) {
+                Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(bottomStart = 32.dp, bottomEnd = 32.dp))
+                    .background(Brush.linearGradient(listOf(Color(0xFF0B0906), Ink, Ink2))).statusBarsPadding().padding(start = 20.dp, end = 20.dp, top = 14.dp, bottom = 22.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(Modifier.size(34.dp).clip(RoundedCornerShape(10.dp)).background(Gold), contentAlignment = Alignment.Center) {
-                            Text("AG", color = Ink, fontWeight = FontWeight.ExtraBold, fontSize = 12.sp)
-                        }
+                        Mark(38)
                         Spacer(Modifier.width(10.dp))
-                        Text("Ametecs ", color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
-                        Text("Global", color = GoldHi, fontWeight = FontWeight.ExtraBold, fontSize = 16.sp)
-                        Spacer(Modifier.weight(1f))
-                        Icon(Icons.Outlined.Refresh, "Refresh", tint = GoldHi, modifier = Modifier.size(24.dp).clickable { reload(); vm.refresh() })
+                        Column(Modifier.weight(1f)) {
+                            Row {
+                                Text("Ametecs ", color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+                                Text("Global", color = GoldHi, fontWeight = FontWeight.ExtraBold, fontSize = 16.sp)
+                            }
+                            me.s("company").takeIf { it.isNotBlank() }?.let { Text(it, color = Color(0xFFBFAE86), fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                        }
+                        Box(Modifier.size(42.dp).clip(CircleShape).clickable { reload(); vm.refresh() }, contentAlignment = Alignment.Center) {
+                            Icon(Icons.Outlined.Refresh, "Refresh", tint = GoldHi, modifier = Modifier.size(22.dp))
+                        }
+                        Spacer(Modifier.width(4.dp))
+                        Bell(h.n("unread")) { go("alerts") }
+                    }
+                    Spacer(Modifier.height(20.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("$hello,", color = Color(0xFFD9C9A3), fontSize = 14.sp)
+                            Text(me.s("name").ifBlank { "there" }, color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            listOf(me.s("designation"), me.s("code")).filter { it.isNotBlank() }.joinToString(" · ").takeIf { it.isNotBlank() }?.let {
+                                Text(it, color = Color(0xFFBFAE86), fontSize = 13.sp)
+                            }
+                        }
+                        val initials = me.s("name").split(" ").filter { it.isNotBlank() }.let { w -> (w.firstOrNull()?.take(1).orEmpty() + (if (w.size > 1) w.last().take(1) else "")).uppercase() }
+                        Box(Modifier.size(52.dp).clip(CircleShape).background(Brush.linearGradient(listOf(GoldHi, Gold))).clickable { go("profile") }, contentAlignment = Alignment.Center) {
+                            Text(initials, color = Ink, fontWeight = FontWeight.ExtraBold, fontSize = 18.sp)
+                        }
                     }
                     Spacer(Modifier.height(18.dp))
-                    Text("$hello,", color = Color(0xFFD9C9A3), fontSize = 15.sp)
-                    Text(me.s("name").ifBlank { "there" }, color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    listOf(me.s("designation"), me.s("code")).filter { it.isNotBlank() }.joinToString(" · ").takeIf { it.isNotBlank() }?.let {
-                        Text(it, color = Color(0xFFBFAE86), fontSize = 13.sp)
-                    }
-                    Spacer(Modifier.height(16.dp))
                     // today
-                    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Color(0x1FFFFFFF)).padding(14.dp)) {
+                    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(Color(0x1AFFFFFF)).border(1.dp, Color(0x33E8C977), RoundedCornerShape(20.dp)).padding(16.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Box(Modifier.size(10.dp).clip(CircleShape).background(if (isIn) Color(0xFF4ADE80) else if (today.str("out") != null) Color(0xFFF59E0B) else Color(0xFFEF4444)))
                             Spacer(Modifier.width(8.dp))
                             Text(if (isIn) "You're in" else if (today.str("out") != null) "Punched out" else "Not punched in yet", color = Color.White, fontWeight = FontWeight.SemiBold)
                             Spacer(Modifier.weight(1f))
-                            Text(LocalDate.now().format(DateTimeFormatter.ofPattern("EEE, d MMM")), color = Color(0xFFD9C9A3), fontSize = 13.sp)
+                            Text(LocalDate.now().format(DateTimeFormatter.ofPattern("EEE, dd-MM-yyyy")), color = Color(0xFFD9C9A3), fontSize = 12.sp)
                         }
-                        Spacer(Modifier.height(12.dp))
+                        Spacer(Modifier.height(14.dp))
                         Row {
                             listOf("Check in" to today.s("in"), "Check out" to today.s("out"), "Worked" to today.s("worked")).forEach { (k, v) ->
                                 Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
                                     Text(k, color = Color(0xFFBFAE86), fontSize = 11.sp)
-                                    Text(v.ifBlank { "—" }, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                                    Text(v.ifBlank { "—" }, color = Color.White, fontSize = 19.sp, fontWeight = FontWeight.Bold)
                                 }
                             }
                         }
+                        if (can.b("scan")) {
+                            Spacer(Modifier.height(16.dp))
+                            GoldButton(if (isIn) "Scan QR to punch out" else "Scan QR to punch in", Icons.Outlined.QrCodeScanner, onClick = punch)
+                        }
                     }
-                    if (can.b("scan")) {
-                        Spacer(Modifier.height(14.dp))
-                        GoldButton(if (isIn) "Scan QR to punch out" else "Scan QR to punch in", Icons.Outlined.QrCodeScanner, onClick = punch)
-                    }
-                    if (can.b("attendance")) {
-                        Text("Attendance history  ›", color = GoldHi, fontWeight = FontWeight.SemiBold, fontSize = 14.sp,
-                            modifier = Modifier.align(Alignment.CenterHorizontally).padding(top = 12.dp).clickable { go("attendance") })
-                    }
+                }
+            }
+            item {
+                Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
+                    quick.forEach { (label, icon, to) -> QuickAction(label, icon, Modifier.weight(1f)) { go(to) } }
                 }
             }
             val punches = today.a("punches")
             if (punches.isNotEmpty()) item {
                 Card(Modifier.padding(horizontal = 16.dp)) {
-                    Text("Today's punches", color = Text2, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                    Spacer(Modifier.height(8.dp))
-                    punches.forEach { p ->
-                        Row(Modifier.padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Pill(p.s("dir"), if (p.s("dir") == "IN") Ok else Color(0xFF2563EB))
-                            Spacer(Modifier.width(10.dp))
-                            Text(p.s("at"), color = Text1, fontWeight = FontWeight.SemiBold)
-                            Spacer(Modifier.weight(1f))
-                            Text(p.s("src"), color = Text2, fontSize = 12.sp)
-                        }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("Today's log", color = Text1, fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                        if (can.b("attendance")) Text("History ›", color = Warn, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.clickable { go("attendance") })
                     }
+                    Spacer(Modifier.height(8.dp))
+                    PunchTimeline(punches)
                 }
             }
+            item { Text("Apps & services", color = Text2, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.sp, modifier = Modifier.padding(start = 20.dp, top = 4.dp)) }
             items(tiles.chunked(2)) { pair ->
                 Row(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     pair.forEach { t ->
-                        Column(Modifier.weight(1f).clip(RoundedCornerShape(18.dp)).background(Color.White).border(1.dp, Line, RoundedCornerShape(18.dp))
+                        Column(Modifier.weight(1f).clip(RoundedCornerShape(20.dp)).background(Color.White).border(1.dp, Line, RoundedCornerShape(20.dp))
                             .clickable { go(t.key) }.padding(16.dp)) {
                             Row(verticalAlignment = Alignment.Top) {
-                                Box(Modifier.size(42.dp).clip(RoundedCornerShape(12.dp)).background(GoldTint), contentAlignment = Alignment.Center) {
+                                Box(Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).background(Brush.linearGradient(listOf(GoldTint, Color(0xFFF0E2C0)))), contentAlignment = Alignment.Center) {
                                     Icon(t.icon, null, tint = Color(0xFFB08433), modifier = Modifier.size(22.dp))
                                 }
                                 Spacer(Modifier.weight(1f))
@@ -494,75 +543,169 @@ private fun Hub(vm: AppViewModel, go: (String) -> Unit) {
                     if (pair.size == 1) Spacer(Modifier.weight(1f))
                 }
             }
+            item {
+                Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+                    Mark(16); Spacer(Modifier.width(6.dp))
+                    Text("Ametecs Global · one platform, every app", color = Text2, fontSize = 11.sp)
+                }
+            }
+        }
+    }
+}
+
+/** A day's punches as a timeline: each punch, and the worked / break stretch between two punches. */
+@Composable
+private fun PunchTimeline(punches: List<JsonObject>) {
+    val mins = { t: String -> runCatching { LocalTime.parse(t).let { it.hour * 60 + it.minute } }.getOrNull() }
+    punches.forEachIndexed { i, p ->
+        val isIn = p.s("dir") == "IN"
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 2.dp)) {
+            Box(Modifier.size(12.dp).clip(CircleShape).background(if (isIn) Ok else Color(0xFF2563EB)))
+            Spacer(Modifier.width(10.dp))
+            Text(p.s("at"), color = Text1, fontWeight = FontWeight.Bold, fontSize = 15.sp, modifier = Modifier.width(56.dp))
+            Text(if (isIn) "In" else "Out", color = if (isIn) Ok else Color(0xFF2563EB), fontWeight = FontWeight.SemiBold, fontSize = 13.sp, modifier = Modifier.width(36.dp))
+            Spacer(Modifier.weight(1f))
+            Text(p.s("src"), color = Text2, fontSize = 12.sp, modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(Cream).padding(horizontal = 8.dp, vertical = 3.dp))
+        }
+        punches.getOrNull(i + 1)?.let { n ->
+            val a = mins(p.s("at")); val b = mins(n.s("at"))
+            if (a != null && b != null && b >= a) {
+                val gap = b - a
+                val work = isIn && n.s("dir") == "OUT"
+                Row(Modifier.padding(start = 5.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.width(2.dp).height(22.dp).background(if (work) Ok.copy(alpha = 0.35f) else Line))
+                    Spacer(Modifier.width(18.dp))
+                    Text((if (work) "Worked " else if (!isIn && n.s("dir") == "IN") "Break " else "Gap ") + "%dh %02dm".format(gap / 60, gap % 60),
+                        color = if (work) Ok else Text2, fontSize = 12.sp)
+                }
+            }
         }
     }
 }
 
 // ---------- attendance history ----------
+private val statusTint = mapOf("Present" to Ok, "Half day" to Warn, "Absent" to Bad, "Leave" to Color(0xFF2563EB), "Unpaid leave" to Color(0xFF7C3AED),
+    "Weekly off" to Text2, "Holiday" to Color(0xFF0F766E), "Off / holiday" to Text2, "Late" to Color(0xFFEA580C))
+
 @Composable
 private fun AttendancePage(vm: AppViewModel, back: () -> Unit, go: (String) -> Unit) {
     var month by rememberSaveable { mutableStateOf(YearMonth.now().toString()) }
+    var filter by rememberSaveable { mutableStateOf("All") }
+    var open by rememberSaveable { mutableStateOf("") }
     val ym = YearMonth.parse(month)
     Column(Modifier.fillMaxSize().background(Cream)) {
         TopBar("Attendance history", back)
-        Row(Modifier.fillMaxWidth().background(Color.White).padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Outlined.ChevronLeft, "Previous month", tint = Text1, modifier = Modifier.size(40.dp).clip(CircleShape).clickable { month = ym.minusMonths(1).toString() }.padding(8.dp))
-            Text(ym.format(DateTimeFormatter.ofPattern("MMMM yyyy")), color = Text1, fontWeight = FontWeight.Bold, fontSize = 16.sp, textAlign = TextAlign.Center, modifier = Modifier.weight(1f))
+        Row(Modifier.fillMaxWidth().background(Ink).padding(horizontal = 8.dp).padding(bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Outlined.ChevronLeft, "Previous month", tint = GoldHi, modifier = Modifier.size(40.dp).clip(CircleShape).clickable { month = ym.minusMonths(1).toString() }.padding(8.dp))
+            Text(ym.format(DateTimeFormatter.ofPattern("MMMM yyyy")), color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp, textAlign = TextAlign.Center, modifier = Modifier.weight(1f))
             val canNext = ym < YearMonth.now()
-            Icon(Icons.Outlined.ChevronRight, "Next month", tint = if (canNext) Text1 else Line,
+            Icon(Icons.Outlined.ChevronRight, "Next month", tint = if (canNext) GoldHi else Color(0x55E8C977),
                 modifier = Modifier.size(40.dp).clip(CircleShape).clickable(enabled = canNext) { month = ym.plusMonths(1).toString() }.padding(8.dp))
         }
-        Load(month, { vm.ag.get("attendance", mapOf("m" to month)) }) { d, _ ->
+        Load(month, { vm.ag.get("attendance", mapOf("m" to month)) }, cache = "attendance:$month") { d, _ ->
+            val all = d.a("days")
+            val days = when (filter) {
+                "Late" -> all.filter { it.str("late") != null }
+                "Needs fix" -> all.filter { it.b("fix") }
+                "All" -> all
+                else -> all.filter { it.s("status_label") == filter || (filter == "Leave" && it.s("status_label") == "Unpaid leave") }
+            }
             LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 item {
                     val sum = (d["summary"] as? JsonArray).orEmpty().mapNotNull { it as? JsonArray }
-                    Card {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("Worked this month", color = Text2, fontSize = 12.sp, modifier = Modifier.weight(1f))
-                            Text(d.s("worked"), color = Ink, fontWeight = FontWeight.ExtraBold, fontSize = 20.sp)
+                    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(Brush.linearGradient(listOf(Color(0xFF0B0906), Ink, Ink2))).padding(18.dp)) {
+                        Row(verticalAlignment = Alignment.Bottom) {
+                            Column(Modifier.weight(1f)) {
+                                Text("Worked this month", color = Color(0xFFBFAE86), fontSize = 12.sp)
+                                Text(d.s("worked"), color = GoldHi, fontWeight = FontWeight.ExtraBold, fontSize = 30.sp)
+                            }
+                            d.str("shift")?.let { Column(horizontalAlignment = Alignment.End) {
+                                Text("Shift", color = Color(0xFFBFAE86), fontSize = 11.sp)
+                                Text(it, color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                            } }
                         }
-                        Spacer(Modifier.height(10.dp))
+                        Spacer(Modifier.height(14.dp))
                         sum.chunked(3).forEach { row ->
-                            Row(Modifier.padding(vertical = 4.dp)) {
+                            Row(Modifier.padding(vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 row.forEach { p ->
-                                    Column(Modifier.weight(1f)) {
-                                        Text(p[1].jsonPrimitive.content, color = Text1, fontWeight = FontWeight.Bold, fontSize = 20.sp)
-                                        Text(p[0].jsonPrimitive.content, color = Text2, fontSize = 12.sp)
+                                    val label = p[0].jsonPrimitive.content
+                                    val tint = statusTint[label] ?: GoldHi
+                                    Column(Modifier.weight(1f).clip(RoundedCornerShape(14.dp)).background(Color(0x14FFFFFF)).padding(10.dp)) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Box(Modifier.size(8.dp).clip(CircleShape).background(if (tint == Text2) Color(0xFF9CA3AF) else tint))
+                                            Spacer(Modifier.width(6.dp))
+                                            Text(p[1].jsonPrimitive.content, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                                        }
+                                        Text(label, color = Color(0xFFD9C9A3), fontSize = 11.sp)
                                     }
                                 }
                             }
                         }
                     }
                 }
-                item { TextButton(onClick = { go("corrections") }) { Icon(Icons.Outlined.EditCalendar, null, tint = Warn); Spacer(Modifier.width(6.dp)); Text("Missed a punch? Request a correction", color = Warn) } }
-                val days = d.a("days")
-                if (days.isEmpty()) item { Text("Nothing recorded for this month.", color = Text2, modifier = Modifier.padding(16.dp)) }
+                item {
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        items(listOf("All", "Present", "Late", "Half day", "Absent", "Leave", "Weekly off", "Holiday", "Needs fix")) { f -> Chip(f, filter == f) { filter = f } }
+                    }
+                }
+                item {
+                    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(GoldTint).clickable { go("correct") }.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Outlined.EditCalendar, null, tint = Warn); Spacer(Modifier.width(8.dp))
+                        Text("Missed a punch? Request a correction", color = Warn, fontWeight = FontWeight.SemiBold, fontSize = 13.sp, modifier = Modifier.weight(1f))
+                        Icon(Icons.Outlined.ChevronRight, null, tint = Warn)
+                    }
+                }
+                if (days.isEmpty()) item { Text(if (all.isEmpty()) "Nothing recorded for this month." else "No days match \"$filter\".", color = Text2, modifier = Modifier.padding(16.dp)) }
                 items(days) { day ->
-                    Card {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Column(Modifier.weight(1f)) {
-                                Text(day.s("label"), color = Text1, fontWeight = FontWeight.Bold)
-                                Text(day.s("day") + if (day.b("planned")) " · planned" else "", color = Text2, fontSize = 12.sp)
-                            }
-                            Pill(day.s("status_label"), stateColor(day.s("status_label")))
-                        }
-                        Spacer(Modifier.height(10.dp))
-                        Row {
-                            listOf("In" to day.s("in"), "Out" to day.s("out"), "Worked" to day.s("worked"), "Late" to day.s("late")).forEach { (k, v) ->
+                    val st = day.s("status_label")
+                    val tint = statusTint[st] ?: Text2
+                    val expanded = open == day.s("date")
+                    val date = runCatching { LocalDate.parse(day.s("date")) }.getOrNull()
+                    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(Color.White).border(1.dp, if (expanded) Gold else Line, RoundedCornerShape(20.dp))
+                        .clickable { open = if (expanded) "" else day.s("date") }) {
+                        Column(Modifier.weight(1f).padding(14.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Column(Modifier.size(52.dp).clip(RoundedCornerShape(14.dp)).background(tint.copy(alpha = 0.10f)), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                                    Text(date?.dayOfMonth?.toString() ?: "", color = if (tint == Text2) Text1 else tint, fontWeight = FontWeight.ExtraBold, fontSize = 20.sp, lineHeight = 22.sp)
+                                    Text(day.s("day").uppercase(), color = Text2, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
+                                }
+                                Spacer(Modifier.width(12.dp))
                                 Column(Modifier.weight(1f)) {
-                                    Text(k, color = Text2, fontSize = 11.sp)
-                                    Text(v.ifBlank { "—" }, color = if (k == "Late" && v.isNotBlank()) Warn else Text1, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                                    Text(day.s("label"), color = Text1, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                                    Text(listOf(day.str("in")?.let { "In $it" }, day.str("out")?.let { "Out $it" }).filterNotNull().joinToString("  ·  ").ifBlank { if (day.b("planned")) "Planned" else "No punches" },
+                                        color = Text2, fontSize = 12.sp)
+                                }
+                                Pill(st, tint)
+                            }
+                            if (day.a("punches").isNotEmpty() || day.str("late") != null) {
+                                Spacer(Modifier.height(12.dp))
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    listOf(Triple("Worked", day.s("worked"), Text1), Triple("Late", day.str("late"), Color(0xFFEA580C)),
+                                        Triple("Early out", day.str("early"), Warn), Triple("Overtime", day.str("ot"), Ok), Triple("Break", day.str("break"), Text2))
+                                        .filter { !it.second.isNullOrBlank() && it.second != "—" }.take(4).forEach { (k, v, c) ->
+                                            Column(Modifier.weight(1f).clip(RoundedCornerShape(12.dp)).background(Cream).padding(horizontal = 8.dp, vertical = 6.dp)) {
+                                                Text(k, color = Text2, fontSize = 10.sp)
+                                                Text(v!!, color = c, fontWeight = FontWeight.Bold, fontSize = 13.sp, maxLines = 1)
+                                            }
+                                        }
                                 }
                             }
-                        }
-                        val ps = day.a("punches")
-                        if (ps.isNotEmpty()) {
-                            Spacer(Modifier.height(8.dp))
-                            LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                items(ps) { p ->
-                                    Text("${p.s("dir")} ${p.s("at")} · ${p.s("src")}", fontSize = 11.sp, color = Text1,
-                                        modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(GoldTint).padding(horizontal = 8.dp, vertical = 4.dp))
-                                }
+                            if (day.b("fix")) Row(Modifier.padding(top = 10.dp).clip(RoundedCornerShape(10.dp)).background(Bad.copy(alpha = 0.08f)).clickable { go("correct") }.padding(horizontal = 10.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Outlined.ErrorOutline, null, tint = Bad, modifier = Modifier.size(16.dp)); Spacer(Modifier.width(6.dp))
+                                Text("Needs a correction · tap to request", color = Bad, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                            }
+                            if (expanded) {
+                                Spacer(Modifier.height(12.dp))
+                                Box(Modifier.fillMaxWidth().height(1.dp).background(Line))
+                                Spacer(Modifier.height(10.dp))
+                                Text("Punch log", color = Text1, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                Spacer(Modifier.height(6.dp))
+                                val ps = day.a("punches")
+                                if (ps.isEmpty()) Text("No punches recorded this day.", color = Text2, fontSize = 12.sp) else PunchTimeline(ps)
+                                day.s("why").takeIf { it.isNotBlank() }?.let { Text(it, color = Text2, fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp)) }
+                            } else if (day.a("punches").isNotEmpty()) {
+                                Text("${day.a("punches").size} punches · tap for the log", color = Warn, fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
                             }
                         }
                     }
@@ -577,7 +720,7 @@ private fun AttendancePage(vm: AppViewModel, back: () -> Unit, go: (String) -> U
 private fun LeavePage(vm: AppViewModel, back: () -> Unit, go: (String) -> Unit) {
     Column(Modifier.fillMaxSize().background(Cream)) {
         TopBar("Leave", back)
-        Load(Unit, { vm.ag.get("leave") }) { d, _ ->
+        Load(Unit, { vm.ag.get("leave") }, cache = "leave") { d, _ ->
             LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 item {
                     Text("Your balance", color = Text2, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
@@ -692,7 +835,7 @@ private fun LeaveApply(vm: AppViewModel, back: () -> Unit) {
 private fun PayslipsPage(vm: AppViewModel, back: () -> Unit, go: (String) -> Unit) {
     Column(Modifier.fillMaxSize().background(Cream)) {
         TopBar("Payslips", back)
-        Load(Unit, { vm.ag.get("payslips") }) { d, _ ->
+        Load(Unit, { vm.ag.get("payslips") }, cache = "payslips") { d, _ ->
             val list = d.a("payslips")
             LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 if (list.isEmpty()) item { Text("No payslips yet. A payslip appears here once that month's payroll is closed.", color = Text2) }
@@ -719,7 +862,7 @@ private fun PayslipsPage(vm: AppViewModel, back: () -> Unit, go: (String) -> Uni
 private fun PayslipPage(vm: AppViewModel, period: String, back: () -> Unit) {
     Column(Modifier.fillMaxSize().background(Cream)) {
         TopBar("Payslip", back)
-        Load(period, { vm.ag.get("payslip", mapOf("period" to period)) }) { d, _ ->
+        Load(period, { vm.ag.get("payslip", mapOf("period" to period)) }, cache = "payslip:$period") { d, _ ->
             val s = d.o("slip") ?: JsonObject(emptyMap())
             LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 item {
@@ -757,7 +900,7 @@ private fun PayslipPage(vm: AppViewModel, period: String, back: () -> Unit) {
 private fun CorrectionsPage(vm: AppViewModel, back: () -> Unit, go: (String) -> Unit) {
     Column(Modifier.fillMaxSize().background(Cream)) {
         TopBar("Attendance corrections", back)
-        Load(Unit, { vm.ag.get("corrections") }) { d, _ ->
+        Load(Unit, { vm.ag.get("corrections") }, cache = "corrections") { d, _ ->
             LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 item { GoldButton("Request a correction", Icons.Outlined.EditCalendar) { go("correct") } }
                 val rs = d.a("requests")
@@ -817,24 +960,81 @@ private fun CorrectionForm(vm: AppViewModel, back: () -> Unit) {
 }
 
 // ---------- another app's view of me (SmartEPT productivity) ----------
+private fun hm(sec: Int) = if (sec <= 0) "0m" else if (sec < 3600) "${sec / 60}m" else "%dh %02dm".format(sec / 3600, sec / 60 % 60)
+
 @Composable
 private fun PersonPage(vm: AppViewModel, app: String, title: String, back: () -> Unit) {
-    var range by rememberSaveable { mutableStateOf("month") }
+    val ctx = LocalContext.current
     val now = LocalDate.now()
-    val from = when (range) { "today" -> now; "week" -> now.minusDays(6); else -> now.withDayOfMonth(1) }
+    var range by rememberSaveable { mutableStateOf("today") }
+    var cFrom by rememberSaveable { mutableStateOf(now.withDayOfMonth(1).toString()) }
+    var cTo by rememberSaveable { mutableStateOf(now.toString()) }
+    var kind by rememberSaveable { mutableStateOf("all") }
+    val (from, to) = when (range) {
+        "today" -> now to now
+        "yesterday" -> now.minusDays(1) to now.minusDays(1)
+        "week" -> now.minusDays(6) to now
+        "month" -> now.withDayOfMonth(1) to now
+        "last" -> now.minusMonths(1).withDayOfMonth(1) to now.withDayOfMonth(1).minusDays(1)
+        else -> LocalDate.parse(cFrom) to LocalDate.parse(cTo)
+    }
     Page(title, back) {
         item {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Chip("Today", range == "today") { range = "today" }
-                Chip("Last 7 days", range == "week") { range = "week" }
-                Chip("This month", range == "month") { range = "month" }
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(listOf("today" to "Today", "yesterday" to "Yesterday", "week" to "Last 7 days", "month" to "This month", "last" to "Last month", "custom" to "Custom")) { (k, l) ->
+                    Chip(l, range == k) { range = k }
+                }
+            }
+        }
+        if (range == "custom") item {
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Card(Modifier.weight(1f), onClick = { pickDate(ctx, cFrom) { cFrom = it; if (cTo < it) cTo = it } }) { Field("From", dmy(cFrom)) }
+                Card(Modifier.weight(1f), onClick = { pickDate(ctx, cTo) { cTo = if (it < cFrom) cFrom else it } }) { Field("To", dmy(cTo)) }
             }
         }
         item {
-            Load(range, { vm.ag.get("person", mapOf("app" to app, "from" to from.toString(), "to" to now.toString())) }) { d, _ ->
+            Load("$from|$to", { vm.ag.get("person", mapOf("app" to app, "from" to from.toString(), "to" to to.toString())) }, cache = "person:$app:$from:$to") { d, _ ->
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    d.str("note")?.let { Text(it, color = Text2) }
-                    (d["tiles"] as? JsonArray).orEmpty().mapNotNull { it as? JsonArray }.chunked(2).forEach { row ->
+                    d.str("note")?.let { Card { Text(it, color = Text2) } }
+                    val tiles = (d["tiles"] as? JsonArray).orEmpty().mapNotNull { it as? JsonArray }
+                    val split = (d["split"] as? JsonArray).orEmpty().mapNotNull { it as? JsonArray }.map { it[0].jsonPrimitive.content to (it[1].jsonPrimitive.content.toIntOrNull() ?: 0) }
+                    if (split.isNotEmpty()) {
+                        // hero: score, active time and how the time split
+                        val score = tiles.firstOrNull()?.get(1)?.jsonPrimitive?.content ?: "—"
+                        val colors = listOf(Color(0xFF4ADE80), Color(0xFFF59E0B), Color(0xFF60A5FA), Color(0xFFA78BFA))
+                        val total = split.sumOf { it.second }.coerceAtLeast(1)
+                        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(Brush.linearGradient(listOf(Color(0xFF0B0906), Ink, Ink2))).padding(18.dp)) {
+                            Row(verticalAlignment = Alignment.Bottom) {
+                                Column(Modifier.weight(1f)) {
+                                    Text("Productivity", color = Color(0xFFBFAE86), fontSize = 12.sp)
+                                    Text(score, color = GoldHi, fontWeight = FontWeight.ExtraBold, fontSize = 34.sp)
+                                }
+                                Column(horizontalAlignment = Alignment.End) {
+                                    Text("At the PC", color = Color(0xFFBFAE86), fontSize = 11.sp)
+                                    Text(hm(d.n("present").takeIf { it > 0 } ?: total), color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                                }
+                            }
+                            Spacer(Modifier.height(14.dp))
+                            Row(Modifier.fillMaxWidth().height(12.dp).clip(RoundedCornerShape(6.dp)).background(Color(0x22FFFFFF))) {
+                                split.forEachIndexed { i, (_, v) -> if (v > 0) Box(Modifier.weight(v.toFloat()).fillMaxSize().background(colors[i % 4])) }
+                            }
+                            Spacer(Modifier.height(12.dp))
+                            split.chunked(2).forEach { row ->
+                                Row(Modifier.padding(vertical = 3.dp)) {
+                                    row.forEach { (k, v) ->
+                                        val c = colors[split.indexOfFirst { it.first == k } % 4]
+                                        Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+                                            Box(Modifier.size(10.dp).clip(CircleShape).background(c)); Spacer(Modifier.width(8.dp))
+                                            Text(k, color = Color(0xFFD9C9A3), fontSize = 12.sp, modifier = Modifier.weight(1f))
+                                            Text("${hm(v)} · ${v * 100 / total}%", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(end = 12.dp))
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    // the four headline numbers (violations, PCs...)
+                    tiles.drop(if (split.isNotEmpty()) 2 else 0).chunked(2).forEach { row ->
                         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                             row.forEach { t ->
                                 Card(Modifier.weight(1f)) {
@@ -846,11 +1046,76 @@ private fun PersonPage(vm: AppViewModel, app: String, title: String, back: () ->
                             if (row.size == 1) Spacer(Modifier.weight(1f))
                         }
                     }
-                    (d["rows"] as? JsonArray).orEmpty().mapNotNull { it as? JsonArray }.forEach { r ->
-                        Card {
-                            Text(dmy(r[0].jsonPrimitive.content.take(10)), color = Text1, fontWeight = FontWeight.Bold)
-                            Text(r.getOrNull(1)?.jsonPrimitive?.content.orEmpty(), color = Text1, fontSize = 13.sp)
-                            Text(r.getOrNull(2)?.jsonPrimitive?.content.orEmpty(), color = Text2, fontSize = 12.sp)
+                    val breaks = (d["breaks"] as? JsonArray).orEmpty().mapNotNull { it as? JsonArray }
+                    if (breaks.isNotEmpty()) Card {
+                        Text("Breaks", color = Text1, fontWeight = FontWeight.Bold)
+                        Spacer(Modifier.height(6.dp))
+                        breaks.forEach { b ->
+                            Row(Modifier.padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Text(b[0].jsonPrimitive.content, color = Text1, fontSize = 14.sp, modifier = Modifier.weight(1f))
+                                Text("${b[2].jsonPrimitive.content}×", color = Text2, fontSize = 12.sp, modifier = Modifier.padding(end = 12.dp))
+                                Text(hm(b[1].jsonPrimitive.content.toIntOrNull() ?: 0), color = Ink, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                            }
+                        }
+                    }
+                    // day by day
+                    val days = d.a("days")
+                    if (days.size > 1) {
+                        Text("Day by day", color = Text2, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                        days.forEach { x ->
+                            Card {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Column(Modifier.weight(1f)) {
+                                        Text(dmy(x.s("date")), color = Text1, fontWeight = FontWeight.Bold)
+                                        Text("PC ${x.s("in").ifBlank { "—" }} – ${x.s("out").ifBlank { "—" }}", color = Text2, fontSize = 12.sp)
+                                    }
+                                    Text("${x.s("score")}%", color = Ink, fontWeight = FontWeight.ExtraBold, fontSize = 18.sp)
+                                }
+                                Spacer(Modifier.height(8.dp))
+                                Row {
+                                    listOf("Active" to x.n("active"), "Idle" to x.n("idle"), "Break" to x.n("break"), "Away" to x.n("away")).forEach { (k, v) ->
+                                        Column(Modifier.weight(1f)) { Text(k, color = Text2, fontSize = 10.sp); Text(hm(v), color = Text1, fontWeight = FontWeight.SemiBold, fontSize = 13.sp) }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    // the full log, filterable
+                    val ev = d.a("events")
+                    if (d["events"] != null) {
+                        Text("Activity log", color = Text2, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            items(listOf("all" to "All", "session" to "PC sessions", "break" to "Breaks", "lunch" to "Lunch", "idle" to "Idle / away")) { (k, l) ->
+                                Chip("$l (${if (k == "all") ev.size else ev.count { it.s("kind") == k }})", kind == k) { kind = k }
+                            }
+                        }
+                        val shown = if (kind == "all") ev else ev.filter { it.s("kind") == kind }
+                        if (shown.isEmpty()) Text("Nothing recorded for this filter.", color = Text2, modifier = Modifier.padding(8.dp))
+                        shown.groupBy { it.s("from").take(10) }.forEach { (day, list) ->
+                            Text(dmy(day), color = Text1, fontWeight = FontWeight.Bold, fontSize = 13.sp, modifier = Modifier.padding(top = 4.dp))
+                            Card {
+                                list.forEachIndexed { i, e ->
+                                    val c = when (e.s("kind")) { "session" -> Ok; "lunch" -> Color(0xFFB08433); "break" -> Color(0xFF2563EB); else -> Warn }
+                                    Row(Modifier.padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                                        Box(Modifier.size(10.dp).clip(CircleShape).background(c)); Spacer(Modifier.width(10.dp))
+                                        Column(Modifier.weight(1f)) {
+                                            Text(e.s("label"), color = Text1, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                                            Text("${e.s("from").drop(11).take(5)} – ${e.str("to")?.drop(11)?.take(5) ?: "now"}" + (e.s("note").takeIf { it.isNotBlank() }?.let { " · $it" } ?: ""),
+                                                color = Text2, fontSize = 12.sp)
+                                        }
+                                        Text(hm(e.n("sec")), color = c, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                    }
+                                    if (i < list.size - 1) Box(Modifier.fillMaxWidth().height(1.dp).background(Line))
+                                }
+                            }
+                        }
+                    } else {
+                        (d["rows"] as? JsonArray).orEmpty().mapNotNull { it as? JsonArray }.forEach { r ->
+                            Card {
+                                Text(dmy(r[0].jsonPrimitive.content.take(10)), color = Text1, fontWeight = FontWeight.Bold)
+                                Text(r.getOrNull(1)?.jsonPrimitive?.content.orEmpty(), color = Text1, fontSize = 13.sp)
+                                Text(r.getOrNull(2)?.jsonPrimitive?.content.orEmpty(), color = Text2, fontSize = 12.sp)
+                            }
                         }
                     }
                 }
@@ -859,24 +1124,135 @@ private fun PersonPage(vm: AppViewModel, app: String, title: String, back: () ->
     }
 }
 
-// ---------- notifications, profile ----------
+// ---------- notifications, support, profile ----------
+private val alertKinds = listOf("all" to "All", "approval" to "Approvals", "notice" to "Notices", "leave" to "Leave", "attendance" to "Attendance", "payroll" to "Payroll", "update" to "Updates")
+
 @Composable
 private fun AlertsPage(vm: AppViewModel, back: () -> Unit) {
+    var kind by rememberSaveable { mutableStateOf("all") }
     Column(Modifier.fillMaxSize().background(Cream)) {
         TopBar("Notifications", back)
-        Load(Unit, { vm.ag.get("notifications") }) { d, _ ->
+        Load(Unit, { vm.ag.get("notifications") }, cache = "notifications") { d, _ ->
             val list = d.a("items")
+            // seen once opened: the bell's count clears (owner, 21 Nov 2026)
+            LaunchedEffect(list.any { !it.b("read") }) { if (list.any { !it.b("read") }) runCatching { vm.ag.post("notifications") } }
+            val shown = if (kind == "all") list else list.filter { it.s("kind") == kind }
             LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                if (list.isEmpty()) item { Text("You're all caught up.", color = Text2) }
-                items(list) { n ->
-                    Card {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            if (!n.b("read")) { Box(Modifier.size(8.dp).clip(CircleShape).background(Gold)); Spacer(Modifier.width(8.dp)) }
-                            Text(n.s("title"), color = Text1, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                item {
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        items(alertKinds.filter { (k, _) -> k == "all" || list.any { it.s("kind") == k } }) { (k, l) ->
+                            Chip(if (k == "all") l else "$l (${list.count { it.s("kind") == k }})", kind == k) { kind = k }
                         }
-                        Text(n.s("body"), color = Text1, fontSize = 13.sp, modifier = Modifier.padding(top = 4.dp))
-                        Text(n.s("at").take(16).let { a -> runCatching { dmy(a.take(10)) + a.drop(10) }.getOrDefault(a) }, color = Text2, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
                     }
+                }
+                if (shown.isEmpty()) item {
+                    Column(Modifier.fillMaxWidth().padding(40.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(Icons.Outlined.Notifications, null, tint = Gold, modifier = Modifier.size(44.dp))
+                        Text("You're all caught up.", color = Text2, modifier = Modifier.padding(top = 8.dp))
+                    }
+                }
+                items(shown) { n ->
+                    val (icon, tint) = when (n.s("kind")) {
+                        "approval" -> Icons.Outlined.CheckCircle to Ok
+                        "notice" -> Icons.Outlined.Campaign to Color(0xFFEA580C)
+                        "leave" -> Icons.Outlined.BeachAccess to Color(0xFF2563EB)
+                        "attendance" -> Icons.Outlined.History to Warn
+                        "payroll" -> Icons.Outlined.Payments to Color(0xFF0F766E)
+                        else -> Icons.Outlined.Notifications to Color(0xFFB08433)
+                    }
+                    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(if (n.b("read")) Color.White else Color(0xFFFFFBF0))
+                        .border(1.dp, if (n.b("read")) Line else Gold.copy(alpha = 0.5f), RoundedCornerShape(18.dp)).padding(14.dp)) {
+                        Box(Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(tint.copy(alpha = 0.12f)), contentAlignment = Alignment.Center) {
+                            Icon(icon, null, tint = tint, modifier = Modifier.size(20.dp))
+                        }
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(n.s("title"), color = Text1, fontWeight = FontWeight.Bold, fontSize = 14.sp, modifier = Modifier.weight(1f))
+                                if (!n.b("read")) Box(Modifier.size(8.dp).clip(CircleShape).background(Gold))
+                            }
+                            if (n.s("body").isNotBlank()) Text(n.s("body"), color = Text1, fontSize = 13.sp, lineHeight = 18.sp, modifier = Modifier.padding(top = 3.dp))
+                            Text(n.s("at").take(16).let { a -> runCatching { dmy(a.take(10)) + a.drop(10) }.getOrDefault(a) } +
+                                (n.s("until").takeIf { it.isNotBlank() }?.let { " · until $it" } ?: ""), color = Text2, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SupportPage(vm: AppViewModel, back: () -> Unit, go: (String) -> Unit) {
+    val ctx = LocalContext.current
+    var faq by rememberSaveable { mutableIntStateOf(-1) }
+    val open = { uri: String -> runCatching { ctx.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(uri))) } }
+    Column(Modifier.fillMaxSize().background(Cream)) {
+        TopBar("Help & support", back)
+        Load(Unit, { vm.ag.get("home") }, cache = "home") { h, _ ->
+            val sup = h.o("support") ?: JsonObject(emptyMap())
+            val can = h.o("can") ?: JsonObject(emptyMap())
+            LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                item {
+                    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(Brush.linearGradient(listOf(Color(0xFF0B0906), Ink, Ink2))).padding(20.dp)) {
+                        Icon(Icons.Outlined.SupportAgent, null, tint = GoldHi, modifier = Modifier.size(34.dp))
+                        Text("How can we help?", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 8.dp))
+                        Text("Reach your manager or HR, or fix common things yourself.", color = Color(0xFFD9C9A3), fontSize = 13.sp)
+                    }
+                }
+                listOf("Your manager" to sup.o("manager"), "HR / company" to sup.o("company")).forEach { (title, c) ->
+                    if (c != null) item {
+                        Card {
+                            Text(title, color = Text2, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                            Text(c.s("name").ifBlank { "—" }, color = Text1, fontWeight = FontWeight.Bold, fontSize = 16.sp, modifier = Modifier.padding(top = 2.dp))
+                            val phone = c.s("mobile").ifBlank { c.s("phone") }.filter { it.isDigit() || it == '+' }
+                            val mail = c.s("email")
+                            if (phone.isBlank() && mail.isBlank()) Text("No contact details on record.", color = Text2, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
+                            Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                if (phone.isNotBlank()) {
+                                    Chip("Call", false) { open("tel:$phone") }
+                                    Chip("WhatsApp", false) { open("https://wa.me/" + phone.trimStart('+').let { if (it.length == 10) "91$it" else it }) }
+                                }
+                                if (mail.isNotBlank()) Chip("Email", false) { open("mailto:$mail") }
+                            }
+                        }
+                    }
+                }
+                item { Text("Do it yourself", color = Text2, fontSize = 12.sp, fontWeight = FontWeight.SemiBold) }
+                item {
+                    Card {
+                        listOfNotNull(
+                            ("Missed or wrong punch" to "correct").takeIf { can.b("corrections") },
+                            ("Apply for leave" to "leave-apply").takeIf { can.b("leave_apply") },
+                            ("See my payslips" to "payslips").takeIf { can.b("payslips") },
+                            "My profile and sign-out" to "profile",
+                        ).forEach { (l, to) ->
+                            Row(Modifier.fillMaxWidth().clickable { go(to) }.padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Text(l, color = Text1, fontSize = 14.sp, modifier = Modifier.weight(1f)); Icon(Icons.Outlined.ChevronRight, null, tint = Text2)
+                            }
+                        }
+                    }
+                }
+                item { Text("Common questions", color = Text2, fontSize = 12.sp, fontWeight = FontWeight.SemiBold) }
+                val qa = listOf(
+                    "My QR punch was refused" to "The message under \"Not recorded\" says why. Most often: stand inside the office, turn on location, or scan the live screen again (the code changes every few seconds). If it says QR attendance is off for you, ask your administrator.",
+                    "My attendance is wrong" to "Open Attendance, tap the day to see its punch log, then use \"Request a correction\". Your manager approves it.",
+                    "I forgot my password" to "Ask your administrator to reset it in User Management. Then sign in with your Employee ID and the new password.",
+                    "I can't see payslips" to "A payslip appears once that month's payroll is closed by HR.",
+                    "The app says Locked" to "The phone has been offline too long. Connect to the internet and tap Retry.",
+                )
+                items(qa.size) { i ->
+                    Card(onClick = { faq = if (faq == i) -1 else i }) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(qa[i].first, color = Text1, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, modifier = Modifier.weight(1f))
+                            Text(if (faq == i) "–" else "+", color = Gold, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                        }
+                        if (faq == i) Text(qa[i].second, color = Text2, fontSize = 13.sp, lineHeight = 19.sp, modifier = Modifier.padding(top = 8.dp))
+                    }
+                }
+                item {
+                    Text("Ametecs Global ${ametecs.managedmobile.BuildConfig.VERSION_NAME} · ${Build.MANUFACTURER} ${Build.MODEL}", color = Text2, fontSize = 11.sp,
+                        textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(top = 8.dp))
                 }
             }
         }
@@ -888,7 +1264,7 @@ private fun ProfilePage(vm: AppViewModel, back: () -> Unit) {
     var ask by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxSize().background(Cream)) {
         TopBar("My profile", back)
-        Load(Unit, { vm.ag.get("home") }) { h, _ ->
+        Load(Unit, { vm.ag.get("home") }, cache = "home") { h, _ ->
             val me = h.o("me") ?: JsonObject(emptyMap())
             Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Card {
@@ -934,7 +1310,7 @@ private fun LettersPage(vm: AppViewModel, back: () -> Unit) {
     var open by rememberSaveable { mutableStateOf("") }
     Column(Modifier.fillMaxSize().background(Cream)) {
         TopBar("My letters", back)
-        Load(Unit, { vm.ag.get("letters") }) { d, _ ->
+        Load(Unit, { vm.ag.get("letters") }, cache = "letters") { d, _ ->
             val list = d.a("letters")
             LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 if (list.isEmpty()) item { Text("No letters have been issued to you yet.", color = Text2) }
@@ -961,7 +1337,7 @@ private fun LettersPage(vm: AppViewModel, back: () -> Unit) {
 private fun AssetsPage(vm: AppViewModel, back: () -> Unit) {
     Column(Modifier.fillMaxSize().background(Cream)) {
         TopBar("My assets", back)
-        Load(Unit, { vm.ag.get("assets") }) { d, _ ->
+        Load(Unit, { vm.ag.get("assets") }, cache = "assets") { d, _ ->
             val held = d.a("held")
             val unsettled = d.a("unsettled")
             LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {

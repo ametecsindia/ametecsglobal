@@ -71,6 +71,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -189,8 +190,9 @@ private fun mmss(sec: Int) = if (sec >= 3600) "%dh %02dm".format(sec / 3600, sec
 
 // ───────────────────────────── sign-in / connect ─────────────────────────────
 
-/** Company logo, Server URL, User ID, Password, Sign In. Before approval: Connect/Register.
- *  "Classic split" (chosen 13 Oct): navy brand panel with logo, headline and three points; white form sheet below. */
+/** Sign-in and device connect. AMETECS GLOBAL PREMIUM SIGN-IN (owner, 21 Nov 2026: "login very simple and looks like
+ *  ROVEXY ... make it look premium"): black-and-gold stage with the Ametecs Global mark, one glass card for the form.
+ *  The server address is shown only while connecting; signing in shows which company this phone belongs to. */
 @Composable
 fun AuthLayout(vm: AppViewModel, mode: String) {
     val b by vm.branding.collectAsState()
@@ -203,70 +205,62 @@ fun AuthLayout(vm: AppViewModel, mode: String) {
     var reveal by remember { mutableStateOf(false) }
     val locked = mode == "login" || vm.serverLocked
     val login = mode == "login"
-    val navy = Color(0xFF14100A); val navyBrand = Color(0xFF2A2112)   // Ametecs Global black and gold
-    val gold = Color(0xFFC9A24C); val goldHi = Color(0xFFE8C977)
-    BoxWithConstraints(Modifier.fillMaxSize().background(navy)) {
-        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).heightIn(min = maxHeight).imePadding(), verticalArrangement = Arrangement.SpaceBetween) {
-            Column(Modifier.statusBarsPadding().padding(start = 24.dp, end = 24.dp, top = 22.dp, bottom = 24.dp)) {
-                Text("Ametecs Global", color = goldHi, fontSize = 26.sp, fontWeight = FontWeight.Bold)
-                Spacer(Modifier.height(30.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.width(22.dp).height(2.dp).background(goldHi))
-                    Spacer(Modifier.width(8.dp))
-                    Text(if (login) "ONE LOGIN" else "DEVICE SETUP", color = goldHi, fontSize = 11.sp, letterSpacing = 2.sp, fontWeight = FontWeight.Bold)
-                }
-                Spacer(Modifier.height(10.dp))
-                Text("Your workforce,", color = Color.White, fontSize = 26.sp, lineHeight = 30.sp, fontWeight = FontWeight.ExtraBold)
-                Text("always on record.", color = goldHi, fontSize = 26.sp, lineHeight = 30.sp, fontWeight = FontWeight.ExtraBold)
-                Spacer(Modifier.height(14.dp))
-                listOf("Calls recorded with their outcome", "Visits verified at the customer's address").forEach { point ->
-                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 4.dp)) {
-                        Box(Modifier.size(22.dp).background(goldHi.copy(alpha = 0.15f), RoundedCornerShape(6.dp)), contentAlignment = Alignment.Center) {
-                            Text("\u2713", color = goldHi, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                        }
-                        Spacer(Modifier.width(10.dp))
-                        Text(point, color = Color(0xFFC9D4E3), fontSize = 13.sp)
-                    }
-                }
+    val ink = Color(0xFF14100A)
+    val gold = Color(0xFFC9A24C); val goldHi = Color(0xFFE8C977); val sand = Color(0xFFD9C9A3)
+    BoxWithConstraints(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFF060504), Color(0xFF14100A), Color(0xFF2A2112))))) {
+        // soft gold glow behind the mark
+        Box(Modifier.align(Alignment.TopCenter).padding(top = 40.dp).size(280.dp)
+            .background(Brush.radialGradient(listOf(gold.copy(alpha = 0.22f), Color.Transparent)), CircleShape))
+        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).heightIn(min = maxHeight).imePadding().statusBarsPadding().navigationBarsPadding()
+            .padding(horizontal = 22.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Spacer(Modifier.height(48.dp))
+            Image(painterResource(R.drawable.ag_mark), "Ametecs Global", Modifier.size(92.dp).clip(RoundedCornerShape(24.dp)).border(1.dp, goldHi.copy(alpha = 0.35f), RoundedCornerShape(24.dp)))
+            Spacer(Modifier.height(18.dp))
+            Row {
+                Text("Ametecs ", color = Color.White, fontSize = 30.sp, fontWeight = FontWeight.Bold)
+                Text("Global", color = goldHi, fontSize = 30.sp, fontWeight = FontWeight.ExtraBold)
             }
-            Column(Modifier.fillMaxWidth().background(Ds.Surface, RoundedCornerShape(topStart = 30.dp, topEnd = 30.dp)).navigationBarsPadding()
-                .padding(start = 22.dp, end = 22.dp, top = 22.dp, bottom = 18.dp)) {
-                Box(Modifier.align(Alignment.CenterHorizontally).width(56.dp).height(4.dp).background(Brush.horizontalGradient(listOf(gold, goldHi)), RoundedCornerShape(2.dp)))
-                Spacer(Modifier.height(16.dp))
-                // Which company this phone signs in to (uploaded logo or initials).
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().background(Ds.Bg, RoundedCornerShape(14.dp)).padding(10.dp)) {
-                    Box(Modifier.size(40.dp).background(navyBrand, RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) { Logo(b, size = 40) }
-                    Spacer(Modifier.width(10.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text(if (login) "Signing in to" else "Connecting to", color = Ds.Muted, fontSize = 11.sp)
-                        Text(b.name, color = Ds.Ink, fontWeight = FontWeight.Bold, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    }
-                }
-                Spacer(Modifier.height(14.dp))
-                Text(if (login) "Welcome back" else "Connect this phone", color = navy, fontSize = 24.sp, fontWeight = FontWeight.ExtraBold)
-                Text(if (login) "Use your Ametecs Global Employee ID (or email) and password." else "Enter the server address your office gave you.",
-                    color = Ds.Muted, fontSize = 13.sp, modifier = Modifier.padding(top = 4.dp, bottom = 8.dp))
-                Field(server, { server = it }, "Server URL", enabled = !locked, type = KeyboardType.Uri, leading = AmmpIcons.Shield)
-                if (mode == "connect" && !locked) Field(workspace, { workspace = it }, "Company workspace (if given)", leading = AmmpIcons.People)
+            Text("ONE PLATFORM · EVERY APP", color = sand.copy(alpha = 0.7f), fontSize = 11.sp, letterSpacing = 3.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 6.dp))
+            Spacer(Modifier.height(34.dp))
+            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(28.dp)).background(Ds.Surface).padding(start = 20.dp, end = 20.dp, top = 22.dp, bottom = 20.dp)) {
+                Text(if (login) "Welcome back" else "Connect this phone", color = ink, fontSize = 24.sp, fontWeight = FontWeight.ExtraBold)
+                Text(if (login) "Sign in with your Employee ID or email." else "Enter the server address your office gave you.",
+                    color = Ds.Muted, fontSize = 13.sp, modifier = Modifier.padding(top = 4.dp, bottom = 10.dp))
                 if (login) {
+                    // which company this phone signs in to (uploaded logo or initials)
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp)
+                        .background(Color(0xFFF7F3EA), RoundedCornerShape(14.dp)).border(1.dp, Color(0xFFEDE5D3), RoundedCornerShape(14.dp)).padding(10.dp)) {
+                        Box(Modifier.size(36.dp).background(ink, RoundedCornerShape(10.dp)), contentAlignment = Alignment.Center) { Logo(b, size = 36) }
+                        Spacer(Modifier.width(10.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text("Your company", color = Ds.Muted, fontSize = 11.sp)
+                            Text(b.name, color = ink, fontWeight = FontWeight.Bold, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                        Box(Modifier.size(8.dp).background(Ds.Green, CircleShape))
+                    }
                     Field(user, { user = it }, "Employee ID or email", leading = AmmpIcons.People)
                     Field(pass, { pass = it }, "Password", password = true, leading = AmmpIcons.Shield, reveal = reveal,
-                        trailing = { TextButton(onClick = { reveal = !reveal }) { Text(if (reveal) "Hide" else "Show", color = navyBrand, fontWeight = FontWeight.SemiBold, fontSize = 13.sp) } })
+                        trailing = { TextButton(onClick = { reveal = !reveal }) { Text(if (reveal) "Hide" else "Show", color = Color(0xFF8A6A25), fontWeight = FontWeight.SemiBold, fontSize = 13.sp) } })
+                } else {
+                    Field(server, { server = it }, "Server URL", enabled = !locked, type = KeyboardType.Uri, leading = AmmpIcons.Shield)
+                    if (!locked) Field(workspace, { workspace = it }, "Company workspace (if given)", leading = AmmpIcons.People)
                 }
                 AnimatedVisibility(err != null) {
                     Text(err.orEmpty(), color = Ds.Red, fontSize = 13.sp, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
                         .background(Ds.Red.copy(alpha = 0.07f), RoundedCornerShape(10.dp)).padding(horizontal = 12.dp, vertical = 10.dp))
                 }
                 Spacer(Modifier.height(16.dp))
-                PrimaryButton(if (login) "Sign in  \u2192" else "Connect / Register  \u2192", Modifier.fillMaxWidth(), busy = busy, color = navyBrand) {
-                    if (login) vm.login(user, pass) else vm.connect(server, workspace)
+                Box(Modifier.fillMaxWidth().height(54.dp).clip(RoundedCornerShape(16.dp))
+                    .background(Brush.horizontalGradient(listOf(goldHi, gold)).takeIf { !busy } ?: SolidColor(gold.copy(alpha = 0.5f)))
+                    .clickable(enabled = !busy) { if (login) vm.login(user, pass) else vm.connect(server, workspace) }, contentAlignment = Alignment.Center) {
+                    if (busy) CircularProgressIndicator(Modifier.size(22.dp), color = ink, strokeWidth = 2.dp)
+                    else Text(if (login) "Sign in" else "Connect / Register", color = ink, fontWeight = FontWeight.ExtraBold, fontSize = 16.sp)
                 }
-                Spacer(Modifier.height(14.dp))
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
-                    Icon(AmmpIcons.Shield, null, tint = gold, modifier = Modifier.size(14.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text("Company-managed device \u00b7 activity is visible to you under Monitoring", color = Ds.Muted, fontSize = 11.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
-                }
+            }
+            Row(Modifier.padding(top = 28.dp, bottom = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(AmmpIcons.Shield, null, tint = gold, modifier = Modifier.size(14.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("Secure company sign-in · v${ametecs.managedmobile.BuildConfig.VERSION_NAME}", color = sand.copy(alpha = 0.6f), fontSize = 11.sp)
             }
         }
     }

@@ -81,3 +81,6 @@
 
 /* the theme switch in the user menus */
 [data-theme-toggle]{cursor:pointer}
+
+/* AMETECS GLOBAL MARK (21 Nov 2026): the gold "A" and orbit in place of the "AG" letters, everywhere */
+.logo-mark,.brand .lm,.agtb .hm span,.agm-b span{background:#14120D url(brand/ag-mark.svg) center/100% no-repeat!important;color:transparent!important;font-size:0!important;box-shadow:none!important}
