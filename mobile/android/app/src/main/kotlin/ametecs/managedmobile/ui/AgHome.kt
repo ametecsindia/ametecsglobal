@@ -135,6 +135,7 @@ import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.drawscope.scale
@@ -498,6 +499,165 @@ private fun PunchResult(r: JsonObject, retry: () -> Unit, close: () -> Unit) {
     }
 }
 
+// ---------- Apps & services: Bento (owner, 21 Nov 2026: option A of the redesign canvas) ----------
+/** A cached API answer, shown at once and refreshed in the background; null until the first answer. No spinner. */
+@Composable
+private fun rememberAg(key: String, load: suspend () -> JsonObject): JsonObject? {
+    var v by remember(key) { mutableStateOf(AgCache.peek(key)) }
+    LaunchedEffect(key) { runCatching { AgCache.fetch(key, load) }.onSuccess { if (it.str("ok") != "false") v = it } }
+    return v
+}
+
+private fun minutesOf(s: String): Int {
+    val h = Regex("(\\d+)h").find(s)?.groupValues?.get(1)?.toIntOrNull() ?: 0
+    val m = Regex("(\\d+)m").find(s)?.groupValues?.get(1)?.toIntOrNull() ?: 0
+    return h * 60 + m
+}
+
+@Composable
+private fun AppsBento(vm: AppViewModel, h: JsonObject, can: JsonObject, go: (String) -> Unit) {
+    val month = YearMonth.now().toString()
+    val att = if (can.b("attendance")) rememberAg("attendance:$month") { vm.ag.get("attendance", mapOf("m" to month)) } else null
+    val today = LocalDate.now()
+    val prod = if (can.b("productivity")) rememberAg("person:smartept:$today:$today") {
+        vm.ag.get("person", mapOf("app" to "smartept", "from" to today.toString(), "to" to today.toString()))
+    } else null
+    Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text("Apps & services", color = Text1, fontSize = 18.sp, fontWeight = FontWeight.ExtraBold, modifier = Modifier.padding(start = 4.dp, top = 4.dp))
+        // attendance: the month at a glance
+        if (can.b("attendance")) {
+            val sum = (att?.get("summary") as? JsonArray).orEmpty().mapNotNull { it as? JsonArray }.associate { it[0].jsonPrimitive.content to it[1].jsonPrimitive.content }
+            val byDate = att?.a("days").orEmpty().associateBy { it.s("date") }
+            val week = (6 downTo 0).map { today.minusDays(it.toLong()) }.map { d -> byDate[d.toString()] }
+            val maxM = week.maxOfOrNull { it?.let { x -> minutesOf(x.s("worked")) } ?: 0 }?.coerceAtLeast(480) ?: 480
+            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(Brush.linearGradient(listOf(Color(0xFF0B0906), Ink, Ink2)))
+                .clickable { go("attendance") }.padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).background(Color(0x24E8C977)), contentAlignment = Alignment.Center) {
+                        Icon(Icons.Outlined.History, null, tint = GoldHi, modifier = Modifier.size(22.dp))
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text("Attendance", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                        Text(YearMonth.now().format(DateTimeFormatter.ofPattern("MMMM")) + " · days, punches, hours", color = Color(0xFFD9C9A3), fontSize = 12.sp)
+                    }
+                    Icon(Icons.Outlined.ChevronRight, null, tint = GoldHi)
+                }
+                Row(verticalAlignment = Alignment.Bottom) {
+                    Column(Modifier.weight(1f)) {
+                        Text(att?.s("worked")?.takeIf { it.isNotBlank() } ?: "—", color = GoldHi, fontWeight = FontWeight.ExtraBold, fontSize = 28.sp, lineHeight = 30.sp)
+                        Text("worked this month", color = Color(0xFFBFAE86), fontSize = 12.sp)
+                    }
+                    // the last 7 days: one bar per day, orange when late, stub when nothing worked
+                    Row(Modifier.height(42.dp), verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                        week.forEachIndexed { i, d ->
+                            val m = d?.let { minutesOf(it.s("worked")) } ?: 0
+                            Box(Modifier.width(8.dp).height((6 + 36 * m / maxM).dp).clip(RoundedCornerShape(4.dp))
+                                .background(when { m == 0 -> Color(0x33FFFFFF); d?.str("late") != null -> Color(0xFFB45309); i == 6 -> GoldHi; else -> Gold }))
+                        }
+                    }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf(Triple("Present", Color(0x264ADE80), Color(0xFF86EFAC)), Triple("Late", Color(0x26F59E0B), Color(0xFFFCD34D)),
+                        Triple("Absent", Color(0x26EF4444), Color(0xFFFCA5A5))).forEach { (k, bg, fg) ->
+                        sum[k]?.let { n -> Text("$n ${k.lowercase()}", color = fg, fontSize = 11.sp, fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.clip(RoundedCornerShape(50)).background(bg).padding(horizontal = 10.dp, vertical = 4.dp)) }
+                    }
+                }
+            }
+        }
+        if (can.b("admin")) {
+            Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(Ink2).clickable { go("admin") }.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Outlined.Groups, null, tint = GoldHi, modifier = Modifier.size(24.dp))
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Text("Team & approvals", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                    Text("Who's in, leave, corrections", color = Color(0xFFD9C9A3), fontSize = 12.sp)
+                }
+                Icon(Icons.Outlined.ChevronRight, null, tint = GoldHi)
+            }
+        }
+        // leave + payslips
+        val pair = listOfNotNull(
+            Tile("leave", "Leave", if (h.n("pending_leave") > 0) "${h.n("pending_leave")} request pending" else "Balance, apply, status", Icons.Outlined.BeachAccess, h.n("pending_leave")).takeIf { can.b("leave") },
+            Tile("payslips", "Payslips", "Monthly salary slips", Icons.Outlined.Payments).takeIf { can.b("payslips") })
+        if (pair.isNotEmpty()) Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            pair.forEachIndexed { i, t ->
+                val hot = i == 0 && t.key == "leave"
+                Column(Modifier.weight(1f).clip(RoundedCornerShape(22.dp))
+                    .background(if (hot) Brush.linearGradient(listOf(Color(0xFFFBF1D9), Color(0xFFF0E2C0))) else SolidColor(Color.White))
+                    .border(1.dp, if (hot) Color.Transparent else Line, RoundedCornerShape(22.dp)).clickable { go(t.key) }.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row {
+                        Box(Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(if (hot) Color.White else GoldTint), contentAlignment = Alignment.Center) {
+                            Icon(t.icon, null, tint = Color(0xFFB08433), modifier = Modifier.size(20.dp))
+                        }
+                        Spacer(Modifier.weight(1f))
+                        if (t.badge > 0) Text("${t.badge}", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold,
+                            modifier = Modifier.clip(CircleShape).background(Bad).padding(horizontal = 8.dp, vertical = 2.dp))
+                    }
+                    Column {
+                        Text(t.label, color = Text1, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                        Text(t.sub, color = Text2, fontSize = 12.sp)
+                    }
+                }
+            }
+        }
+        // productivity: today's score ring
+        if (can.b("productivity")) {
+            val pct = (prod?.get("tiles") as? JsonArray)?.firstOrNull()?.let { (it as? JsonArray)?.getOrNull(1)?.jsonPrimitive?.content }?.removeSuffix("%")?.toFloatOrNull()
+            Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(Color.White).border(1.dp, Line, RoundedCornerShape(22.dp))
+                .clickable { go("productivity") }.padding(horizontal = 16.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(52.dp), contentAlignment = Alignment.Center) {
+                    Canvas(Modifier.fillMaxSize()) {
+                        val w = 5.dp.toPx()
+                        val tl = Offset(w / 2, w / 2); val sz = Size(size.width - w, size.height - w)
+                        drawArc(GoldTint, 0f, 360f, false, tl, sz, style = Stroke(w))
+                        if (pct != null) drawArc(Gold, -90f, 360f * pct / 100f, false, tl, sz, style = Stroke(w, cap = StrokeCap.Round))
+                    }
+                    if (pct != null) Text("${pct.toInt()}%", color = Text1, fontSize = 12.sp, fontWeight = FontWeight.ExtraBold)
+                    else Icon(Icons.Outlined.Insights, null, tint = Color(0xFFB08433), modifier = Modifier.size(20.dp))
+                }
+                Spacer(Modifier.width(14.dp))
+                Column(Modifier.weight(1f)) {
+                    Text("Productivity", color = Text1, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                    Text(if (pct != null) "Today's score · PC time, breaks, idle" else "PC time, breaks, idle", color = Text2, fontSize = 12.sp)
+                }
+                Icon(Icons.Outlined.ChevronRight, null, tint = Color(0xFFB08433))
+            }
+        }
+        // the small ones
+        val small = listOfNotNull(
+            Tile("corrections", "Correct", "", Icons.Outlined.EditCalendar).takeIf { can.b("corrections") },
+            Tile("field", "Field", "", Icons.Outlined.Route).takeIf { can.b("field") },
+            Tile("letters", "Letters", "", Icons.Outlined.Description).takeIf { can.b("letters") },
+            Tile("assets", "Assets", "", Icons.Outlined.Inventory2).takeIf { can.b("assets") })
+        small.chunked(4).forEach { row ->
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                row.forEach { t ->
+                    Column(Modifier.weight(1f).clip(RoundedCornerShape(18.dp)).background(Color.White).border(1.dp, Line, RoundedCornerShape(18.dp))
+                        .clickable { go(t.key) }.padding(vertical = 12.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Icon(t.icon, null, tint = Color(0xFFB08433), modifier = Modifier.size(22.dp))
+                        Text(t.label, color = Text1, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                    }
+                }
+                repeat(4 - row.size) { Spacer(Modifier.weight(1f)) }
+            }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(Modifier.weight(1f).clip(RoundedCornerShape(18.dp)).background(Text1).clickable { go("support") }.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Outlined.SupportAgent, null, tint = GoldHi, modifier = Modifier.size(20.dp)); Spacer(Modifier.width(10.dp))
+                Text("Help & support", color = GoldHi, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            }
+            Row(Modifier.weight(1f).clip(RoundedCornerShape(18.dp)).background(Color.White).border(1.dp, Line, RoundedCornerShape(18.dp)).clickable { go("profile") }.padding(14.dp),
+                verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Outlined.Person, null, tint = Color(0xFFB08433), modifier = Modifier.size(20.dp)); Spacer(Modifier.width(10.dp))
+                Text("My profile", color = Text1, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            }
+        }
+    }
+}
+
 // ---------- home ----------
 private data class Tile(val key: String, val label: String, val sub: String, val icon: ImageVector, val badge: Int = 0)
 
@@ -541,19 +701,6 @@ private fun Hub(vm: AppViewModel, go: (String) -> Unit) {
             if (can.b("corrections")) add(Triple("Correction", Icons.Outlined.EditCalendar, "correct"))
             if (can.b("payslips")) add(Triple("Payslips", Icons.Outlined.Payments, "payslips"))
             add(Triple("Support", Icons.Outlined.SupportAgent, "support"))
-        }
-        val tiles = buildList {
-            if (can.b("admin")) add(Tile("admin", "Team & approvals", "Who's in, leave, corrections", Icons.Outlined.Groups))
-            if (can.b("attendance")) add(Tile("attendance", "Attendance", "Days, punches, hours", Icons.Outlined.History))
-            if (can.b("leave")) add(Tile("leave", "Leave", "Balance, apply, status", Icons.Outlined.BeachAccess, h.n("pending_leave")))
-            if (can.b("payslips")) add(Tile("payslips", "Payslips", "Monthly salary slips", Icons.Outlined.Payments))
-            if (can.b("productivity")) add(Tile("productivity", "Productivity", "PC time, breaks, idle", Icons.Outlined.Insights))
-            if (can.b("corrections")) add(Tile("corrections", "Corrections", "Missed or wrong punch", Icons.Outlined.EditCalendar))
-            if (can.b("field")) add(Tile("field", "Field work", "Calls, visits, follow-ups", Icons.Outlined.Route))
-            if (can.b("letters")) add(Tile("letters", "My letters", "Letters issued to you", Icons.Outlined.Description))
-            if (can.b("assets")) add(Tile("assets", "My assets", "Items issued to you", Icons.Outlined.Inventory2))
-            add(Tile("support", "Help & support", "Manager, HR, FAQs", Icons.Outlined.SupportAgent))
-            add(Tile("profile", "My profile", "Details and sign-out", Icons.Outlined.Person))
         }
         val refreshing = LocalAgRefreshing.current
         val pull = rememberPullToRefreshState()
@@ -640,28 +787,7 @@ private fun Hub(vm: AppViewModel, go: (String) -> Unit) {
                     PunchTimeline(punches)
                 }
             }
-            item { Text("Apps & services", color = Text2, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.sp, modifier = Modifier.padding(start = 20.dp, top = 4.dp)) }
-            items(tiles.chunked(2)) { pair ->
-                Row(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    pair.forEach { t ->
-                        Column(Modifier.weight(1f).clip(RoundedCornerShape(20.dp)).background(Color.White).border(1.dp, Line, RoundedCornerShape(20.dp))
-                            .clickable { go(t.key) }.padding(16.dp)) {
-                            Row(verticalAlignment = Alignment.Top) {
-                                Box(Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).background(Brush.linearGradient(listOf(GoldTint, Color(0xFFF0E2C0)))), contentAlignment = Alignment.Center) {
-                                    Icon(t.icon, null, tint = Color(0xFFB08433), modifier = Modifier.size(22.dp))
-                                }
-                                Spacer(Modifier.weight(1f))
-                                if (t.badge > 0) Text("${t.badge}", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.clip(CircleShape).background(Bad).padding(horizontal = 7.dp, vertical = 2.dp))
-                            }
-                            Spacer(Modifier.height(12.dp))
-                            Text(t.label, color = Text1, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
-                            Text(t.sub, color = Text2, fontSize = 12.sp, lineHeight = 15.sp, modifier = Modifier.padding(top = 2.dp))
-                        }
-                    }
-                    if (pair.size == 1) Spacer(Modifier.weight(1f))
-                }
-            }
+            item { AppsBento(vm, h, can, go) }
             item {
                 Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
                     Mark(16); Spacer(Modifier.width(6.dp))
