@@ -37,6 +37,8 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.File
 
 sealed class Screen {
+    /** The animated logo while the app checks the server and this phone (owner, 21 Nov 2026), not a flash of Connect. */
+    object Starting : Screen()
     object Connect : Screen()
     data class Pending(val code: String) : Screen()
     data class Ended(val state: String) : Screen()           // rejected | revoked
@@ -66,7 +68,7 @@ data class Disclosure(val recorded: Boolean, val notice: String, val location: S
 
 class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val g = (app as AmmpApp).graph
-    val screen = MutableStateFlow<Screen>(Screen.Connect)
+    val screen = MutableStateFlow<Screen>(Screen.Starting)
     /** Ametecs Global one app: (app, name) this employee may open; null = plain ROVEXY workspace (no home tiles). */
     val agApps = MutableStateFlow<List<Pair<String, String>>?>(null)
     /** Ametecs Global native screens (attendance, leave, payslips, QRONEX punch...): SmartPRS / QRONEX engines, no web pages. */
@@ -204,11 +206,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch { startup() }
     }
 
-    private suspend fun startup() = runCatching { startupInner() }.onFailure { error.value = "Could not start: ${it.message}" }
+    private suspend fun startup() {
+        runCatching { startupInner() }.onFailure { error.value = "Could not start: ${it.message}" }
+        if (screen.value == Screen.Starting) screen.value = Screen.Connect   // nothing decided (e.g. server error): the form, with the message
+    }
 
     private suspend fun startupInner() {
         if (g.config.serverOrigin == null || g.store.getString("registered") == null) { screen.value = Screen.Connect; loadBranding(); return }
-        loadBranding()
+        viewModelScope.launch { loadBranding() }   // the company name for sign-in; not needed to decide the screen
         refreshStatus()
     }
 

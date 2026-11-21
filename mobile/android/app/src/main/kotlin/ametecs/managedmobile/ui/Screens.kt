@@ -111,6 +111,7 @@ fun AppRoot(vm: AppViewModel, requestScreenConsent: () -> Unit, requestCameraCon
         active?.let { MonitoringBanner(it.sessionId, voice = it.kind == "voice", onStop = vm::stopMedia) }   // always-visible indicator in-app
         mediaError?.let { Text(it, color = Ds.Red, modifier = Modifier.padding(12.dp)) }
         when (val s = screen) {
+            Screen.Starting -> AgSplash()
             Screen.Connect -> AuthLayout(vm, mode = "connect")
             is Screen.Pending -> PendingScreen(vm, s.code)
             is Screen.Ended -> EndedScreen(s.state, vm::startNewRegistration)

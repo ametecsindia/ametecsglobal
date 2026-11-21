@@ -115,6 +115,27 @@ import ametecs.managedmobile.data.str
 import ametecs.managedmobile.data.AgCache
 import ametecs.managedmobile.R
 import androidx.compose.foundation.Image
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.offset
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.painterResource
 
 /*
@@ -150,6 +171,55 @@ private fun JsonObject.a(k: String): List<JsonObject> = (this[k] as? JsonArray).
 private fun JsonObject.b(k: String) = str(k) == "true"
 private fun JsonObject.n(k: String) = str(k)?.toIntOrNull() ?: 0
 private fun fail(msg: String) = JsonObject(mapOf("ok" to JsonPrimitive(false), "message" to JsonPrimitive(msg)))
+
+// ---------- the Ametecs Global loader (owner, 21 Nov 2026: "loading time / refresh / logo animation") ----------
+/** True while a screen's data is being refreshed underneath what is shown. */
+val LocalAgRefreshing = compositionLocalOf { false }
+
+/** The mark, breathing, inside a turning gold orbit: every wait in the app (start, load, pull to refresh). */
+@Composable
+fun AgSpinner(size: Int = 56, modifier: Modifier = Modifier, spinning: Boolean = true) {
+    val t = rememberInfiniteTransition(label = "ag")
+    val turn by t.animateFloat(0f, 360f, infiniteRepeatable(tween(1100, easing = LinearEasing)), label = "turn")
+    val pulse by t.animateFloat(0.92f, 1.04f, infiniteRepeatable(tween(750, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "pulse")
+    Box(modifier.size((size * 1.45f).dp), contentAlignment = Alignment.Center) {
+        Canvas(Modifier.fillMaxSize().graphicsLayer { rotationZ = if (spinning) turn else 0f }) {
+            val w = 3.dp.toPx()
+            drawArc(Brush.sweepGradient(listOf(Color.Transparent, Gold, GoldHi)), 0f, 330f, false, topLeft = Offset(w, w),
+                size = Size(this.size.width - 2 * w, this.size.height - 2 * w), style = Stroke(w, cap = StrokeCap.Round))
+        }
+        Image(painterResource(R.drawable.ag_mark), "Loading", Modifier.size(size.dp)
+            .graphicsLayer { val s = if (spinning) pulse else 1f; scaleX = s; scaleY = s }.clip(RoundedCornerShape((size * 0.23f).dp)))
+    }
+}
+
+/** Full-screen start: shown while the app checks the server and this phone, instead of a flash of the connect form. */
+@Composable
+fun AgSplash() {
+    val t = rememberInfiniteTransition(label = "dots")
+    val a by t.animateFloat(0.35f, 1f, infiniteRepeatable(tween(800), RepeatMode.Reverse), label = "a")
+    Column(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFF060504), Ink, Ink2))), horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center) {
+        AgSpinner(96)
+        Spacer(Modifier.height(22.dp))
+        Row {
+            Text("Ametecs ", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold)
+            Text("Global", color = GoldHi, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold)
+        }
+        Text("ONE PLATFORM · EVERY APP", color = Color(0xFFD9C9A3).copy(alpha = 0.7f), fontSize = 11.sp, letterSpacing = 3.sp, modifier = Modifier.padding(top = 6.dp))
+        Text("Getting things ready…", color = Color(0xFFD9C9A3).copy(alpha = a), fontSize = 13.sp, modifier = Modifier.padding(top = 28.dp))
+    }
+}
+
+/** Thin gold bar sliding across the top while a screen refreshes what it already shows. */
+@Composable
+private fun RefreshBar() {
+    val t = rememberInfiniteTransition(label = "bar")
+    val x by t.animateFloat(-0.4f, 1f, infiniteRepeatable(tween(900, easing = FastOutSlowInEasing)), label = "x")
+    BoxWithConstraints(Modifier.fillMaxWidth().height(3.dp).background(GoldTint)) {
+        Box(Modifier.width(maxWidth * 0.4f).fillMaxHeight().offset(x = maxWidth * x).background(Brush.horizontalGradient(listOf(Gold, GoldHi, Gold))))
+    }
+}
 
 // ---------- navigation ----------
 @Composable
@@ -244,22 +314,31 @@ private fun Load(key: Any?, load: suspend () -> JsonObject, cache: String? = nul
     var tick by remember { mutableIntStateOf(0) }
     var data by remember(key) { mutableStateOf(cache?.let { AgCache.peek(it) }) }
     var err by remember(key) { mutableStateOf<String?>(null) }
+    var busy by remember(key) { mutableStateOf(false) }
     LaunchedEffect(key, tick) {
         err = null
+        busy = true
         runCatching { if (cache != null) AgCache.fetch(cache, load) else load() }
+            .also { busy = false }
             .onSuccess { if (it.str("ok") == "false") { if (data == null) err = it.str("message") ?: "Not available." } else data = it }
             .onFailure { if (data == null) err = it.message ?: "Could not load this just now." }
     }
     val d = data
     when {
-        d != null -> content(d) { tick++ }
+        d != null -> Box {
+            CompositionLocalProvider(LocalAgRefreshing provides busy) { content(d) { tick++ } }
+            if (busy) Box(Modifier.align(Alignment.TopCenter)) { RefreshBar() }
+        }
         err != null -> Column(Modifier.fillMaxWidth().padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Icon(Icons.Outlined.ErrorOutline, null, tint = Bad, modifier = Modifier.size(36.dp))
             Spacer(Modifier.height(8.dp))
             Text(err!!, color = Text1, textAlign = TextAlign.Center)
             TextButton(onClick = { tick++ }) { Text("Try again", color = Warn) }
         }
-        else -> Box(Modifier.fillMaxWidth().padding(48.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Gold) }
+        else -> Column(Modifier.fillMaxWidth().padding(56.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            AgSpinner(52)
+            Text("Loading…", color = Text2, fontSize = 13.sp, modifier = Modifier.padding(top = 12.dp))
+        }
     }
 }
 
@@ -416,6 +495,7 @@ private fun QuickAction(label: String, icon: ImageVector, modifier: Modifier, on
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun Hub(vm: AppViewModel, go: (String) -> Unit) {
     var tick by remember { mutableIntStateOf(0) }
@@ -445,6 +525,14 @@ private fun Hub(vm: AppViewModel, go: (String) -> Unit) {
             add(Tile("support", "Help & support", "Manager, HR, FAQs", Icons.Outlined.SupportAgent))
             add(Tile("profile", "My profile", "Details and sign-out", Icons.Outlined.Person))
         }
+        val refreshing = LocalAgRefreshing.current
+        val pull = rememberPullToRefreshState()
+        PullToRefreshBox(refreshing, { reload(); vm.refresh() }, Modifier.fillMaxSize().background(Cream), state = pull, indicator = {
+            // pull to refresh: the logo comes down with the finger and turns while it refreshes
+            val f = pull.distanceFraction.coerceIn(0f, 1.4f)
+            if (refreshing || f > 0f) AgSpinner(34, Modifier.align(Alignment.TopCenter).statusBarsPadding()
+                .graphicsLayer { translationY = (if (refreshing) 1f else f) * 140f; alpha = if (refreshing) 1f else f.coerceAtMost(1f) }, spinning = refreshing || f >= 1f)
+        }) {
         LazyColumn(Modifier.fillMaxSize().background(Cream), contentPadding = PaddingValues(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             item {
                 Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(bottomStart = 32.dp, bottomEnd = 32.dp))
@@ -460,7 +548,8 @@ private fun Hub(vm: AppViewModel, go: (String) -> Unit) {
                             me.s("company").takeIf { it.isNotBlank() }?.let { Text(it, color = Color(0xFFBFAE86), fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) }
                         }
                         Box(Modifier.size(42.dp).clip(CircleShape).clickable { reload(); vm.refresh() }, contentAlignment = Alignment.Center) {
-                            Icon(Icons.Outlined.Refresh, "Refresh", tint = GoldHi, modifier = Modifier.size(22.dp))
+                            val spin by rememberInfiniteTransition(label = "r").animateFloat(0f, 360f, infiniteRepeatable(tween(900, easing = LinearEasing)), label = "spin")
+                            Icon(Icons.Outlined.Refresh, "Refresh", tint = GoldHi, modifier = Modifier.size(22.dp).graphicsLayer { rotationZ = if (refreshing) spin else 0f })
                         }
                         Spacer(Modifier.width(4.dp))
                         Bell(h.n("unread")) { go("alerts") }
@@ -549,6 +638,7 @@ private fun Hub(vm: AppViewModel, go: (String) -> Unit) {
                     Text("Ametecs Global · one platform, every app", color = Text2, fontSize = 11.sp)
                 }
             }
+        }
         }
     }
 }
