@@ -350,11 +350,11 @@ body:before{content:"";position:fixed;inset:0;pointer-events:none;z-index:100;op
 
 <header class="nav"><div class="wrap">
   <a class="logo" href="#top"><span class="lm">AG</span><span>Ametecs<b>Global</b></span></a>
-  <nav id="mainnav"><a href="#apps">Applications</a><a href="#tour">Product tour</a><a href="#onelogin">One login</a><a href="#themes">Themes</a><a href="#features">Features</a><a href="#pricing">Pricing</a><a href="#faq">FAQ</a><a href="#contact">Contact</a></nav>
+  <nav id="mainnav"><a href="#apps">Applications</a><a href="#viewdemo">View demo</a><a href="#tour">Product tour</a><a href="#onelogin">One login</a><a href="#themes">Themes</a><a href="#features">Features</a><a href="#pricing">Pricing</a><a href="#faq">FAQ</a><a href="#contact">Contact</a></nav>
   <div class="acts"><a class="btn line" href="#contact">Book a demo</a><a class="btn gold" href="core/"><i class="fas fa-right-to-bracket"></i>Sign in</a></div>
   <button class="burger" type="button" aria-label="Open menu" aria-expanded="false" data-burger><i class="fas fa-bars"></i></button>
 </div>
-<div class="mnav" id="mnav"><a href="#apps">Applications</a><a href="#tour">Product tour</a><a href="#onelogin">One login</a><a href="#themes">Themes</a><a href="#features">Features</a><a href="#pricing">Pricing</a><a href="#faq">FAQ</a><a href="#contact">Contact</a><a class="btn gold" href="core/"><i class="fas fa-right-to-bracket"></i>Sign in</a></div>
+<div class="mnav" id="mnav"><a href="#apps">Applications</a><a href="#viewdemo">View demo</a><a href="#tour">Product tour</a><a href="#onelogin">One login</a><a href="#themes">Themes</a><a href="#features">Features</a><a href="#pricing">Pricing</a><a href="#faq">FAQ</a><a href="#contact">Contact</a><a class="btn gold" href="core/"><i class="fas fa-right-to-bracket"></i>Sign in</a></div>
 </header>
 
 <main id="top">
@@ -362,7 +362,7 @@ body:before{content:"";position:fixed;inset:0;pointer-events:none;z-index:100;op
   <span class="eyebrow"><i class="fas fa-crown"></i>By Ametecs India · Hyderabad</span>
   <h1>Every Ametecs application,<br><em>one platform.</em></h1>
   <p class="lead">HR and payroll, productivity, collections, leads, field force and QR attendance on one foundation. One organisation, one login per employee, one place for licences and updates.</p>
-  <div class="cta"><a class="btn gold" href="#contact"><i class="fas fa-calendar-check"></i>Book a free demo</a><a class="btn line" href="#tour"><i class="fas fa-play"></i>Take the tour</a></div>
+  <div class="cta"><a class="btn gold" href="#contact"><i class="fas fa-calendar-check"></i>Book a free demo</a><a class="btn line" href="#viewdemo"><i class="fas fa-play"></i>View live demo</a></div>
   <div class="trust"><span><i class="fas fa-cloud"></i>Cloud or on-premise</span><span><i class="fas fa-shield-halved"></i>Separate workspace per company</span><span><i class="fas fa-indian-rupee-sign"></i>Pay per user</span></div>
 </div>
   <div class="stage">
@@ -411,6 +411,30 @@ body:before{content:"";position:fixed;inset:0;pointer-events:none;z-index:100;op
   </div>
 </div></section>
 
+<section id="viewdemo" class="vdemo"><div class="wrap">
+  <!-- VIEW DEMO (owner, 21 Nov 2026): pick Mobile, Desktop or Both; demo.php plays every flow on a sample company -->
+  <div class="vd-head"><span class="vd-cap"><i class="fas fa-play"></i>Live demo</span>
+    <h2>See it work, end to end, before you talk to us</h2>
+    <p>A sample company, ready to click. Apply leave on the phone and watch the HR manager approve it on the desktop, then the phone hears back. Punch in with QR, fix a missed punch, publish payslips, post a notice, resign, log a field visit.</p></div>
+  <div class="vd-grid">
+    <a class="vd-card" href="demo.php?view=mobile"><span class="vd-ic"><i class="fas fa-mobile-screen"></i></span><b>Mobile</b><span>The employee app: punch, leave, payslips, badges, profile.</span><em>Open mobile demo <i class="fas fa-arrow-right"></i></em></a>
+    <a class="vd-card" href="demo.php?view=desktop"><span class="vd-ic"><i class="fas fa-desktop"></i></span><b>Desktop</b><span>The web console: live attendance, approvals, payroll, notices.</span><em>Open desktop demo <i class="fas fa-arrow-right"></i></em></a>
+    <a class="vd-card hot" href="demo.php?view=both"><span class="vd-tag">Recommended</span><span class="vd-ic"><i class="fas fa-table-columns"></i></span><b>Both, side by side</b><span>Phone and desktop together: every action shows up on the other screen.</span><em>Open full demo <i class="fas fa-arrow-right"></i></em></a>
+  </div>
+  <div class="vd-list"><?php foreach ([['fa-umbrella-beach', 'Leave', 'leave'], ['fa-qrcode', 'QR punch', 'punch'], ['fa-calendar-pen', 'Corrections', 'corr'], ['fa-money-check-dollar', 'Payslips', 'pay'], ['fa-bullhorn', 'Notices', 'notice'], ['fa-door-open', 'Resignation', 'resign'], ['fa-location-dot', 'Field visits', 'field']] as [$i, $t, $id]): ?><a href="demo.php?view=both&amp;story=<?= $id ?>"><i class="fas <?= $i ?>"></i><?= $t ?></a><?php endforeach; ?></div>
+</div></section>
+<style>
+.vdemo{background:var(--dark);color:#fff;padding:80px 0}
+.vd-head{text-align:center;max-width:760px;margin:0 auto 34px}.vd-head h2{font-family:Fraunces,serif;font-size:clamp(28px,4vw,40px);margin:12px 0 10px;line-height:1.15}.vd-head p{color:#d9c9a3;margin:0}
+.vd-cap{display:inline-flex;gap:8px;align-items:center;font-size:12px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:#e8c977;border:1px solid rgba(232,201,119,.35);padding:6px 12px;border-radius:99px}
+.vd-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px}@media(max-width:860px){.vd-grid{grid-template-columns:1fr}}
+.vd-card{position:relative;display:flex;flex-direction:column;gap:8px;padding:26px;border-radius:22px;background:rgba(255,255,255,.05);border:1px solid rgba(232,201,119,.2);transition:transform .15s,border-color .15s}
+.vd-card:hover{transform:translateY(-4px);border-color:rgba(232,201,119,.6)}.vd-card b{font-size:20px}.vd-card span{color:#d9c9a3;font-size:14px}.vd-card em{font-style:normal;color:#e8c977;font-weight:700;font-size:14px;margin-top:8px}
+.vd-card.hot{background:linear-gradient(160deg,rgba(232,201,119,.22),rgba(255,255,255,.04));border-color:rgba(232,201,119,.55)}
+.vd-ic{width:54px;height:54px;border-radius:16px;display:grid;place-items:center;background:var(--g);color:#14100a!important;font-size:22px}
+.vd-tag{position:absolute;top:18px;right:18px;font-size:11px!important;font-weight:700;color:#14100a!important;background:var(--g);padding:3px 10px;border-radius:99px}
+.vd-list{display:flex;flex-wrap:wrap;justify-content:center;gap:10px;margin-top:26px}.vd-list a{display:inline-flex;gap:8px;align-items:center;padding:8px 14px;border-radius:99px;border:1px solid rgba(232,201,119,.3);color:#f3e7c9;font-size:13px;font-weight:600}.vd-list a i{color:#e8c977}.vd-list a:hover{background:rgba(232,201,119,.1)}
+</style>
 <section id="apps" style="padding-top:20px"><div class="wrap">
   <div class="sh reveal"><span class="k">The applications</span><h2>Switch on what your business needs</h2><p>Each application is a plugin on the same platform. Turn one on for a company, a branch or a team, and it works with everything you already set up.</p></div>
   <div class="apps"><?php foreach ($apps as [$n, $what, $ic, $st, $pts]): ?>
