@@ -39,7 +39,7 @@ class AgApi(private val link: suspend () -> String) {
         override fun loadForRequest(url: HttpUrl) = synchronized(cookies) { cookies.filter { it.matches(url) } }
     }
     private val http = OkHttpClient.Builder().cookieJar(jar).followRedirects(false)
-        .connectTimeout(10, TimeUnit.SECONDS).readTimeout(30, TimeUnit.SECONDS).build()
+        .connectTimeout(6, TimeUnit.SECONDS).readTimeout(25, TimeUnit.SECONDS).build()   // unreachable server: say so in seconds, not a minute
     private val lock = Mutex()
     @Volatile private var root: String? = null      // http://host/AmetecsGlobal
     @Volatile private var csrf: String? = null

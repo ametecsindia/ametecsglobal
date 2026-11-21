@@ -380,8 +380,16 @@ private fun Load(key: Any?, load: suspend () -> JsonObject, cache: String? = nul
             TextButton(onClick = { tick++ }) { Text("Try again", color = Warn) }
         }
         else -> Column(Modifier.fillMaxWidth().padding(56.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            // still waiting after a few seconds: most often the phone is off the office network (owner, 21 Nov 2026)
+            var slow by remember(key, tick) { mutableStateOf(false) }
+            LaunchedEffect(key, tick) { kotlinx.coroutines.delay(7000); slow = true }
             AgSpinner(52)
-            Text("Loading…", color = Text2, fontSize = 13.sp, modifier = Modifier.padding(top = 12.dp))
+            Text(if (slow) "Taking longer than usual…" else "Loading…", color = Text2, fontSize = 13.sp, modifier = Modifier.padding(top = 12.dp))
+            if (slow) {
+                Text("Check the phone is on Wi-Fi or internet that can reach your company's server.", color = Text2, fontSize = 12.sp,
+                    textAlign = TextAlign.Center, modifier = Modifier.padding(top = 6.dp))
+                TextButton(onClick = { tick++ }) { Text("Try again", color = Warn, fontWeight = FontWeight.SemiBold) }
+            }
         }
     }
 }
